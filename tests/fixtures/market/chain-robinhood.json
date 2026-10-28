@@ -3286,7 +3286,7 @@
     "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
     "symbol": "QQQ",
     "name": "Invesco QQQ • Robinhood Token",
-    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174119%2Flarge%2F0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png%3F1782444588",
+    "logo": null,
     "priceUsd": {
      "v": 714.378830132917,
      "src": "geckoterminal",
@@ -3336,7 +3336,7 @@
     "address": "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
     "symbol": "SPCX",
     "name": "Space Exploration Technologies Corp. Class A Common Stock • Robinhood Token",
-    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174129%2Flarge%2F0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea.png%3F1782444614",
+    "logo": null,
     "priceUsd": {
      "v": 148.541497451708,
      "src": "geckoterminal",

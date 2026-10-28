@@ -1,0 +1,82 @@
+[
+ {
+  "id": "advanced-micro-dog",
+  "symbol": "amd",
+  "name": "Advanced Micro Dog",
+  "platforms": {
+   "robinhood": "0x1c2a482970ae6b6e5052a7a184c8aef19e0840be"
+  }
+ },
+ {
+  "id": "amc-entertainment-holdings-inc-robinhood-token",
+  "symbol": "amc",
+  "name": "AMC Entertainment Holdings, Inc. • Robinhood Token",
+  "platforms": {
+   "robinhood": "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b"
+  }
+ },
+ {
+  "id": "a-meme-coin",
+  "symbol": "amc",
+  "name": "A Meme Coin",
+  "platforms": {
+   "robinhood": "0x385f4f8ae47651ce5f58f5265395a669f8281e18"
+  }
+ },
+ {
+  "id": "blackrock",
+  "symbol": "blackrock",
+  "name": "BLACKROCK",
+  "platforms": {
+   "robinhood": "0x9de83d01bc3d0857435529d931679ba5dc31ddf4"
+  }
+ },
+ {
+  "id": "blockchain-usd",
+  "symbol": "usdb",
+  "name": "Blockchain USD",
+  "platforms": {
+   "robinhood": "0x65f1f83dd8b702a195e24ea171f8136fb1888888"
+  }
+ },
+ {
+  "id": "gamestop-3",
+  "symbol": "gme",
+  "name": "GameStop",
+  "platforms": {
+   "robinhood": "0x7e86381a763f0ecca2bdf27c54eac403ddd48123"
+  }
+ },
+ {
+  "id": "gamestop-ondo-tokenized-stock",
+  "symbol": "gmeon",
+  "name": "GameStop (Ondo Tokenized Stock)",
+  "platforms": {
+   "robinhood": "0xb094d0d3221d7f7a9f14b0f78c34cd38d7acf6f2"
+  }
+ },
+ {
+  "id": "gamestop-robinhood-tokenized-stock",
+  "symbol": "gme",
+  "name": "GameStop • Robinhood Token",
+  "platforms": {
+   "robinhood": "0x1b0e319c6a659f002271b69db8a7df2f911c153e"
+  }
+ },
+ {
+  "id": "greatest-meme-ever",
+  "symbol": "gme",
+  "name": "Greatest Meme Ever",
+  "platforms": {
+   "robinhood": "0xef67e3064bef1a27e81925ec7132f23e533bd5f6"
+  }
+ },
+ {
+  "id": "tesla-robinhood-tokenized-stock",
+  "symbol": "tsla",
+  "name": "Tesla • Robinhood Token",
+  "platforms": {
+   "robinhood": "0x322f0929c4625ed5bad873c95208d54e1c003b2d"
+  }
+ }
+]

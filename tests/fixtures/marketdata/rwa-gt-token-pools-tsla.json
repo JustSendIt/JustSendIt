@@ -1,0 +1,1864 @@
+{
+ "data": [
+  {
+   "id": "robinhood_0x3ea70ce0b34473692549f97e630a1d82dc05cea94fa55f81b50f10c8c6d8186f",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "399.4900656899",
+    "base_token_price_native_currency": "0.171128864177213",
+    "quote_token_price_usd": "772.999866207223",
+    "quote_token_price_native_currency": "0.330555196550516",
+    "base_token_price_quote_token": "0.5177013278",
+    "quote_token_price_base_token": "1.9316156754",
+    "address": "0x3ea70ce0b34473692549f97e630a1d82dc05cea94fa55f81b50f10c8c6d8186f",
+    "name": "TSLA / SPY 0.035%",
+    "pool_created_at": "2026-09-28T01:55:52Z",
+    "token_price_usd": "399.4900656899",
+    "fdv_usd": "4524055.03440275",
+    "market_cap_usd": "4407791.53694445",
+    "price_change_percentage": {
+     "m5": "0.1",
+     "m15": "-0.814",
+     "m30": "-1.318",
+     "h1": "-2.74",
+     "h6": "-2.72",
+     "h24": "-0.81"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 3,
+      "sells": 0,
+      "buyers": 2,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 25,
+      "sells": 74,
+      "buyers": 8,
+      "sellers": 23
+     },
+     "m30": {
+      "buys": 87,
+      "sells": 177,
+      "buyers": 33,
+      "sellers": 37
+     },
+     "h1": {
+      "buys": 161,
+      "sells": 343,
+      "buyers": 47,
+      "sellers": 62
+     },
+     "h6": {
+      "buys": 323,
+      "sells": 531,
+      "buyers": 77,
+      "sellers": 103
+     },
+     "h24": {
+      "buys": 1140,
+      "sells": 1546,
+      "buyers": 218,
+      "sellers": 265
+     }
+    },
+    "volume_usd": {
+     "m5": "494.1434157268",
+     "m15": "33640.3383073928",
+     "m30": "117171.974059788",
+     "h1": "234593.966088518",
+     "h6": "366798.213184867",
+     "h24": "856378.812763162"
+    },
+    "reserve_in_usd": "519779.2637"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "uniswap-v4-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xf4acdaeeb7022862a763c9b1b885e11191c889e3",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "400.9103508785",
+    "base_token_price_native_currency": "0.171880154120412",
+    "quote_token_price_usd": "1.00183307672337",
+    "quote_token_price_native_currency": "0.000427622158236556",
+    "base_token_price_quote_token": "401.9439844493",
+    "quote_token_price_base_token": "0.00248790886",
+    "address": "0xf4acdaeeb7022862a763c9b1b885e11191c889e3",
+    "name": "TSLA / USDG 0.3%",
+    "pool_created_at": "2026-07-08T22:06:17Z",
+    "token_price_usd": "400.9103508785",
+    "fdv_usd": "4540139.1599158",
+    "market_cap_usd": "4423462.31720165",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "0.192",
+     "m30": "-1.015",
+     "h1": "-1.99",
+     "h6": "-2.11",
+     "h24": "-0.57"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 1,
+      "sells": 0,
+      "buyers": 1,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 2,
+      "sells": 38,
+      "buyers": 2,
+      "sellers": 21
+     },
+     "m30": {
+      "buys": 5,
+      "sells": 97,
+      "buyers": 4,
+      "sellers": 42
+     },
+     "h1": {
+      "buys": 5,
+      "sells": 154,
+      "buyers": 4,
+      "sellers": 68
+     },
+     "h6": {
+      "buys": 17,
+      "sells": 177,
+      "buyers": 15,
+      "sellers": 75
+     },
+     "h24": {
+      "buys": 251,
+      "sells": 260,
+      "buyers": 105,
+      "sellers": 135
+     }
+    },
+    "volume_usd": {
+     "m5": "60.6993242056",
+     "m15": "15577.4296275309",
+     "m30": "39299.6432745244",
+     "h1": "62832.2858162668",
+     "h6": "68703.1941641905",
+     "h24": "134897.141265817"
+    },
+    "reserve_in_usd": "497052.233"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "uniswap-v3-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x8517f8071ae5b831b738052f12125e8e3d6c158b78728aa44ce3b25e5104d32e",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "401.2506711641",
+    "base_token_price_native_currency": "0.170850641410734",
+    "quote_token_price_usd": "1.00183849128614",
+    "quote_token_price_native_currency": "0.00042804836823376",
+    "base_token_price_quote_token": "399.1386349998",
+    "quote_token_price_base_token": "0.002505395149",
+    "address": "0x8517f8071ae5b831b738052f12125e8e3d6c158b78728aa44ce3b25e5104d32e",
+    "name": "TSLA / USDG 0.3%",
+    "pool_created_at": "2026-07-05T06:18:59Z",
+    "token_price_usd": "401.2506711641",
+    "fdv_usd": "4543993.14236395",
+    "market_cap_usd": "4427217.25631917",
+    "price_change_percentage": {
+     "m5": "0.62",
+     "m15": "0.28",
+     "m30": "-0.929",
+     "h1": "-2.46",
+     "h6": "-2.14",
+     "h24": "-0.51"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 2,
+      "sells": 2,
+      "buyers": 1,
+      "sellers": 1
+     },
+     "m15": {
+      "buys": 2,
+      "sells": 44,
+      "buyers": 1,
+      "sellers": 23
+     },
+     "m30": {
+      "buys": 2,
+      "sells": 104,
+      "buyers": 1,
+      "sellers": 39
+     },
+     "h1": {
+      "buys": 3,
+      "sells": 152,
+      "buyers": 2,
+      "sellers": 57
+     },
+     "h6": {
+      "buys": 19,
+      "sells": 187,
+      "buyers": 17,
+      "sellers": 73
+     },
+     "h24": {
+      "buys": 174,
+      "sells": 266,
+      "buyers": 105,
+      "sellers": 120
+     }
+    },
+    "volume_usd": {
+     "m5": "18.4449317236",
+     "m15": "9011.2719447533",
+     "m30": "22479.6569875398",
+     "h1": "31033.1601257771",
+     "h6": "37105.327819149",
+     "h24": "104534.717701945"
+    },
+    "reserve_in_usd": "559378.5128"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "uniswap-v4-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xa953ca88ff430e9487c60ca34d757414f4efda07",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "401.2439069849",
+    "base_token_price_native_currency": "0.171880154120412",
+    "quote_token_price_usd": "2335.95",
+    "quote_token_price_native_currency": "1.0",
+    "base_token_price_quote_token": "0.1718801541",
+    "quote_token_price_base_token": "5.81800735",
+    "address": "0xa953ca88ff430e9487c60ca34d757414f4efda07",
+    "name": "TSLA / WETH 0.3%",
+    "pool_created_at": "2026-07-03T09:27:54Z",
+    "token_price_usd": "401.2439069849",
+    "fdv_usd": "4543916.54091227",
+    "market_cap_usd": "4427142.62344493",
+    "price_change_percentage": {
+     "m5": "0.62",
+     "m15": "0.225",
+     "m30": "-0.88",
+     "h1": "-2.34",
+     "h6": "-2.73",
+     "h24": "0.23"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 1,
+      "sells": 1,
+      "buyers": 1,
+      "sellers": 1
+     },
+     "m15": {
+      "buys": 1,
+      "sells": 67,
+      "buyers": 1,
+      "sellers": 35
+     },
+     "m30": {
+      "buys": 5,
+      "sells": 101,
+      "buyers": 5,
+      "sellers": 42
+     },
+     "h1": {
+      "buys": 8,
+      "sells": 216,
+      "buyers": 7,
+      "sellers": 78
+     },
+     "h6": {
+      "buys": 106,
+      "sells": 295,
+      "buyers": 61,
+      "sellers": 98
+     },
+     "h24": {
+      "buys": 347,
+      "sells": 515,
+      "buyers": 161,
+      "sellers": 252
+     }
+    },
+    "volume_usd": {
+     "m5": "2.8332707547",
+     "m15": "6037.0911953783",
+     "m30": "10714.7815901504",
+     "h1": "28252.4556543408",
+     "h6": "47429.5687055827",
+     "h24": "70283.1160175421"
+    },
+    "reserve_in_usd": "354047.778"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x0bd7d308f8e1639fab988df18a8011f41eacad73",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "uniswap-v3-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xd5effce87036cd858146c0c15fa825c231a9de1843200ca108e431e431331e8e",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "398.6570086337",
+    "base_token_price_native_currency": "0.171049710867663",
+    "quote_token_price_usd": "1.00172893838112",
+    "quote_token_price_native_currency": "0.000428406422186052",
+    "base_token_price_quote_token": "399.2697168143",
+    "quote_token_price_base_token": "0.002504572618",
+    "address": "0xd5effce87036cd858146c0c15fa825c231a9de1843200ca108e431e431331e8e",
+    "name": "TSLA / USDG",
+    "pool_created_at": "2026-08-20T07:58:24Z",
+    "token_price_usd": "398.6570086337",
+    "fdv_usd": "4514621.01765808",
+    "market_cap_usd": "4398599.96459392",
+    "price_change_percentage": {
+     "m5": "-0.42",
+     "m15": "-0.616",
+     "m30": "-2.078",
+     "h1": "-2.61",
+     "h6": "-2.96",
+     "h24": "-1.2"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 1,
+      "sells": 22,
+      "buyers": 1,
+      "sellers": 17
+     },
+     "m15": {
+      "buys": 5,
+      "sells": 40,
+      "buyers": 5,
+      "sellers": 25
+     },
+     "m30": {
+      "buys": 5,
+      "sells": 128,
+      "buyers": 5,
+      "sellers": 42
+     },
+     "h1": {
+      "buys": 11,
+      "sells": 150,
+      "buyers": 11,
+      "sellers": 44
+     },
+     "h6": {
+      "buys": 33,
+      "sells": 192,
+      "buyers": 28,
+      "sellers": 61
+     },
+     "h24": {
+      "buys": 200,
+      "sells": 376,
+      "buyers": 97,
+      "sellers": 87
+     }
+    },
+    "volume_usd": {
+     "m5": "2279.6236762083",
+     "m15": "4577.6342687103",
+     "m30": "14197.1104412941",
+     "h1": "17659.1380797284",
+     "h6": "25302.8913370134",
+     "h24": "71456.2768742708"
+    },
+    "reserve_in_usd": "136973.8104"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "uniswap-v4-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xa1771923045e0dade6578f8c99de248d5a6029b97fb928328f9e767674e7663a",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "0.002870968564",
+    "base_token_price_native_currency": "0.0000012318317054375",
+    "quote_token_price_usd": "399.104074774994",
+    "quote_token_price_native_currency": "0.171049710867663",
+    "base_token_price_quote_token": "0.000007201600629",
+    "quote_token_price_base_token": "138858.019413385",
+    "address": "0xa1771923045e0dade6578f8c99de248d5a6029b97fb928328f9e767674e7663a",
+    "name": "OPTIMUS / TSLA",
+    "pool_created_at": "2026-08-29T06:36:51Z",
+    "token_price_usd": "399.104074774994",
+    "fdv_usd": "4519683.85150788",
+    "market_cap_usd": "4403532.68889245",
+    "price_change_percentage": {
+     "m5": "-0.42",
+     "m15": "-0.42",
+     "m30": "-1.63",
+     "h1": "-2.78",
+     "h6": "-2.5",
+     "h24": "-0.98"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 4,
+      "buyers": 0,
+      "sellers": 1
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 4,
+      "buyers": 0,
+      "sellers": 1
+     },
+     "m30": {
+      "buys": 2,
+      "sells": 5,
+      "buyers": 2,
+      "sellers": 1
+     },
+     "h1": {
+      "buys": 2,
+      "sells": 6,
+      "buyers": 2,
+      "sellers": 2
+     },
+     "h6": {
+      "buys": 20,
+      "sells": 31,
+      "buyers": 13,
+      "sellers": 24
+     },
+     "h24": {
+      "buys": 74,
+      "sells": 76,
+      "buyers": 51,
+      "sellers": 51
+     }
+    },
+    "volume_usd": {
+     "m5": "46.9572126884",
+     "m15": "46.9572126884",
+     "m30": "178.8835231499",
+     "h1": "181.2006631789",
+     "h6": "11741.0320138697",
+     "h24": "36869.8450833286"
+    },
+    "reserve_in_usd": "155813.7148"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x0ff9072a1ead154d92c2d2fef16afba6028ce2b2",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "pons-v2-dex",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xa821b3724b451b22476c5347471b2a96d185b86af8760f226273e34ab4b2b8a0",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "398.7369830691",
+    "base_token_price_native_currency": "0.171046899111017",
+    "quote_token_price_usd": "772.420933485819",
+    "quote_token_price_native_currency": "0.330240502229179",
+    "base_token_price_quote_token": "0.5179464601",
+    "quote_token_price_base_token": "1.9307014856",
+    "address": "0xa821b3724b451b22476c5347471b2a96d185b86af8760f226273e34ab4b2b8a0",
+    "name": "TSLA / SPY 0.05%",
+    "pool_created_at": "2026-08-03T19:48:12Z",
+    "token_price_usd": "398.7369830691",
+    "fdv_usd": "4515526.69411457",
+    "market_cap_usd": "4399482.36610976",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "-0.861",
+     "m30": "-1.413",
+     "h1": "-2.72",
+     "h6": "-2.9",
+     "h24": "-1"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 1,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 1
+     },
+     "m15": {
+      "buys": 3,
+      "sells": 15,
+      "buyers": 10,
+      "sellers": 1
+     },
+     "m30": {
+      "buys": 22,
+      "sells": 46,
+      "buyers": 21,
+      "sellers": 2
+     },
+     "h1": {
+      "buys": 39,
+      "sells": 98,
+      "buyers": 29,
+      "sellers": 2
+     },
+     "h6": {
+      "buys": 68,
+      "sells": 136,
+      "buyers": 34,
+      "sellers": 7
+     },
+     "h24": {
+      "buys": 208,
+      "sells": 248,
+      "buyers": 41,
+      "sellers": 32
+     }
+    },
+    "volume_usd": {
+     "m5": "50.5589173699",
+     "m15": "1043.9117974938",
+     "m30": "3473.8650105998",
+     "h1": "6369.5497074987",
+     "h6": "8868.0065506892",
+     "h24": "19144.1906890842"
+    },
+    "reserve_in_usd": "129675.3083"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "uniswap-v4-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x90b6675dc859215228e86636f94ab19cc260d1c9ca919b117a5e486b6b2565b9",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "0.0000209150981",
+    "base_token_price_native_currency": "0.00000000893076347618247",
+    "quote_token_price_usd": "411.128968822026",
+    "quote_token_price_native_currency": "0.174914258835303",
+    "base_token_price_quote_token": "0.00000005105794997",
+    "quote_token_price_base_token": "19585588.5447849",
+    "address": "0x90b6675dc859215228e86636f94ab19cc260d1c9ca919b117a5e486b6b2565b9",
+    "name": "ROBOTAXI / TSLA",
+    "pool_created_at": "2026-10-28T02:31:32Z",
+    "token_price_usd": "411.128968822026",
+    "fdv_usd": "4655860.66070509",
+    "market_cap_usd": "4536209.89607563",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "0",
+     "m30": "0",
+     "h1": "0",
+     "h6": "0",
+     "h24": "0.78"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m30": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h6": {
+      "buys": 1,
+      "sells": 2,
+      "buyers": 1,
+      "sellers": 1
+     },
+     "h24": {
+      "buys": 242,
+      "sells": 235,
+      "buyers": 64,
+      "sellers": 64
+     }
+    },
+    "volume_usd": {
+     "m5": "0.0",
+     "m15": "0.0",
+     "m30": "0.0",
+     "h1": "0.0",
+     "h6": "7.455801275",
+     "h24": "17921.6375883477"
+    },
+    "reserve_in_usd": "20827.3112"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0xe8a45505c70a33cfc30383b12092afb758fe1e18",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "long-xyz",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x36ac732af427fd9958b9039a0dcb2ac0da0e45e959b4429d53e0b29b6cb2aeba",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "408.1314545493",
+    "base_token_price_native_currency": "0.174937721891143",
+    "quote_token_price_usd": "0.999690014731573",
+    "quote_token_price_native_currency": "0.000428497955315911",
+    "base_token_price_quote_token": "408.2580085176",
+    "quote_token_price_base_token": "0.002449431436",
+    "address": "0x36ac732af427fd9958b9039a0dcb2ac0da0e45e959b4429d53e0b29b6cb2aeba",
+    "name": "TSLA / USDG",
+    "pool_created_at": "2026-09-21T09:53:52Z",
+    "token_price_usd": "408.1314545493",
+    "fdv_usd": "4621915.08683256",
+    "market_cap_usd": "4503136.68805887",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "0",
+     "m30": "0",
+     "h1": "-0.79",
+     "h6": "-0.48",
+     "h24": "1.76"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m30": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 4,
+      "buyers": 0,
+      "sellers": 4
+     },
+     "h6": {
+      "buys": 3,
+      "sells": 7,
+      "buyers": 3,
+      "sellers": 6
+     },
+     "h24": {
+      "buys": 4,
+      "sells": 62,
+      "buyers": 4,
+      "sellers": 38
+     }
+    },
+    "volume_usd": {
+     "m5": "0.0",
+     "m15": "0.0",
+     "m30": "0.0",
+     "h1": "1718.9934084641",
+     "h6": "1771.8651778392",
+     "h24": "8480.4685733318"
+    },
+    "reserve_in_usd": "14761.544"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "uniswap-v4-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x141be60316aeb3aa7c0e0d8e4fbdc0aa78105e6e462cfc03b8a0f0c59f0bf3f8",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "0.0001087087385",
+    "base_token_price_native_currency": "0.0000000464564441362627",
+    "quote_token_price_usd": "409.353950163036",
+    "quote_token_price_native_currency": "0.17525514186519",
+    "base_token_price_quote_token": "0.0000002650789223",
+    "quote_token_price_base_token": "3772461.39095675",
+    "address": "0x141be60316aeb3aa7c0e0d8e4fbdc0aa78105e6e462cfc03b8a0f0c59f0bf3f8",
+    "name": "DOGGIE / TSLA",
+    "pool_created_at": "2026-08-26T21:41:52Z",
+    "token_price_usd": "409.353950163036",
+    "fdv_usd": "4635759.32955811",
+    "market_cap_usd": "4516625.14818082",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "0",
+     "m30": "0",
+     "h1": "0",
+     "h6": "-0.15",
+     "h24": "1.78"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m30": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h1": {
+      "buys": 1,
+      "sells": 2,
+      "buyers": 1,
+      "sellers": 1
+     },
+     "h6": {
+      "buys": 12,
+      "sells": 15,
+      "buyers": 5,
+      "sellers": 5
+     },
+     "h24": {
+      "buys": 85,
+      "sells": 89,
+      "buyers": 19,
+      "sellers": 19
+     }
+    },
+    "volume_usd": {
+     "m5": "0.0",
+     "m15": "0.0",
+     "m30": "0.0",
+     "h1": "9.8539053484",
+     "h6": "173.6474100096",
+     "h24": "1349.2279997899"
+    },
+    "reserve_in_usd": "84999.6222"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0xa9efe2fc94de79734c03051515f48f254ce61e18",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "long-xyz",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x42b961e421c08741fe9b25dda1d1090d42c7f782a0d73e099b4248d67357a612",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "0.00003437453706",
+    "base_token_price_native_currency": "0.0000000145426196604139",
+    "quote_token_price_usd": "410.691735679127",
+    "quote_token_price_native_currency": "0.174830885146154",
+    "base_token_price_quote_token": "0.00000008318106751",
+    "quote_token_price_base_token": "12021966.4151746",
+    "address": "0x42b961e421c08741fe9b25dda1d1090d42c7f782a0d73e099b4248d67357a612",
+    "name": "FTR / TSLA",
+    "pool_created_at": "2026-09-12T18:38:24Z",
+    "token_price_usd": "410.691735679127",
+    "fdv_usd": "4650909.18137876",
+    "market_cap_usd": "4531385.66460541",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "0",
+     "m30": "0",
+     "h1": "0",
+     "h6": "0",
+     "h24": "0.79"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m30": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h24": {
+      "buys": 10,
+      "sells": 17,
+      "buyers": 9,
+      "sellers": 9
+     }
+    },
+    "volume_usd": {
+     "m5": "0.0",
+     "m15": "0.0",
+     "m30": "0.0",
+     "h1": "0.0",
+     "h6": "0.0",
+     "h24": "2061.6193129116"
+    },
+    "reserve_in_usd": "36819.8026"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0xa605875d620753f4fb06024b788b2b6552a81e18",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "long-xyz",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xef3422f03f45e33527e9837a30328c36368f0d5b10455d4098760ba75c18d4c3",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "0.0000528362364",
+    "base_token_price_native_currency": "0.0000000226222223915823",
+    "quote_token_price_usd": "411.479072162008",
+    "quote_token_price_native_currency": "0.17617778469766",
+    "base_token_price_quote_token": "0.0000001284056468",
+    "quote_token_price_base_token": "7787819.50102372",
+    "address": "0xef3422f03f45e33527e9837a30328c36368f0d5b10455d4098760ba75c18d4c3",
+    "name": "OPTIMUS / TSLA",
+    "pool_created_at": "2026-07-19T09:30:05Z",
+    "token_price_usd": "411.479072162008",
+    "fdv_usd": "4659825.432082",
+    "market_cap_usd": "4540072.77696195",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "0",
+     "m30": "0",
+     "h1": "0",
+     "h6": "0.51",
+     "h24": "1.24"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m30": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h6": {
+      "buys": 6,
+      "sells": 4,
+      "buyers": 5,
+      "sellers": 4
+     },
+     "h24": {
+      "buys": 7,
+      "sells": 4,
+      "buyers": 6,
+      "sellers": 4
+     }
+    },
+    "volume_usd": {
+     "m5": "0.0",
+     "m15": "0.0",
+     "m30": "0.0",
+     "h1": "0.0",
+     "h6": "1052.8750164478",
+     "h24": "1562.6704482216"
+    },
+    "reserve_in_usd": "45899.8519"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0xb5d553cc06f9b3569731b7a74fc269b939841e18",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "long-xyz",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xb349fb08c2712f3a70bad40a4d006b68d67e888b",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "398.6570086337",
+    "base_token_price_native_currency": "0.171880154120412",
+    "quote_token_price_usd": "1.00160804245978",
+    "quote_token_price_native_currency": "0.000427622158236556",
+    "base_token_price_quote_token": "401.9439844493",
+    "quote_token_price_base_token": "0.00248790886",
+    "address": "0xb349fb08c2712f3a70bad40a4d006b68d67e888b",
+    "name": "TSLA / USDG 1%",
+    "pool_created_at": "2026-08-20T14:08:23Z",
+    "token_price_usd": "398.6570086337",
+    "fdv_usd": "4514621.01765808",
+    "market_cap_usd": "4398599.96459392",
+    "price_change_percentage": {
+     "m5": "-0.42",
+     "m15": "-0.45",
+     "m30": "-1.57",
+     "h1": "-1.57",
+     "h6": "-1.57",
+     "h24": "-1.37"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 6,
+      "buyers": 0,
+      "sellers": 6
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 8,
+      "buyers": 0,
+      "sellers": 8
+     },
+     "m30": {
+      "buys": 0,
+      "sells": 23,
+      "buyers": 0,
+      "sellers": 14
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 23,
+      "buyers": 0,
+      "sellers": 14
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 23,
+      "buyers": 0,
+      "sellers": 14
+     },
+     "h24": {
+      "buys": 28,
+      "sells": 24,
+      "buyers": 20,
+      "sellers": 15
+     }
+    },
+    "volume_usd": {
+     "m5": "497.8482323961",
+     "m15": "667.6432081377",
+     "m30": "1912.6813868416",
+     "h1": "1912.6813868416",
+     "h6": "1912.6813868416",
+     "h24": "3937.9603027706"
+    },
+    "reserve_in_usd": "16247.5101"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "uniswap-v3-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xf741d39c5980a86ffe049bceb7b4c2eb58b59d3b",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "0.000004525466232",
+    "base_token_price_native_currency": "0.00000000191114058294166",
+    "quote_token_price_usd": "407.495396096732",
+    "quote_token_price_native_currency": "0.17208856478489",
+    "base_token_price_quote_token": "0.00000001110556408",
+    "quote_token_price_base_token": "90044953.4277632",
+    "address": "0xf741d39c5980a86ffe049bceb7b4c2eb58b59d3b",
+    "name": "Robotaxi / TSLA",
+    "pool_created_at": "2026-10-28T02:34:59Z",
+    "token_price_usd": "407.495396096732",
+    "fdv_usd": "4614711.9954627",
+    "market_cap_usd": "4496118.70862704",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "0",
+     "m30": "0",
+     "h1": "0",
+     "h6": "0",
+     "h24": "0.01"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m30": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 1,
+      "buyers": 0,
+      "sellers": 1
+     },
+     "h24": {
+      "buys": 78,
+      "sells": 88,
+      "buyers": 47,
+      "sellers": 49
+     }
+    },
+    "volume_usd": {
+     "m5": "0.0",
+     "m15": "0.0",
+     "m30": "0.0",
+     "h1": "0.0",
+     "h6": "49.6032677394",
+     "h24": "13437.4925911065"
+    },
+    "reserve_in_usd": "4446.7903"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x1303f5d0686349e4e34e74ecac77b994fb542162",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "pons-v2",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x7bba397eba6a5031c60df68ab0885f5de37fce30e9607bedf53c90880a5fce26",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "0.0000008262684325",
+    "base_token_price_native_currency": "0.000000000348974341406899",
+    "quote_token_price_usd": "410.591681587875",
+    "quote_token_price_native_currency": "0.173480402396442",
+    "base_token_price_quote_token": "0.000000002011606709",
+    "quote_token_price_base_token": "497115064.955926",
+    "address": "0x7bba397eba6a5031c60df68ab0885f5de37fce30e9607bedf53c90880a5fce26",
+    "name": "TSLR / TSLA",
+    "pool_created_at": "2026-08-04T16:12:24Z",
+    "token_price_usd": "410.591681587875",
+    "fdv_usd": "4649776.11136246",
+    "market_cap_usd": "4530281.71330715",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "0",
+     "m30": "0",
+     "h1": "0",
+     "h6": "0",
+     "h24": "0.95"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m30": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "h6": {
+      "buys": 1,
+      "sells": 1,
+      "buyers": 1,
+      "sellers": 1
+     },
+     "h24": {
+      "buys": 11,
+      "sells": 8,
+      "buyers": 8,
+      "sellers": 8
+     }
+    },
+    "volume_usd": {
+     "m5": "0.0",
+     "m15": "0.0",
+     "m30": "0.0",
+     "h1": "0.0",
+     "h6": "15.7389206542",
+     "h24": "898.2415478074"
+    },
+    "reserve_in_usd": "60629.6348"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x24117e8e9312223e8fe02078c1ef8077e9b66ba3",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "bankr-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x3f62c18272bafbedf255cd5c999da1ee1ed7a004",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "400.1708598078",
+    "base_token_price_native_currency": "0.171880154120412",
+    "quote_token_price_usd": "1.00098772121646",
+    "quote_token_price_native_currency": "0.000427622158236556",
+    "base_token_price_quote_token": "401.9439844493",
+    "quote_token_price_base_token": "0.00248790886",
+    "address": "0x3f62c18272bafbedf255cd5c999da1ee1ed7a004",
+    "name": "TSLA / USDG 0.35%",
+    "pool_created_at": "2026-08-20T12:32:22Z",
+    "token_price_usd": "400.1708598078",
+    "fdv_usd": "4531764.7381501",
+    "market_cap_usd": "4415303.10934388",
+    "price_change_percentage": {
+     "m5": "-0.08",
+     "m15": "-0.048",
+     "m30": "-1.082",
+     "h1": "-1.8",
+     "h6": "-2.66",
+     "h24": "-0.67"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 4,
+      "buyers": 0,
+      "sellers": 4
+     },
+     "m30": {
+      "buys": 0,
+      "sells": 7,
+      "buyers": 0,
+      "sellers": 7
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 11,
+      "buyers": 0,
+      "sellers": 10
+     },
+     "h6": {
+      "buys": 0,
+      "sells": 14,
+      "buyers": 0,
+      "sellers": 13
+     },
+     "h24": {
+      "buys": 23,
+      "sells": 17,
+      "buyers": 17,
+      "sellers": 16
+     }
+    },
+    "volume_usd": {
+     "m5": "0.0",
+     "m15": "237.810006562",
+     "m30": "287.5101832631",
+     "h1": "344.4876359712",
+     "h6": "576.3821903634",
+     "h24": "3252.0091050691"
+    },
+    "reserve_in_usd": "16417.7822"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "alandale-cl",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x00000000000014aa86c5d3c41765bb24e11bd701-0x517babb270284c7b63567f76e32b4989b454a4d0a305f889205ecdd120fc5c79",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "398.7636885462",
+    "base_token_price_native_currency": "0.170850641410734",
+    "quote_token_price_usd": "1.00367928623242",
+    "quote_token_price_native_currency": "0.000427702229810117",
+    "base_token_price_quote_token": "399.4616569724",
+    "quote_token_price_base_token": "0.002503369178",
+    "address": "0x00000000000014aa86c5d3c41765bb24e11bd701-0x517babb270284c7b63567f76e32b4989b454a4d0a305f889205ecdd120fc5c79",
+    "name": "TSLA / USDG",
+    "pool_created_at": "2026-08-01T19:39:45Z",
+    "token_price_usd": "398.7636885462",
+    "fdv_usd": "4515829.12228112",
+    "market_cap_usd": "4399777.02218774",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "-0.351",
+     "m30": "-1.464",
+     "h1": "-2.51",
+     "h6": "-2.68",
+     "h24": "-1.03"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 1,
+      "buyers": 0,
+      "sellers": 1
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 5,
+      "buyers": 0,
+      "sellers": 5
+     },
+     "m30": {
+      "buys": 0,
+      "sells": 11,
+      "buyers": 0,
+      "sellers": 10
+     },
+     "h1": {
+      "buys": 0,
+      "sells": 23,
+      "buyers": 0,
+      "sellers": 18
+     },
+     "h6": {
+      "buys": 4,
+      "sells": 29,
+      "buyers": 4,
+      "sellers": 23
+     },
+     "h24": {
+      "buys": 42,
+      "sells": 37,
+      "buyers": 31,
+      "sellers": 28
+     }
+    },
+    "volume_usd": {
+     "m5": "24.1785023104",
+     "m15": "185.9937602022",
+     "m30": "451.8827549114",
+     "h1": "809.7138605696",
+     "h6": "1591.9268563115",
+     "h24": "4704.9708908269"
+    },
+    "reserve_in_usd": "8101.9075"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "ekubo-v3-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xc4f0172d6ac8dd294dd1137d047d5e1893760236",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "398.4722781563",
+    "base_token_price_native_currency": "0.171880154120412",
+    "quote_token_price_usd": "1.0000638402065",
+    "quote_token_price_native_currency": "0.000427622158236556",
+    "base_token_price_quote_token": "401.9439844493",
+    "quote_token_price_base_token": "0.00248790886",
+    "address": "0xc4f0172d6ac8dd294dd1137d047d5e1893760236",
+    "name": "TSLA / USDG 0.05%",
+    "pool_created_at": "2026-07-15T21:35:24Z",
+    "token_price_usd": "398.4722781563",
+    "fdv_usd": "4512529.02359349",
+    "market_cap_usd": "4396561.7325956",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "-0.398",
+     "m30": "-1.672",
+     "h1": "-2.83",
+     "h6": "-2.75",
+     "h24": "-0.61"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 6,
+      "sells": 8,
+      "buyers": 3,
+      "sellers": 2
+     },
+     "m30": {
+      "buys": 15,
+      "sells": 22,
+      "buyers": 5,
+      "sellers": 3
+     },
+     "h1": {
+      "buys": 31,
+      "sells": 44,
+      "buyers": 12,
+      "sellers": 7
+     },
+     "h6": {
+      "buys": 48,
+      "sells": 71,
+      "buyers": 18,
+      "sellers": 25
+     },
+     "h24": {
+      "buys": 219,
+      "sells": 235,
+      "buyers": 87,
+      "sellers": 108
+     }
+    },
+    "volume_usd": {
+     "m5": "0.0",
+     "m15": "605.6730023326",
+     "m30": "1246.6876661913",
+     "h1": "1788.512936946",
+     "h6": "3029.0409640205",
+     "h24": "17124.5942127344"
+    },
+    "reserve_in_usd": "2183.0013"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "uniswap-v3-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x9d870a591fafe8e8cf717263f7debaeecffbf44983b7313f6129a324e923b8ef",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "398.7369830691",
+    "base_token_price_native_currency": "0.170988650300864",
+    "quote_token_price_usd": "140.629775210144",
+    "quote_token_price_native_currency": "0.0603059507605489",
+    "base_token_price_quote_token": "2.8353528656",
+    "quote_token_price_base_token": "0.3526897876",
+    "address": "0x9d870a591fafe8e8cf717263f7debaeecffbf44983b7313f6129a324e923b8ef",
+    "name": "TSLA / MSTR 0.25%",
+    "pool_created_at": "2026-10-27T16:06:23Z",
+    "token_price_usd": "398.7369830691",
+    "fdv_usd": "4515526.69411457",
+    "market_cap_usd": "4399482.36610976",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "-1.001",
+     "m30": "-1.471",
+     "h1": "-1.95",
+     "h6": "-2.64",
+     "h24": "-2.19"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 0,
+      "sells": 0,
+      "buyers": 0,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 0,
+      "sells": 9,
+      "buyers": 0,
+      "sellers": 9
+     },
+     "m30": {
+      "buys": 5,
+      "sells": 18,
+      "buyers": 3,
+      "sellers": 12
+     },
+     "h1": {
+      "buys": 16,
+      "sells": 39,
+      "buyers": 13,
+      "sellers": 21
+     },
+     "h6": {
+      "buys": 38,
+      "sells": 55,
+      "buyers": 24,
+      "sellers": 25
+     },
+     "h24": {
+      "buys": 67,
+      "sells": 82,
+      "buyers": 33,
+      "sellers": 33
+     }
+    },
+    "volume_usd": {
+     "m5": "0.0",
+     "m15": "559.0658959204",
+     "m30": "1495.735412384",
+     "h1": "4201.2987609179",
+     "h6": "7145.6713089947",
+     "h24": "10912.7063997322"
+    },
+    "reserve_in_usd": "2457.6915"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0xec262a75e413fafd0df80480274532c79d42da09",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "uniswap-v4-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xed80cb489e051246f95fbe9e507d04120faac8742e4c20eae69d6738d7b36d6f",
+   "type": "pool",
+   "attributes": {
+    "base_token_price_usd": "399.9967398133",
+    "base_token_price_native_currency": "0.171378943274503",
+    "quote_token_price_usd": "2333.99",
+    "quote_token_price_native_currency": "1.0",
+    "base_token_price_quote_token": "0.1713789433",
+    "quote_token_price_base_token": "5.835022558",
+    "address": "0xed80cb489e051246f95fbe9e507d04120faac8742e4c20eae69d6738d7b36d6f",
+    "name": "TSLA / WETH 0.18%",
+    "pool_created_at": "2026-09-21T23:33:20Z",
+    "token_price_usd": "399.9967398133",
+    "fdv_usd": "4529792.90329021",
+    "market_cap_usd": "4413381.94858399",
+    "price_change_percentage": {
+     "m5": "0",
+     "m15": "-0.044",
+     "m30": "-1.024",
+     "h1": "-2.28",
+     "h6": "-2.6",
+     "h24": "-0.85"
+    },
+    "transactions": {
+     "m5": {
+      "buys": 1,
+      "sells": 0,
+      "buyers": 1,
+      "sellers": 0
+     },
+     "m15": {
+      "buys": 2,
+      "sells": 11,
+      "buyers": 2,
+      "sellers": 1
+     },
+     "m30": {
+      "buys": 9,
+      "sells": 21,
+      "buyers": 8,
+      "sellers": 2
+     },
+     "h1": {
+      "buys": 10,
+      "sells": 40,
+      "buyers": 9,
+      "sellers": 4
+     },
+     "h6": {
+      "buys": 29,
+      "sells": 66,
+      "buyers": 14,
+      "sellers": 19
+     },
+     "h24": {
+      "buys": 119,
+      "sells": 168,
+      "buyers": 63,
+      "sellers": 79
+     }
+    },
+    "volume_usd": {
+     "m5": "4.93802082",
+     "m15": "200.8986775603",
+     "m30": "466.867905989",
+     "h1": "770.3577502751",
+     "h6": "1435.7493464798",
+     "h24": "3290.6470432624"
+    },
+    "reserve_in_usd": "7295.8253"
+   },
+   "relationships": {
+    "base_token": {
+     "data": {
+      "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+      "type": "token"
+     }
+    },
+    "quote_token": {
+     "data": {
+      "id": "robinhood_0x0000000000000000000000000000000000000000",
+      "type": "token"
+     }
+    },
+    "dex": {
+     "data": {
+      "id": "uniswap-v4-robinhood",
+      "type": "dex"
+     }
+    }
+   }
+  }
+ ]
+}

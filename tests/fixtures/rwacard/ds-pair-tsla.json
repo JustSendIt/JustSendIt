@@ -1,0 +1,63 @@
+{
+ "capturedAt": "2026-10-28",
+ "source": "https://api.dexscreener.com/latest/dex/search?q=TSLA",
+ "pair": {
+  "chainId": "robinhood",
+  "dexId": "uniswap",
+  "url": "https://dexscreener.com/robinhood/0x8517f8071ae5b831b738052f12125e8e3d6c158b78728aa44ce3b25e5104d32e",
+  "pairAddress": "0x8517f8071ae5b831b738052f12125e8e3d6c158b78728aa44ce3b25e5104d32e",
+  "labels": [
+   "v4"
+  ],
+  "baseToken": {
+   "address": "0x322F0929c4625eD5bAd873c95208D54E1c003b2d",
+   "name": "Tesla • Robinhood Token",
+   "symbol": "TSLA"
+  },
+  "quoteToken": {
+   "address": "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168",
+   "name": "Global Dollar",
+   "symbol": "USDG"
+  },
+  "priceNative": "400.5415",
+  "priceUsd": "400.54",
+  "txns": {
+   "m5": {
+    "buys": 0,
+    "sells": 31
+   },
+   "h1": {
+    "buys": 1,
+    "sells": 151
+   },
+   "h6": {
+    "buys": 18,
+    "sells": 189
+   },
+   "h24": {
+    "buys": 177,
+    "sells": 270
+   }
+  },
+  "volume": {
+   "h24": 105370.18,
+   "h6": 38166.24,
+   "h1": 30992.32,
+   "m5": 6861.52
+  },
+  "priceChange": {
+   "m5": -0.38,
+   "h1": -2.12,
+   "h6": -2.7,
+   "h24": -0.45
+  },
+  "liquidity": {
+   "usd": 559820.57,
+   "base": 324.4319,
+   "quote": 429872
+  },
+  "fdv": 4545926,
+  "marketCap": 4545926,
+  "pairCreatedAt": 1783232339000
+ }
+}

@@ -6098,7 +6098,7 @@ const OUTBOUND_RPM = {
   /* Market Data (lib/marketdata.js, 2026-10-26). DefiLlama, L2BEAT and the logo CDNs publish no number, so these are ceilings
      of our own, far below anything they would notice (DefiLlama is CDN-cached for 30 minutes and is read no faster than that);
      growthepie publishes 10 a minute. GeckoTerminal is the site's 10 a minute: Market Data's collectors take at most 3 of them
-     ('market:geckoterminal', about 2 a minute on average), and 2 more are kept for a person opening a token on /market or
+     ('market:geckoterminal', about 2.3 a minute on average with the RWA job's reads), and 2 more are kept for a person opening a token on /market or
      through the Send API ('market:geckoterminal-asked': its candles and token reads), which the collectors never take from —
      they queue for minutes, and a person waits 8 s at most. With the name search's 4, that leaves the chart switch and the
      Scanner at least 1 in the busiest minute, and in practice most of the 10. 'market:rpc' is Market Data's own ceiling on
@@ -6111,6 +6111,10 @@ const OUTBOUND_RPM = {
      5 (its learned coins, 50 to a call), the daily walk at most 20. */
   'api.coinlore.net': 30,
   'market:geckoterminal': 3, 'market:geckoterminal-asked': 2, 'market:rpc': 12,
+  /* The RWA job (2026-10-28): Robinhood's Stock Token API documents 60 requests a second and cached answers; the job asks it about
+     five times every 30 minutes, so 20 a minute is far above what it needs, and 6 of them are Market Data's share. Chainlink's feed
+     directory is a static file read once a day. */
+  'api.robinhood.com': 20, 'market:robinhood': 6, 'reference-data-directory.vercel.app': 6,
   'coin-images.coingecko.com': 120, 'assets.geckoterminal.com': 120, 'icons.llamao.fi': 60, 'icons.llama.fi': 60, 'cdn.dexscreener.com': 300, 'dd.dexscreener.com': 300,
 };
 try { OUTBOUND_RPM[new URL(BLOCKSCOUT).host] = OUTBOUND_RPM[new URL(BLOCKSCOUT).host] || 240; } catch {}   // a keyed explorer host inherits the keyed ceiling
@@ -10138,6 +10142,13 @@ function applyRisk(e, deployerCounts, deployerDied) {
   r.deadVolume = liq != null && e.volume.h24 < 300 && e.pair.ageMinutes != null && e.pair.ageMinutes > 60;
   const dep = e.token.deployer;
   r.serialDeployer = !!(dep && deployerCounts[dep] >= 3);
+  /* Robinhood's Stock Tokens (owner's RWA spec, 2026-10-28): on a token confirmed as one (its registry and its code on the chain), a
+     deployer that holds the registry's token-deployer role deploys every Stock Token by design, so "serial deployer" is not raised —
+     and the reason is kept (a string, never a flag) for the RWA card. Every other flag stands as it is. */
+  if (r.serialDeployer && (!e.chain || e.chain === 'robinhood')) {
+    let waived = null; try { waived = MKT.rwaIssuerDeployer(e.token.address, dep); } catch {}   // (before Market Data is wired, nothing is waived)
+    if (waived) { r.serialDeployer = false; r.serialDeployerWaived = waived; }
+  }
   if (r.serialDeployer) { r.deployerLaunches = deployerCounts[dep]; r.deployerDied = deployerDied[dep] || 0; }
   applySniperFlags(e, r);
   applyBundleFlags(e, r);
@@ -10395,6 +10406,9 @@ const MKT_URLS = {
   ds: process.env.MARKET_DS_URL || 'https://api.dexscreener.com',
   cg: process.env.MARKET_CG_URL || 'https://api.coingecko.com/api/v3',
   ethRpc: process.env.MARKET_ETH_RPC_URL || 'https://ethereum-rpc.publicnode.com',
+  // the RWA tab (owner, 2026-10-28): Robinhood's Stock Token API, and Chainlink's public feed directory for the chain
+  rhj: process.env.MARKET_RHJ_URL || 'https://api.robinhood.com/rhj',
+  chainlink: process.env.MARKET_CHAINLINK_URL || 'https://reference-data-directory.vercel.app/feeds-robinhood-mainnet.json',
   // CoinLore, the chain market caps' second source: an empty MARKET_COINLORE_URL turns it off (the check then says so)
   coinlore: process.env.MARKET_COINLORE_URL != null ? process.env.MARKET_COINLORE_URL : 'https://api.coinlore.net/api',
 };
@@ -10531,6 +10545,15 @@ const MKT = MD.createMarketData({
   log: (m) => { const k = String(m).split(':')[0]; if (now() - (_mktLogAt.get(k) || 0) > 10 * 60e3) { _mktLogAt.set(k, now()); console.warn(m); } },
 });
 MKT.migrate();
+/* The RWA card on the Scanner's dashboard (owner, 2026-10-28): a Robinhood Chain profile carries p.rwa — the facts Market Data keeps
+   for that token when it is an RWA here (MKT.rwaFacts: its evidence, figures, issuer powers, corporate actions, lookalikes); for a
+   token that only shares an RWA's ticker, the "not an RWA" answer that says so (MKT.rwaLookalike, { notRwa, why }); else null. A
+   lookup of stored facts, never a read on the scan path; added to the answer only, never stored with the profile. */
+function withRwa(p) {
+  if (!p || !p.token || !/^0x[0-9a-f]{40}$/i.test(String(p.token.address || '')) || (p.chain && p.chain !== 'robinhood')) return p;
+  let rwa = null; try { rwa = MKT.rwaFacts(p.token.address) || MKT.rwaLookalike(p.token.address, p.token.symbol); } catch {}
+  return Object.assign({}, p, { rwa });
+}
 // the radar resumes where it stopped: its block cursor and its newest pairs (until now they lived in memory only)
 try { const rr = MKT.radarRestore(Math.max(PAIRS_KEEP, 120)); if (rr.cursor && !pairsScanBlock) { pairsScanBlock = rr.cursor; pairsRaw = rr.raw; } } catch {}
 if (MKT_COLLECT_ON) {
@@ -18584,7 +18607,10 @@ const server = http.createServer(async (req, res) => {
         else if (p === '/api/market/status') r = MKT.status();
         else if (p === '/api/market/token') { if (!rateLimit('mkttok:' + clientIp(req), 30, 6e4)) return bad(res, 'too many token reads — slow down', 429); r = await MKT.token(mq); }
         else if (p === '/api/market/search') { if (!rateLimit('mktsearch:' + clientIp(req), 30, 6e4)) return bad(res, 'too many searches — slow down', 429); r = await MKT.search(mq); }
-        if (!r) return bad(res, 'unknown market endpoint — one of: chains, chain, tokens, token, scan, search, new-pools, status, logo', 404);
+        // the RWA tab: the list (any view) inherits the 120 a minute; one token's facts are 30 a minute, like a token read
+        else if (p === '/api/market/rwa') r = MKT.rwa(mq);
+        else if (p === '/api/market/rwa/token') { if (!rateLimit('mktrwa:' + clientIp(req), 30, 6e4)) return bad(res, 'too many RWA reads — slow down', 429); r = MKT.rwaToken(mq); }
+        if (!r) return bad(res, 'unknown market endpoint — one of: chains, chain, tokens, token, scan, search, new-pools, status, logo, rwa, rwa/token', 404);
         return send(res, r.status, r.body);
       }
       /* ----- which other sites chart these pools: the chart switch shows only the buttons that will draw a chart ----- */
@@ -18740,7 +18766,7 @@ const server = http.createServer(async (req, res) => {
               ? 'That’s a base trading asset (WETH/USDG), not a token to profile here.'
               : 'No indexed trading pair or WETH/USDG pool found for this address.',
           });
-          return send(res, 200, { pair: r.pair, risk: Object.fromEntries(Object.entries(RISK).map(([k, v]) => [k, { sev: v.sev, label: v.label }])), community: communityForToken(token) });
+          return send(res, 200, { pair: withRwa(r.pair), risk: Object.fromEntries(Object.entries(RISK).map(([k, v]) => [k, { sev: v.sev, label: v.label }])), community: communityForToken(token) });
         } catch (e) {
           // a designed refusal (an HttpError: busy, bad address) says its own words; anything else is logged, not echoed
           if (e && e.status) return bad(res, e.message, e.status);
@@ -18904,7 +18930,7 @@ const server = http.createServer(async (req, res) => {
           const mk = r.stale ? false : MKT.scanPut('robinhood', tok, r.pair, { src: quiet ? 'market' : 'scan', readAt: r.readAt, kind });   // a stale snapshot is not a new reading
           return send(res, 200, {
             kind, ...(pool ? { pool, poolVerified: poolOk === true ? true : (poolOk === false ? false : null) } : {}),
-            ...RH, pair: r.pair, risk: risk(), community: communityForToken(tok),
+            ...RH, pair: withRwa(r.pair), risk: risk(), community: communityForToken(tok),   // withRwa: the RWA card's stored facts, on the answer only
             // count/firstAt/lastAt come from the store or not at all — a failed write is "not kept", never "1 scan, just now"
             scan: { now: now(), readAt: r.readAt, stale: !!r.stale, ...(r.stale ? { reason: r.reason || null, busy: !!r.busy } : {}),
                     kept: !!s, ...(s ? { count: s.count, firstAt: s.first_at, lastAt: s.last_at } : {}), ...(quiet ? { quiet: true, marketKept: mk } : {}) },

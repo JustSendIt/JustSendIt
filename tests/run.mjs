@@ -126,6 +126,7 @@ const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DI
                  against fakes of every one of them. */
               MARKET_COLLECT: '0', MARKET_LLAMA_URL: DEAD, MARKET_LLAMA_COINS_URL: DEAD, MARKET_LLAMA_STABLES_URL: DEAD, MARKET_L2BEAT_URL: DEAD,
               MARKET_GROWTHEPIE_URL: DEAD, MARKET_GROWTHEPIE_METRICS_URL: DEAD, MARKET_GT_URL: DEAD, MARKET_DS_URL: DEAD, MARKET_CG_URL: DEAD, MARKET_ETH_RPC_URL: DEAD, MARKET_LOGO_ORIGIN: DEAD, MARKET_COINLORE_URL: DEAD,
+              MARKET_RHJ_URL: DEAD, MARKET_CHAINLINK_URL: DEAD,   // the RWA tab's: Robinhood's Stock Token API, Chainlink's feed directory
               // no keyed explorer, whatever a .env says: the server then asks the explorer nothing (owner, 2026-10-27), which the guard below holds it to
               ...(process.env.CHAIN_LIVE === '1' ? {} : { BLOCKSCOUT_URL: '' }) };
 

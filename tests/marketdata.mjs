@@ -24,6 +24,9 @@ import { createRequire } from 'node:module';
 import { ROOT, SERVER_JS } from './_paths.mjs';
 const require = createRequire(import.meta.url);
 const MD = require(path.join(ROOT, 'lib', 'marketdata.js'));
+const RW = require(path.join(ROOT, 'lib', 'rwa.js'));
+const { AbiCoder, id: keccakId } = require(path.join(ROOT, 'node_modules', 'ethers'));
+const ABI = AbiCoder.defaultAbiCoder();
 const CM = require(path.join(ROOT, 'lib', 'chainmcap.js'));
 
 const SRC = fs.readFileSync(SERVER_JS, 'utf8');
@@ -56,6 +59,15 @@ const F = {
   dsTokens: FIX('ds-tokens-v1.json'), dsSend: FIX('ds-token-pairs-send.json'), dsSearch: FIX('ds-search-robinhood.json'), cgMarkets: FIX('cg-markets.json'),
   state: FIX('rpc-state.json'), logs: FIX('rpc-logs.json'), anchors: FIX('rpc-anchor-blocks.json'), bridge: FIX('eth-bridge.json'), pm: FIX('rpc-poolmanager.json'),
 };
+// the RWA tab's (2026-10-28): Robinhood's Stock Token API, Chainlink's directory, DefiLlama, GeckoTerminal, Sourcify's ABIs, the chain
+const FR = {
+  assets: FIX('rwa-rhj-assets.json'), prices: FIX('rwa-rhj-prices.json'), actions: FIX('rwa-rhj-corporate-actions.json'), devs: FIX('rwa-rhj-price-deviations.json'),
+  feeds: FIX('rwa-chainlink-feeds.json'), stables: FIX('rwa-llama-stablecoins.json'), multi: FIX('rwa-gt-multi.json'), tslaPools: FIX('rwa-gt-token-pools-tsla.json'),
+  abiReg: FIX('rwa-sourcify-abi-registry.json'), abiStock: FIX('rwa-sourcify-abi-stock.json'), logs: FIX('rwa-rpc-registry-logs.json'), reads: FIX('rwa-rpc-reads.json'), cg: FIX('rwa-cg-lookalikes.json'),
+  proto: Object.fromEntries(['morpho-blue', 'catch-exchange', 'solon-stocks', 'grove-finance', 'spark-savings'].map((k) => [k, FIX('rwa-llama-protocol-' + k + '.json')])),
+};
+const TSLA = '0x322f0929c4625ed5bad873c95208d54e1c003b2d', TSLAON = '0xb197f36c25ba9b66960688882a4dc595c6b04309', WEEK = '0xc93a8c440cea26d7445df01729f193b27965099f', REGISTRY = '0xe10b6f6b275de231345c20d14ab812db62151b00';
+const GME_RHJ = FR.assets.assets.find((a) => a.tokenSymbol === 'GME').deployments[0].contractAddress.toLowerCase(), GME_MEME = FR.cg.find((c) => c.id === 'gamestop-3').platforms.robinhood;
 /* the chain market caps' cross-check (2026-10-28): DefiLlama's chains, CoinGecko's coins and asset platforms, DefiLlama's relay,
    CoinLore's walk and a /ticker/ read — measured that day (tests/fixtures/marketdata/README.txt) */
 const MC = { chains: FIX('mcap-llama-chains.json'), cg: FIX('mcap-cg-markets.json'), relay: FIX('mcap-llama-mcaps.json'), platforms: FIX('mcap-cg-platforms.json'),
@@ -94,7 +106,10 @@ const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a
 /* ═══ the fake vendors: one server, a prefix per source ═══ */
 const hits = {}, uas = new Set(), log = [], loreAt = [];   // loreAt: when each CoinLore request arrived (real clock), for its pace
 const hit = (k) => { hits[k] = (hits[k] || 0) + 1; };
-const vendorFail = { mcaps: false, gtAll: false, noList: false, cg: false, platforms: false, lore: false, loreFrom: null }, cgSeen = [];
+const vendorFail = { mcaps: false, gtAll: false, gtMulti: false, noList: false, rhj: false, cg: false, platforms: false, lore: false, loreFrom: null }, cgSeen = [];
+/* rows the fake's GeckoTerminal multi answer leaves out (as GeckoTerminal does for a token it has no entry for — TSLAon, mGLO): the RWA
+   section drops AMC and AAPL, so TSLA, whose own pools the research read, is among the 12 RWAs with the most liquidity */
+const gtMultiLeaveOut = new Set();
 // vendorMode.mcap: DefiLlama's chains and relay as measured 2026-10-28 (the market-cap section); otherwise the 2026-10-26 answers
 const vendorMode = { mcap: false };
 // hold.rhPage2: a promise Robinhood Chain's second pools page waits on (a run caught partway through); asked: it was asked for
@@ -107,7 +122,7 @@ const vendor = http.createServer((req, res) => {
   req.on('end', () => {
     const send = (code, o, ct) => { res.writeHead(code, { 'Content-Type': ct || 'application/json' }); res.end(Buffer.isBuffer(o) || typeof o === 'string' ? o : JSON.stringify(o)); };
     const seg = p.split('/')[1];
-    if (['llama', 'coins', 'stables', 'l2beat', 'gtp', 'gt', 'ds', 'cg', 'eth', 'img', 'lore'].includes(seg)) uas.add(String(req.headers['user-agent']));
+    if (['llama', 'coins', 'stables', 'l2beat', 'gtp', 'gt', 'ds', 'cg', 'eth', 'img', 'rhj', 'chainlink', 'lore'].includes(seg)) uas.add(String(req.headers['user-agent']));
     log.push(req.method + ' ' + p + u.search);
     if (seg === 'lore') loreAt.push([Date.now(), p + u.search]);
     hit(seg);
@@ -119,10 +134,15 @@ const vendor = http.createServer((req, res) => {
     if (p === '/llama/overview/open-interest') return send(200, vendorFail.noList ? { error: 'no protocols today' } : F.oi);
     if (p === '/llama/protocols') return send(200, F.protocols);
     if (p === '/llama/v2/historicalChainTvl/Robinhood%20Chain') return send(200, F.histtvl);
+    { const pm = /^\/llama\/protocol\/([a-z0-9.-]+)$/.exec(p); if (pm) { hit('llama-protocol'); return FR.proto[pm[1]] ? send(200, FR.proto[pm[1]]) : send(404, { error: 'not in the fixtures' }); } }
     if (p === '/llama/overview/dexs/Robinhood%20Chain') return send(200, F.dexsRh);
     if (p === '/llama/overview/fees/Robinhood%20Chain') return send(200, F.feesRh);
     if (p.startsWith('/llama/')) return send(404, { error: 'not in the fixtures' });
     if (p === '/stables/stablecoinchains') return send(200, F.stables);
+    if (p === '/stables/stablecoins') { hit('stables-list'); return u.searchParams.get('includePrices') === 'true' ? send(200, FR.stables) : send(400, { error: 'includePrices' }); }
+    // Robinhood's Stock Token API (vendorFail.rhj: it answers 503), Chainlink's feed directory
+    if (seg === 'rhj') { hit('rhj-' + p.split('/')[2]); if (vendorFail.rhj) return send(503, { error: 'unavailable' }); const k = { assets: FR.assets, prices: FR.prices, 'corporate-actions': FR.actions, 'price-deviations': FR.devs }[p.split('/')[2]]; return k ? send(200, k) : send(404, { error: 'not here' }); }
+    if (p === '/chainlink/feeds-robinhood-mainnet.json') { hit('chainlink-dir'); return send(200, FR.feeds); }
     if (p === '/stables/stablecoincharts/Robinhood%20Chain') return send(200, F.stChart);
     if (p.startsWith('/stables/')) return send(404, { error: 'not in the fixtures' });
     if (p === '/coins/mcaps' && req.method === 'POST') { hit('mcaps-post'); try { JSON.parse(body); } catch { return send(400, {}); } return vendorFail.mcaps ? send(500, { error: 'down' }) : send(200, vendorMode.mcap ? MC.relay : F.mcaps); }
@@ -151,6 +171,8 @@ const vendor = http.createServer((req, res) => {
       if (p === '/gt/networks/eth/new_pools') return send(200, F.gtNewEth);
       if (/^\/gt\/networks\/[a-z_]+\/new_pools$/.test(p)) return send(200, { data: [] });
       if (p === '/gt/networks/robinhood/tokens/' + SEND) return send(200, F.gtSend);
+      if (p.startsWith('/gt/networks/robinhood/tokens/multi/')) { hit('gt-multi'); if (vendorFail.gtMulti) return send(500, { errors: [{ status: '500' }] }); const want = p.split('/').pop().split(','); return send(200, { data: FR.multi.data.filter((d) => want.includes(d.attributes.address) && !gtMultiLeaveOut.has(d.attributes.address)) }); }
+      if (p === '/gt/networks/robinhood/tokens/' + TSLA + '/pools') { hit('gt-token-pools'); return send(200, FR.tslaPools); }
       if (/^\/gt\/networks\/[a-z_]+\/tokens\//.test(p)) return send(404, { errors: [{ status: '404', title: 'Not Found' }] });
       if (/\/ohlcv\/hour$/.test(p)) return send(200, F.ohlcvH);
       if (/\/ohlcv\/day$/.test(p)) return send(200, F.ohlcvD);
@@ -194,17 +216,59 @@ const vendor = http.createServer((req, res) => {
 await new Promise((ok) => vendor.listen(0, '127.0.0.1', ok));
 vendor.unref();
 const V = 'http://127.0.0.1:' + vendor.address().port;
-const URLS = { llama: V + '/llama', coins: V + '/coins', stables: V + '/stables', l2beat: V + '/l2beat', growthepie: V + '/gtp', growthepieMetrics: V + '/gtp', gt: V + '/gt', ds: V + '/ds', cg: V + '/cg', ethRpc: V + '/eth', coinlore: V + '/lore' };
+const URLS = { llama: V + '/llama', coins: V + '/coins', stables: V + '/stables', l2beat: V + '/l2beat', growthepie: V + '/gtp', growthepieMetrics: V + '/gtp', gt: V + '/gt', ds: V + '/ds', cg: V + '/cg', ethRpc: V + '/eth',
+  rhj: V + '/rhj', chainlink: V + '/chainlink/feeds-robinhood-mainnet.json', coinlore: V + '/lore' };
 // CoinLore's pace without the wait: each sleep the module asks for is recorded (and the clock it reads stays where it is)
 const sleeps = [];
 const fakeSleep = async (ms) => { sleeps.push(ms); };
 
 /* ═══ the fake Robinhood Chain node: the research's state batch, its real pool-creation logs, and timestamps between two real blocks ═══ */
-const node = { head: HEAD, ranges: [], single: [], throttle: false, v4Limit: 400000, calls: 0 };
+const node = { head: HEAD, ranges: [], single: [], throttle: false, v4Limit: 400000, calls: 0, mc: [], storage: 0 };
+/* The RWA reads the research made, answered as it read them (rwa-rpc-reads.json) and nothing else: a beacon slot or a code it did not
+   read is an error item (the node gave nothing — "not read"), and a Multicall3 subcall it did not read reverts. terms() is pure in
+   Stock.sol (its verified ABI), so every Stock Token answers what TSLA did. A Chainlink round's id, start and answeredInRound were not
+   recorded: they answer 0 (the site reads only the answer and updatedAt). */
+const RR = FR.reads, MC3 = RW.MULTICALL3, RR_EXTRA_CODE = {};
+const units18 = (x) => { const s = /e/i.test(String(x)) ? Number(x).toFixed(18) : String(x); const [i, d = ''] = s.split('.'); return BigInt(i + (d + '0'.repeat(18)).slice(0, 18)); };
+function rwaSub(to, data) {
+  const S = RW.SELECTORS, word = (v) => '0x' + w256(BigInt(v).toString(16)), str = (x) => ABI.encode(['string'], [x]);
+  if (data === S.totalSupply) return to === RR.tsla.address ? RR.tsla.totalSupply : to === RR.week.address ? word(units18(RR.week.supply)) : RR.supplies[to] != null ? word(units18(RR.supplies[to])) : null;
+  if (to === RR.tsla.address && ({ [S.tokenPaused]: 1, [S.oraclePaused]: 1 })[data]) return word(0);
+  if (to === RR.tsla.address && data === S.uiMultiplier) return RR.tsla.uiMultiplier;
+  if (to === RR.tsla.address && data === S.newUIMultiplier) return RR.tsla.newUIMultiplier;
+  if (to === RR.tsla.address && data === S.effectiveAt) return RR.tsla.effectiveAt;
+  if (data === S.terms && RR.beacons[to] === REGISTRY) return str(RR.tsla.terms);
+  if (data === S.implementation && RR.beaconImpl[to]) return '0x' + w256(RR.beaconImpl[to]);
+  if (RR.meta[to] && data === S.name) return str(RR.meta[to].name);
+  if (RR.meta[to] && data === S.symbol) return str(RR.meta[to].symbol);
+  if (RR.meta[to] && data === S.decimals) return word(RR.meta[to].decimals);
+  if (RR.feeds[to] && data === S.latestRoundData) return ABI.encode(['uint80', 'int256', 'uint256', 'uint256', 'uint80'], [0, BigInt(RR.feeds[to].answer), 0, RR.feeds[to].updatedAt, 0]);
+  if (RR.feeds[to] && data === S.description) return str(RR.feeds[to].description);
+  return null;
+}
+function rwaNodeAnswer(m, params) {
+  const a0 = params && params[0];
+  if (m === 'eth_getStorageAt') {
+    node.storage++;
+    const a = String(a0).toLowerCase(), v = params[1] === RW.SLOT.beacon ? (a === RR.week.address ? RR.week.beacon : RR.beacons[a]) : params[1] === RW.SLOT.impl ? RR.implementations[a] : null;
+    return v ? { result: '0x' + w256(String(v).toLowerCase()) } : { error: { code: -32000, message: 'not read by the research' } };
+  }
+  if (m === 'eth_call' && String(a0.to).toLowerCase() === MC3) {
+    const [arr] = ABI.decode(['tuple(address,bool,bytes)[]'], '0x' + String(a0.data).slice(10));
+    node.mc.push({ n: arr.length, sel: String(a0.data).slice(0, 10) });
+    return { result: ABI.encode(['tuple(bool,bytes)[]'], [arr.map(([t, , d]) => { const r = rwaSub(String(t).toLowerCase(), d); return r == null ? [false, '0x'] : [true, r]; })]) };
+  }
+  if (m === 'eth_getLogs' && String(a0.address).toLowerCase() === REGISTRY) { const from = parseInt(a0.fromBlock, 16), to = parseInt(a0.toBlock, 16); return { result: FR.logs.filter((l) => { const b = parseInt(l.blockNumber, 16); return b >= from && b <= to; }) }; }
+  // a contract's code: the role holders the research found to be wallets, the Stock Token proxy the review read for the registry's tokens
+  // and WEEK (rwa-rpc-reads.json code), and a test's own hypothetical contract (RR_EXTRA_CODE) — anything else, the node gave nothing
+  if (m === 'eth_getCode') { const a = String(a0).toLowerCase(), c = RR.holderCode[a] != null ? RR.holderCode[a] : RR.code.addresses.includes(a) ? RR.code.hex : RR_EXTRA_CODE[a]; return c != null ? { result: c } : { error: { code: -32000, message: 'not read by the research' } }; }
+  return undefined;
+}
 const KIND = { [MD.RH.v2Factory]: 'v2', [MD.RH.v3Factory]: 'v3', [MD.RH.poolManager]: 'v4' };
 function nodeAnswer(m, params) {
   const hx = (n) => '0x' + n.toString(16);
   const a0 = params && params[0];
+  const rw = rwaNodeAnswer(m, params); if (rw !== undefined) return rw;
   if (m === 'eth_blockNumber') return { result: hx(node.head) };
   if (m === 'eth_getBlockByNumber') { const n = a0 === 'latest' ? node.head : parseInt(a0, 16); return { result: { number: hx(n), timestamp: hx(tsAt(n)), baseFeePerGas: F.state['5'].baseFeePerGas } }; }
   if (m === 'eth_gasPrice') return { result: F.state['2'] };
@@ -255,7 +319,7 @@ try {
   check('one honest User-Agent, at least 30 s to answer, no redirect followed, a size cap — never the browser one', MD.HONEST_UA === UA && /Math\.max\(30000, Number\(o\.timeoutMs\) \|\| 30000\)/.test(LIB) && (LIB.match(/redirect: 'error'/g) || []).length === 2 && /readCapped\(res, Number\(o\.maxBytes\)/.test(LIB) && !/BROWSER_UA|Mozilla\//.test(LIB));
   check('every outbound read takes the meter first — the share (GeckoTerminal), then the host — and a spent meter is "could not ask"', /if \(o\.share\) await takeShare\(\[\]\.concat\(o\.share\), wait\);\s*const h = hostOf\(url\); if \(h\) await take\(h, wait\);/.test(LIB) && /catch \{ return \{ ok: false, status: 0, data: null, reason: 'budget' \}; \}/.test(LIB)
     && /const gtAsk = \(ctx, path, o = \{\}\) => ask\(ctx, urls\.gt \+ path, Object\.assign\(\{ share: GT_SHARE \}, o\)\);/.test(LIB) && /const gtAskNow = \(path, o = \{\}\) => ask\(null, urls\.gt \+ path, Object\.assign\(\{ share: \[GT_ASKED, GT_SHARE\], wait: ASK_WAIT \}, o\)\);/.test(LIB)
-    && (LIB.match(/gtAskNow\('/g) || []).length === 2 && (LIB.match(/gtAsk\(ctx, '/g) || []).length === 2);
+    && (LIB.match(/gtAskNow\('/g) || []).length === 2 && (LIB.match(/gtAsk\(ctx, '/g) || []).length === 4);   // the pools and new pools, and the RWA job's multi read and token pools
   check('the chain node is read only through the injected (paced) batch, stands aside while the site\'s own reads are refused, and cools down after a refusal', /const busy = rpcBusy\(\);\s+if \(busy\) throw Object\.assign\(new Error\('yielded: '/.test(LIB) && /await take\(RPC_SHARE, BG_WAIT\)/.test(LIB) && /rpcCoolUntil = now\(\) \+ 5 \* MIN/.test(LIB) && !/fetch\(RH_RPC|rpc\.mainnet\.chain\.robinhood\.com/.test(LIB));
   check('a DefiLlama point dated today is never stored as a day', /if \(!validDay\(r\[2\]\) \|\| r\[2\] >= today \|\| r\[3\] == null\) continue;/.test(LIB));
   check('every table the contract names is created, each with an index for paging newest-first', ['mkt_chain_snap', 'mkt_chain_series', 'mkt_pool_snap', 'mkt_new_pool', 'mkt_rh_pulse', 'mkt_scan', 'mkt_radar', 'mkt_runs'].every((t) => q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", t))
@@ -538,7 +602,7 @@ try {
   check('the Send API resources page by before / limit, filter by chain / address / metric, and give raw logo URLs (programs, not browsers)', r1.body.data.length === 3 && r2.body.data[0].id < r1.body.data[2].id && typeof r1.body.data[0].src === 'object'
     && r3.body.data.length === 5 && r3.body.data.every((x) => x.address === A) && r4.body.data.length === 5 && r4.body.data[0].day === '2026-10-01' && r5.body.data.length >= 40 && r6 === null && r7.status === 400
     && /^https:\/\/icons\.llamao\.fi\//.test(r5.body.data.find((x) => x.key === 'robinhood').logo || ''), brief({ r1: r1.body.next, r3: r3.body.data.length, r4: r4.body.data.length }));
-  check('  ...every resource the contract names is served', ['chains', 'chain', 'chain-history', 'chain-snapshots', 'tokens', 'token', 'pools', 'new-pools', 'radar', 'scans', 'pulse', 'collectors'].every((n) => md.RESOURCES.includes(n)));
+  check('  ...every resource the contract names is served', ['chains', 'chain', 'chain-history', 'chain-snapshots', 'tokens', 'token', 'pools', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'rwa', 'rwa-token'].every((n) => md.RESOURCES.includes(n)));
 
   // the budgets
   const gtTakes = meter.log.filter(([k]) => k === 'market:geckoterminal' || k === 'market:geckoterminal-asked').length, gtHits = Object.entries(hits).filter(([k]) => k.startsWith('gt-')).reduce((a, [, v]) => a + v, 0);
@@ -841,6 +905,559 @@ try {
   const keysCd = [...Object.keys(cd2), ...Object.keys(cd2.stats), ...Object.keys(cd2.history), ...Object.keys(cd2.history.src), ...Object.keys(cd2.topTokens)];
   check('the docs\' "chain" shape names every key the resource returns (stats.liquidity and l2beat, history.from / to and its src map, appFees and daa)', keysCd.length > 30 && keysCd.every(named), keysCd.filter((k) => !named(k)).join(','));
 
+  /* ══ the RWA tab (owner, 2026-10-28): lib/rwa.js on the research's samples, then the 'rwa' job and its answers on a database of
+     their own, its clock the afternoon the samples were read ══ */
+  {
+    const RNOW = Date.parse('2026-10-28T15:00:00Z');
+    // the figure contract is lib/marketdata.js's, copied: the two give the same answers
+    const figIn = [[1, 'x', 5], [null, 'x', 5], [NaN, null, null], [0, 'geckoterminal', 9, { label: 'l' }], [null, 'rpc', 1, { why: 'w' }], ['3', 's', 1]];
+    check('RWA: lib/rwa.js keeps the figure contract exactly — fig() and num() answer as lib/marketdata.js\'s do; none() and a yes/no fact never turn "not read" into 0 or false',
+      figIn.every((a) => JSON.stringify(RW.fig(...a)) === JSON.stringify(MD.fig(...a))) && ['1', '', ' ', 'x', 2, Infinity, null].every((x) => RW.num(x) === MD.num(x))
+      && RW.none('w', 'rpc', 1).v === null && RW.fact(null, 'rpc', 1).v === null && RW.fact(null, 'rpc', 1).why === 'not read' && RW.fact(false, 'rpc', 1).v === false && !('why' in RW.fact(false, 'rpc', 1)));
+    // every selector and topic from ethers' id(), held to the verified ABIs Sourcify served
+    const sigOf = (x) => x.name + '(' + (x.inputs || []).map((i) => i.type).join(',') + ')';
+    const abiSel = new Map([...FR.abiReg.abi, ...FR.abiStock.abi].filter((x) => x.type === 'function').map((x) => [x.name, keccakId(sigOf(x)).slice(0, 10)]));
+    const regEvt = new Map(FR.abiReg.abi.filter((x) => x.type === 'event').map((x) => [x.name, keccakId(sigOf(x))]));
+    const selNames = ['totalSupply', 'decimals', 'name', 'symbol', 'tokenPaused', 'oraclePaused', 'uiMultiplier', 'newUIMultiplier', 'effectiveAt', 'terms', 'paused', 'implementation'];
+    check('RWA: every selector the job calls is in the verified ABIs (Robinhood\'s registry and Stock.sol, Sourcify exact match) and equals id() of its signature; every registry event topic too — and the registry\'s real logs carry them',
+      FR.abiReg.match === 'exact_match' && FR.abiStock.match === 'exact_match' && selNames.every((n) => abiSel.get(n) === RW.SELECTORS[n]) && ['RoleGranted', 'RoleRevoked', 'Blocked', 'Unblocked', 'Upgraded', 'Paused', 'Unpaused'].every((n) => regEvt.get(n) === RW.TOPICS[n])
+      && RW.SELECTORS.aggregate3 === keccakId('aggregate3((address,bool,bytes)[])').slice(0, 10) && RW.SELECTORS.latestRoundData === keccakId('latestRoundData()').slice(0, 10)
+      && [RW.TOPICS.RoleGranted, RW.TOPICS.Blocked, RW.TOPICS.Upgraded].every((t) => FR.logs.some((l) => l.topics[0] === t)), selNames.filter((n) => abiSel.get(n) !== RW.SELECTORS[n]).join(','));
+    // the parsers, on the samples
+    const pa = RW.parseRhjAssets(FR.assets), tsA = pa.assets.find((a) => a.symbol === 'TSLA'), tsF = FR.assets.assets.find((a) => a.tokenSymbol === 'TSLA');
+    check('RWA: Robinhood\'s registry is read as served — every asset with its chain-4663 address (lower case), ISIN, multiplier, decimals and status — and its logo URLs are never kept; an answer without its list is a failed read',
+      pa.ok && pa.assets.length === FR.assets.assets.length && tsA.address === TSLA && tsA.isin === tsF.isin && tsA.multiplier === Number(tsF.currentMultiplier) && tsA.decimals === 18 && tsA.status === 'ASSET_STATUS_ACTIVE'
+      && !JSON.stringify(pa).includes('cdn.robinhood.com') && RW.parseRhjAssets({ error: 'x' }).ok === false && /assets list/.test(RW.parseRhjAssets(null).why), brief(tsA));
+    const pp = RW.parseRhjPrices(FR.prices), qT = pp.quotes[TSLA], crmF = FR.prices.quotes.find((q) => q.tokenSymbol === 'CRM'), qC = pp.quotes[crmF.deployments[0].contractAddress.toLowerCase()];
+    check('RWA: its quotes — the token bid/ask mid (multiplier applied, an undocumented field) kept apart from the raw bid/ask; the halt flag, the quote\'s time and the primary mint/burn USD as given',
+      pp.ok && near(qT.mid, (399.31 + 399.4) / 2) && qT.halted === false && qT.at === Date.parse(FR.prices.quotes[2].generatedAt) && near(qT.mintBurnUsd, Number(FR.prices.quotes[2].mintBurnUsdVolume))
+      && near(qC.mid, (Number(crmF.tokenBid) + Number(crmF.tokenAsk)) / 2) && near(qC.rawMid, (Number(crmF.bid) + Number(crmF.ask)) / 2) && qC.mid !== qC.rawMid, brief({ qT, qC }));
+    const pd = RW.parseRhjDeviations(FR.devs), sats = Object.values(pd.rows).find((r) => r.symbol === 'SATS'), wk = pd.rows[WEEK];
+    check('RWA: Robinhood\'s published deviations — SATS +1,494% (a premium, 32 trading days, since 2026-09-14), WEEK −50% (a discount), signed by direction, as of 2026-10-27',
+      pd.ok && pd.asOf === '2026-10-27' && near(sats.pct, Number(FR.devs.rows[0].deviationPct)) && sats.direction === 'premium' && sats.days === 32 && sats.since === '2026-09-14' && wk && wk.pct < 0 && near(-wk.pct, Number(FR.devs.rows[1].deviationPct)) && wk.direction === 'discount', brief(pd));
+    const pc = RW.parseRhjActions(FR.actions), a0 = FR.actions.corpActions[0];
+    check('RWA: corporate actions — each for its token\'s address, its type and status in words, its date, its rate as a number',
+      pc.ok && pc.actions.length === FR.actions.corpActions.length && pc.actions[0].address === a0.deployments[0].contractAddress.toLowerCase() && pc.actions[0].typeWords === 'cash dividend' && ['in progress', 'completed'].includes(pc.actions[0].status)
+      && /^\d{4}-\d{2}-\d{2}$/.test(pc.actions[0].date) && pc.actions[0].details.rate === Number(a0.details.cashDividend.rate), brief(pc.actions[0]));
+    const pf = RW.parseChainlinkDirectory(FR.feeds), fT = pf.feeds.find((x) => x.ticker === 'TSLA');
+    check('RWA: Chainlink\'s directory — the "Robinhood <TICKER> / USD" (and "-USD") feeds and GLD / USD, by ticker, with proxy and heartbeat; the crypto feeds and exchange rates are left out',
+      pf.ok && fT.proxy === '0x4a1166a659a55625345e9515b32adecea5547c38' && fT.heartbeat === 86400 && fT.decimals === 8 && pf.feeds.some((x) => x.ticker === 'GLD') && pf.feeds.some((x) => x.ticker === 'SGOV')
+      && !pf.feeds.some((x) => /ETH|USDG|SYRUP/.test(x.ticker)) && pf.feeds.length === FR.feeds.filter((x) => /^Robinhood /.test(x.name) || x.name === 'GLD / USD').length, brief(pf.feeds.map((x) => x.ticker)));
+    const fG = pf.feeds.find((x) => x.ticker === 'GLD'), fS = pf.feeds.find((x) => x.ticker === 'SGOV'), gldDir = FR.feeds.find((x) => x.name === 'GLD / USD');
+    check('  ...a feed is the underlying\'s price only where the directory says it prices the share: every "Robinhood X / USD" feed (primaryTokenizedPrice, or US equity hours for the shared-SVR ones) is a reference; "GLD / USD" — a dex_state_price with crypto hours, the token\'s own DEX price — is kept as supporting evidence only (ref false)',
+      fT.ref === true && fT.product === 'primaryTokenizedPrice' && fS && fS.ref === true && fG.ref === false && fG.priceKind === 'dex_state_price' && gldDir.docs.attributeType === 'dex_state_price' && gldDir.docs.marketHours === 'Crypto'
+      && pf.feeds.filter((x) => x.ticker !== 'GLD').every((x) => x.ref === true), brief([fT, fS, fG]));
+    const plist = RW.parseLlamaProtocols(F.protocols), picks = RW.tvlPicks(plist);
+    check('RWA: DefiLlama\'s app list (the liquidity job\'s answer) — every app with a Robinhood Chain TVL, by slug; the deposits read are the RWA apps first, then the largest, never a DEX (its pools are Liquidity), an exchange, a curator, an aggregator, a liquidity manager, a locker or perps',
+      plist.length > 20 && plist.every((p) => p.rhTvl > 0 && p.slug) && picks[0].category === 'RWA' && picks.some((p) => p.slug === 'morpho-blue') && picks.every((p) => !RW.TVL_SKIP.has(p.category)) && picks.length <= 12
+      && plist.some((p) => p.category === 'Dexs') && plist.some((p) => p.category === 'CEX') && plist.some((p) => p.category === 'Risk Curators'), brief(picks.map((p) => p.slug + ':' + p.category)));
+    const pm = RW.parseLlamaProtocol(FR.proto['morpho-blue']), pcx = RW.parseLlamaProtocol(FR.proto['catch-exchange']);
+    const lastCx = FR.proto['catch-exchange'].chainTvls['Robinhood Chain'].tokensInUsd.slice(-1)[0];
+    check('RWA: an app\'s deposits on the chain — the latest tokensInUsd entry, by symbol (Morpho holds NVDA and mGLO as collateral; Catch Exchange\'s newest entry, not its older one)',
+      pm.ok && pm.tokens.NVDA === FR.proto['morpho-blue'].chainTvls['Robinhood Chain'].tokensInUsd[0].tokens.NVDA && pm.tokens.MGLO > 3e7 && pcx.tokens.GLD === lastCx.tokens.GLD && pcx.date === lastCx.date * 1000 && RW.parseLlamaProtocol({ name: 'x' }).ok === false, brief({ m: pm.tokens.NVDA, c: pcx.tokens }));
+    const ps = RW.parseStablecoins(FR.stables), usdgS = ps.rows.find((x) => x.symbol === 'USDG'), usdgF = FR.stables.peggedAssets.find((x) => x.symbol === 'USDG');
+    check('RWA: DefiLlama\'s stablecoins — those circulating on Robinhood Chain with their backing (USDG fiat-backed; USDe, U and Multipli\'s crypto-backed); one not on the chain (USDT) is not listed',
+      ps.ok && usdgS.pegMechanism === 'fiat-backed' && usdgS.circulating === usdgF.chainCirculating['Robinhood Chain'].current.peggedUSD && usdgS.price === usdgF.price && ps.rows.filter((x) => x.pegMechanism === 'crypto-backed').map((x) => x.symbol).sort().join() === 'U,USDe,rwaUSD,rwaUSDi' && !ps.rows.some((x) => x.symbol === 'USDT'), brief(ps.rows));
+    const pg = RW.parseGtMulti(FR.multi), gGld = Object.values(pg.tokens).find((t) => t.geckoId === 'spdr-gold-shares-robinhood-token');
+    const ptp = RW.parseGtTokenPools(FR.tslaPools), opt = ptp.pools.find((p) => p.name === 'OPTIMUS / TSLA'), usdgP = ptp.pools.find((p) => p.name === 'TSLA / USDG 0.3%');
+    check('RWA: GeckoTerminal\'s multi read (its symbol as it gives it — "gld" — kept apart from Robinhood\'s) and a token\'s pools: both sides of each, the symbol from the pool\'s name less its fee',
+      pg.ok && gGld && gGld.symbol === 'gld' && gGld.reserveUsd > 0 && ptp.ok && ptp.pools.length === FR.tslaPools.data.length && opt.base.symbol === 'OPTIMUS' && opt.quote.address === TSLA && usdgP.quote.symbol === 'USDG' && usdgP.base.address === TSLA, brief({ opt, usdgP }));
+    // what kind of asset, and its underlying
+    const K = (s, n, i) => RW.kindOf(s, n, i), U = (i, s, n) => RW.underlyingOf(i, s, n);
+    check('RWA: the asset kind — bonds and T-bills (SGOV, SHY, BND, WEEK, and a T-Bill ETF by name), commodities (GLD, SLV, USO, GDX, CPER), ETFs (the curated set and the ETF/Trust/Fund/iShares/SPDR… name test), Midas\'s credit fund, every other share a stock',
+      K('SGOV', 'iShares 0-3 Month Treasury Bond', 'rhj') === 'bond' && K('WEEK', null, 'rhj') === 'bond' && K('GLD', 'SPDR Gold Trust', 'rhj') === 'commodity' && K('SPY', 'SPDR S&P 500 ETF Trust', 'rhj') === 'etf' && K('QQQ', 'Invesco QQQ', 'rhj') === 'etf'
+      && K('EWY', 'iShares MSCI South Korea fund', 'rhj') === 'etf' && K('TSLA', 'Tesla', 'rhj') === 'stock' && K('mGLO', 'Midas Fasanara Global Open', 'midas') === 'credit'
+      && U('ondo', 'CPERon', 'US Copper Index Fund (Ondo Tokenized)').kind === 'commodity' && U('anchored', 'abil', 'SPDR Bloomberg 1-3 Month T-Bill ETF (Anchored Tokenized ETF)').kind === 'bond');
+    check('RWA: the underlying, so one share\'s tokens group together — Robinhood\'s ticker and name less " • Robinhood Token"; Ondo less "on" and "(Ondo Tokenized …)"; Anchored less its "a"; ST0x less "wt"',
+      U('rhj', 'TSLA', 'Tesla • Robinhood Token').name === 'Tesla' && U('ondo', 'TSLAon', 'Tesla (Ondo Tokenized)').symbol === 'TSLA' && U('ondo', 'googlon', 'Alphabet Class A (Ondo Tokenized Stock)').name === 'Alphabet Class A'
+      && U('anchored', 'aaapl', 'Apple aStock').symbol === 'AAPL' && U('anchored', 'aaapl', 'Apple aStock').name === 'Apple' && U('st0x', 'wtWMT', 'Wrapped Walmart Inc. ST0x').symbol === 'WMT' && U('st0x', 'wtWMT', 'Wrapped Walmart Inc. ST0x').name === 'Walmart Inc.');
+    // the classifier, tier by tier (a made-up address for a hypothetical state; the real ones for what the samples hold)
+    const asset = pa.assets.find((a) => a.symbol === 'GME'), at0 = RNOW - 3600e3, X = '0x' + 'ab'.repeat(20);
+    const c1 = RW.classify(GME_RHJ, { asset, registryAt: at0, chain: { beacon: REGISTRY, beaconAt: at0 } }), c2 = RW.classify(GME_RHJ, { asset, registryAt: at0, chain: {} });
+    const wkChain = { beacon: REGISTRY, beaconAt: at0 }, c3 = RW.classify(WEEK, { asset: null, registryAt: at0, chain: Object.assign({ codeMatch: true, codeAt: at0 }, wkChain), rhjNamed: ['/price-deviations'] });
+    const c4 = RW.classify(X, { asset: { symbol: 'X', status: 'ASSET_STATUS_ACTIVE' }, registryAt: at0, chain: { beacon: '0x' + '0'.repeat(40), beaconAt: at0 } });
+    check('RWA: Robinhood\'s tokens — the registry and the chain\'s fingerprint both: "confirmed"; the registry with the slot not read yet: "issuer-listed" (why: fingerprint not read yet); out of the registry\'s list (WEEK), the slot AND the code matching the registry\'s own tokens: "confirmed", its status saying so; a registry entry whose slot reads otherwise is flagged',
+      c1.rwa && c1.confidence === 'confirmed' && c1.evidence.map((e) => e.tier).join() === 'A1,A2' && c1.evidence[0].text === 'Listed in Robinhood\'s Stock Token registry (api.robinhood.com/rhj/assets)' && c1.evidence[1].text === 'Its code runs from Robinhood\'s token registry contract (checked on the chain)'
+      && c2.confidence === 'issuer-listed' && c2.why === 'fingerprint not read yet' && c3.rwa && c3.confidence === 'confirmed' && c3.status.text === 'On the chain, not in the registry\'s active list' && c3.issuer.key === 'rhj' && c3.evidence[0].tier === 'A2' && /proxy code the registry's own Stock Tokens run/.test(c3.evidence[0].text)
+      && c4.mismatch === true && /not Robinhood's registry \(checked on the chain\)/.test(c4.why), brief([c1, c2, c3, c4]));
+    /* the review's attack (2026-10-28): any contract can write the registry's address into its own beacon slot. The slot alone never
+       makes a token Robinhood's: its code must also be the registry tokens' own, compared by keccak on the chain */
+    const s1 = RW.classify(X, { asset: null, registryAt: at0, chain: wkChain }), s2 = RW.classify(X, { asset: null, registryAt: at0, chain: Object.assign({ codeMatch: false, codeAt: at0 }, wkChain) });
+    const s3 = RW.classify(WEEK, { asset: null, registryAt: at0, chain: wkChain, rhjNamed: ['/price-deviations'] }), s4 = RW.classify(WEEK, { asset: null, registryAt: at0, chain: {}, rhjNamed: ['/price-deviations'] });
+    check('RWA: the beacon slot alone never qualifies — a token the registry does not list whose slot names the registry is not an RWA until its code matches (pending), and not one at all when its code differs; one Robinhood\'s own answers name is shown "not confirmed" meanwhile, and before its slot is read it is never told "not an RWA here"',
+      s1.rwa === false && s1.pending === true && /code has not been compared/.test(s1.why) && !s1.evidence.some((e) => /^A/.test(e.tier)) && s1.evidence.some((e) => e.kind === 'beacon-slot' && /any contract can write that slot/.test(e.text))
+      && s2.rwa === false && !s2.pending && /its code is not the code Robinhood's Stock Tokens run/.test(s2.why) && s2.issuer === null
+      && s3.rwa === true && s3.confidence === 'not-confirmed' && /code has not been compared/.test(s3.why) && s3.evidence.some((e) => e.kind === 'robinhood-api')
+      && s4.rwa === false && s4.pending === true && /^Not confirmed as an RWA yet/.test(s4.why) && /may still be one of Robinhood's Stock Tokens/.test(s4.why) && !/Not an RWA here/.test(s4.why)
+      && RW.notRwaWhy(WEEK, s4, { rows: [] }) === s4.why, brief([s1, s2, s3, s4]));
+    const ondoB = RW.ISSUERS.ondo.beacons[0];
+    const c5 = RW.classify(TSLAON, { chain: {} }), c6 = RW.classify(TSLAON, { chain: { beacon: ondoB, beaconAt: at0 }, geckoId: 'tesla-ondo-tokenized-stock', geckoAt: at0 }), c7 = RW.classify(TSLAON, { chain: { beacon: REGISTRY, beaconAt: at0 } });
+    const c7b = RW.classify(TSLAON, { chain: { beacon: '0x' + '0'.repeat(40), beaconAt: at0 } });
+    const c6s = RW.classify(TSLAON, { chain: { beacon: ondoB, beaconAt: at0 }, geckoId: 'tesla-ondo-tokenized-stock', geckoSrc: 'site' });
+    check('RWA: another issuer on this site\'s list — "not-confirmed" until its own beacon is read (why: fingerprint not read yet), "confirmed" once it matches (CoinGecko\'s id only as supporting evidence), and not counted when the slot reads otherwise',
+      c5.rwa && c5.confidence === 'not-confirmed' && c5.why === 'fingerprint not read yet' && c6.confidence === 'confirmed' && c6.evidence.map((e) => e.tier).join() === 'A3,B' && /supporting evidence only/.test(c6.evidence[1].text)
+      && c7.rwa === false && c7.pending === true && c7b.rwa === false && /not Ondo Global Markets's beacon|not Ondo Global Markets'?s? beacon/.test(c7b.why), brief([c5, c6, c7b]));
+    /* review two (2026-10-28). 8: a token off this site's list whose slot names another issuer's beacon (Anchored's aTSLA, 0x10fa…e146
+       on Anchored's beacon in the research's landscape, one of its contracts not on the list) is said as the chain read it — never
+       "its code does not run from an issuer's beacon (checked on the chain)" — and not counted. 10: Midas's confirmation is a live
+       ERC-1967 proxy, said as such (check: 'proxy'), never "its fingerprint is the issuer's". 14: an issuer-list item the chain has
+       not agreed with yet is listed, not proof (proof: false) */
+    const ATSLA = '0x10fad4a60adb421f8f5ca6f9f2eaf2dbc110e146', anchB = RW.ISSUERS.anchored.beacons[0], st0xB = RW.ISSUERS.st0x.beacons[0];
+    const h8 = RW.classify(ATSLA, { chain: { beacon: anchB, beaconAt: at0 }, geckoId: 'tesla-astock', geckoAt: at0 }), h8s = RW.classify(X, { chain: { beacon: st0xB, beaconAt: at0 } });
+    const h8w = RW.notRwaWhy(ATSLA, h8, { symbol: 'aTSLA', rows: [], registryRead: true, beaconRead: true, beacon: anchB }), h8n = RW.notRwaWhy(X, { why: null }, { symbol: 'ZZQ', rows: [], registryRead: true, beaconRead: true, beacon: st0xB });
+    const h10 = RW.classify('0xfed493f38c1aacb4ea4e6a11f8b9287849ee0096', { chain: { impl: '0x' + '0'.repeat(36) + 'dead', implAt: at0 } });
+    check('RWA review two: a token off this site\'s list on another issuer\'s beacon (Anchored\'s aTSLA, an ST0x share) is not counted, and its answer says what the chain read — never "its code does not run from an issuer\'s registry or beacon"; Midas\'s confirmation says a live ERC-1967 proxy, its code not compared; a listed token the chain has not agreed with is "listed, not proof" (proof: false)',
+      h8.rwa === false && /^Its beacon slot names Anchored \(aStock\)'s beacon \(checked on the chain\)/.test(h8.why) && h8.beaconOf.key === 'anchored' && h8.evidence.some((e) => e.kind === 'beacon-slot' && e.tier === 'B') && h8w === h8.why && !/does not run from/.test(h8w)
+      && h8s.rwa === false && /ST0x \(S01 Issuer GmbH\)'s beacon/.test(h8s.why) && !/does not run from/.test(h8n)
+      && /does not run from an issuer's registry or beacon/.test(RW.notRwaWhy(X, { why: null }, { symbol: 'ZZQ', rows: [], registryRead: true, beaconRead: true, beacon: '0x' + '0'.repeat(40) }))
+      && h10.confidence === 'confirmed' && h10.evidence[0].check === 'proxy' && /its code is not compared with the issuer's/.test(h10.evidence[0].text) && /a live ERC-1967 proxy on the chain/.test(h10.status.text)
+      && c6.evidence[0].check === 'beacon' && c6.evidence[0].proof !== false && c5.evidence[0].tier === 'A3' && c5.evidence[0].proof === false && /not checked on the chain yet/.test(c5.evidence[0].text), brief([h8.why, h8n, h10.evidence[0], c5.evidence[0]]));
+    check('  ...and CoinGecko\'s id is credited to its source: GeckoTerminal\'s read (with its time) when a read gave it, this site\'s own list (no read time) when the id is the list\'s — never a GeckoTerminal read that did not happen',
+      c6.evidence[1].src === 'geckoterminal' && c6.evidence[1].at === at0 && c6s.evidence[1].src === 'site' && c6s.evidence[1].at === null && /this site's list, taken from CoinGecko's platform map on 2026-10-28/.test(c6s.evidence[1].text), brief([c6.evidence[1], c6s.evidence[1]]));
+    const cgRow = (id) => FR.cg.find((c) => c.id === id), traps = ['gamestop-3', 'greatest-meme-ever', 'a-meme-coin', 'advanced-micro-dog', 'blackrock', 'blockchain-usd'].map(cgRow);
+    check('RWA: a name or a symbol never qualifies — CoinGecko\'s "GameStop" memecoin (GME), Greatest Meme Ever, A Meme Coin (AMC), Advanced Micro Dog (AMD), BLACKROCK and Blockchain USD (USDB) are not RWAs, even with a ticker of one',
+      traps.every((c) => c && RW.classify(c.platforms.robinhood, { chain: { beacon: '0x' + '0'.repeat(40), beaconAt: at0 }, geckoId: c.id }).rwa === false) && RW.classify(GME_MEME, { chain: {} }).rwa === false
+      && RW.classify('0x4a0ade17fa7602bdfc7d2a9c85f404328687c92d', { chain: {} }).rwa === false, brief(traps.map((c) => c.id)));
+    // the multicall, encoded and decoded; a revert is "no such function"
+    const subs = [{ target: TSLA, data: RW.SELECTORS.totalSupply }, { target: TSLA, data: RW.SELECTORS.paused }];
+    const enc = RW.encodeAggregate3(subs), dec = RW.decodeAggregate3(ABI.encode(['tuple(bool,bytes)[]'], [[[true, RR.tsla.totalSupply], [false, '0x']]]));
+    check('RWA: the Multicall3 aggregate3 call is encoded with allowFailure on every subcall, and its answer decoded per subcall; a subcall that reverted is "no such function" (absent) — never false or 0',
+      enc.startsWith(RW.SELECTORS.aggregate3) && ABI.decode(['tuple(address,bool,bytes)[]'], '0x' + enc.slice(10))[0].every((x) => x[1] === true) && dec.length === 2 && RW.decodeAs('uint', dec[0]).v === BigInt(RR.tsla.totalSupply)
+      && RW.decodeAs('bool', dec[1]).absent === true && RW.decodeAs('uint', { ok: true, data: '0x' }).absent === true && RW.decodeAs('string', { ok: true, data: ABI.encode(['string'], ['https://robinhood.com/stocktoken/rhj']) }).v === 'https://robinhood.com/stocktoken/rhj');
+    // the registry's logs, folded
+    const fold = RW.foldRegistryLogs(null, FR.logs), rr = RW.roleRows(fold);
+    const holders = (n) => RW.holdersOf(fold, n);
+    check('RWA: the registry\'s 276 logs folded into its roles — one wallet can upgrade every token (BEACON_UPGRADER_ROLE 0xcd8c…), the token deployer 0x5516…, two minters (one granted in October 2026), the deployer\'s own admin revoked; 175 wallets blocked; two upgrades, both to Stock.sol; an unknown hash is "an unnamed role"',
+      fold.logs === FR.logs.length && holders('BEACON_UPGRADER_ROLE').join() === '0xcd8c6182e7c6ca3b5156d6a90a67719d7e2be094' && holders('TOKEN_DEPLOYER_ROLE').join() === '0x5516b3451d4d6c9f63353fe7bc9537477ecce000'
+      && holders('MINTER_ROLE').sort().join() === ['0x13643b89b19245201b29d556edde5cf18f749c08', '0x2b94105fff37630f98e1f24811dad588fc5c3a87'].sort().join() && holders('DEFAULT_ADMIN_ROLE').join() === '0xd6f8378f8e440c65f8382f5f2728c78dfd55b66d'
+      && fold.blocked.length === 175 && fold.upgrades.length === 2 && fold.upgrades.every((u) => u.implementation === '0xb35490d6f9163de4f80d88dc75c3516eb64c5ae2') && rr.some((r) => r.role === 'an unnamed role' && r.holder === '0x697e774d60c1a3769f2ed0b919aacf17be0ae553')
+      && rr[0].role === 'BEACON_UPGRADER_ROLE', brief({ blocked: fold.blocked.length, up: fold.upgrades, roles: rr.map((r) => r.role + ' ' + r.holder.slice(0, 8)) }));
+    // sorting, connected pools, lookalikes (pure)
+    const rowsN = [{ v: 3 }, { v: null }, { v: 1 }, { v: 2 }];
+    check('RWA: a missing figure sorts last in both directions (nullLast)', rowsN.slice().sort(RW.nullLast('desc', (r) => r.v)).map((r) => r.v).join() === '3,2,1,' && rowsN.slice().sort(RW.nullLast('asc', (r) => r.v)).map((r) => r.v).join() === '1,2,3,');
+    const tpRows = ptp.pools.map((p) => Object.assign({}, p, { at: at0 }));
+    const cn1 = RW.connectedRows(tpRows, new Set([TSLA, '0x117cc2133c37b721f49de2a7a74833232b3b4c0c', '0xec262a75e413fafd0df80480274532c79d42da09']), () => 'TSLA');
+    const wantC = FR.tslaPools.data.filter((d) => { const b = d.relationships.base_token.data.id.slice(10), q = d.relationships.quote_token.data.id.slice(10), o = b === TSLA ? q : b; return !['0x5fc5360d0400a0fd4f2af552add042d716f1d168', '0x0bd7d308f8e1639fab988df18a8011f41eacad73', '0x0000000000000000000000000000000000000000', '0x117cc2133c37b721f49de2a7a74833232b3b4c0c', '0xec262a75e413fafd0df80480274532c79d42da09'].includes(o); });
+    const cn2 = RW.connectedRows(tpRows, new Set([TSLA]), () => 'TSLA', 50000);   // SPY and MSTR not counted as RWAs here: their pools with TSLA count too
+    const wantC2 = FR.tslaPools.data.filter((d) => { const b = d.relationships.base_token.data.id.slice(10), q = d.relationships.quote_token.data.id.slice(10), o = b === TSLA ? q : b; return !RW.QUOTES.has(o); });
+    check('RWA: tokens connected to an RWA — a pool against TSLA whose other side is not USDG, WETH (or native ETH) or another RWA (SPY, MSTR): OPTIMUS, DOGGIE, TSLR… each "Not an RWA — paired with $TSLA", deepest first; under the floor they are counted, not listed',
+      cn1.rows.length === wantC.length && cn1.rows[0].symbol === 'OPTIMUS' && cn1.rows.every((r) => r.label === 'Not an RWA — paired with $TSLA' && r.rwa.address === TSLA && r.reserveUsd.v >= 1000) && cn1.below === 0 && cn1.floor === 1000
+      && cn2.rows.every((r) => r.reserveUsd.v >= 50000) && cn2.below === wantC2.filter((d) => Number(d.attributes.reserve_in_usd) < 50000).length && cn2.rows.length === wantC2.filter((d) => Number(d.attributes.reserve_in_usd) >= 50000).length && cn2.below > 0, brief({ n: cn1.rows.length, want: wantC.length, rows: cn1.rows.map((r) => r.symbol + ' ' + r.reserveUsd.v), cn2: [cn2.rows.length, cn2.below] }));
+    const fakeRows = [{ address: GME_RHJ, symbol: 'GME', name: 'GameStop • Robinhood Token', underlying: { symbol: 'GME', name: 'GameStop' }, issuer: RW.issuerOf('rhj') }, { address: '0x05a3d1cd21d0c88145e82600e62e7e496e0f222b', symbol: 'AMC', name: 'AMC Entertainment Holdings, Inc. • Robinhood Token', underlying: { symbol: 'AMC', name: 'AMC Entertainment Holdings, Inc.' }, issuer: RW.issuerOf('rhj') }];
+    const look = RW.lookalikesOf(fakeRows, FR.cg.map((c) => ({ address: c.platforms.robinhood, symbol: c.symbol, name: c.name, src: 'coingecko' })), new Set([GME_RHJ, '0x05a3d1cd21d0c88145e82600e62e7e496e0f222b', '0xb094d0d3221d7f7a9f14b0f78c34cd38d7acf6f2']));
+    check('RWA: lookalikes — a token with an RWA\'s ticker or underlying name that is not itself an RWA: GME gets the "GameStop" memecoin and Greatest Meme Ever, AMC gets A Meme Coin; Ondo\'s GMEon (an RWA itself) and the registry\'s own tokens are never lookalikes',
+      (look.get(GME_RHJ) || []).map((x) => x.address).sort().join() === [GME_MEME, cgRow('greatest-meme-ever').platforms.robinhood].sort().join() && (look.get('0x05a3d1cd21d0c88145e82600e62e7e496e0f222b') || []).map((x) => x.address).join() === cgRow('a-meme-coin').platforms.robinhood
+      && ![...look.values()].flat().some((x) => x.address === '0xb094d0d3221d7f7a9f14b0f78c34cd38d7acf6f2'), brief([...look].map(([k, v]) => [k.slice(0, 8), v.map((x) => x.symbol)])));
+
+    /* ── the review's cases (2026-10-28), lib/rwa.js buildRows alone. The registry, feeds and GeckoTerminal answers are the samples'
+       (parsed above); the reads of the chain, the quotes and DefiLlama's apps here are hypothetical states the review described, made
+       up like X above to put each rule to the test ── */
+    {
+      const now = RNOW, H = 3600e3, D = 24 * H;
+      const GLDA = '0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e', NVDA = '0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec', SPYA = '0x117cc2133c37b721f49de2a7a74833232b3b4c0c', PA = '0x1cdad396db64bda184d5182a97dd9b3c62100b7d';
+      const SATS = '0x95052ddcd5dc25641657424a8cf04834997e1730', GOOGL = '0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3', GOOGLON = '0xe10cc5f0cd0c90322ebeb33e7757b2c9090146dc';
+      const assetsS = { readAt: now - H, data: pa }, linkS = { readAt: now - H, data: pf }, fTS = pf.feeds.find((x) => x.ticker === 'TSLA');
+      const reg = (extra) => Object.assign({ beacon: REGISTRY, beaconAt: now - H, fpAt: now - H }, extra || {});
+      const gtOf = (a) => Object.assign({}, pg.tokens[a], { at: now - H });
+      const B0 = { at: now - H, rows: [] };
+      const build = (o) => RW.buildRows(Object.assign({ now, batch: B0, assets: assetsS, chainlink: linkS, logo: (u) => u }, o));
+      const rowOf = (b, a) => b.rows.find((r) => r.address === a);
+      // 2. GLD: the "GLD / USD" feed prices the token's own DEX state, so the premium is against Robinhood's quote (DEX 369.65, quote mid 342.27)
+      const pricesG = { readAt: now - 600e3, data: { ok: true, generatedAt: now - 600e3, quotes: { [GLDA]: { symbol: 'GLD', tokenBid: 342.2, tokenAsk: 342.34, mid: 342.27, halted: false, at: now - 600e3, mintBurnUsd: null } } } };
+      const gldFeed = pf.feeds.find((x) => x.ticker === 'GLD');
+      const bG = build({ prices: pricesG, chain: { tokens: { [GLDA]: reg({ tokenPaused: false, oraclePaused: false, stateAt: now - H }) }, feeds: { [gldFeed.proxy]: { answer: '36940000000', updatedAt: Math.floor((now - 20 * 60e3) / 1000), at: now - H, description: 'GLD / USD' } } }, gt: { tokens: { [GLDA]: gtOf(GLDA) } } });
+      const g1 = rowOf(bG, GLDA);
+      check('RWA review: GLD\'s premium is measured against Robinhood\'s quote of the share — never against Chainlink\'s "GLD / USD", which prices the token\'s own DEX trading (a premium against it is about 0 by construction)',
+        g1.reference.chainlink.v === null && g1.reference.chainlink.notReference === true && /priced from the token's own DEX trading/.test(g1.reference.chainlink.why) && g1.premium.ref === 'robinhood' && near(g1.premium.v, (gtOf(GLDA).priceUsd / 342.27 - 1) * 100) && g1.premium.v > 7.9 && g1.flags.includes('premium')
+        && g1.evidence.some((e) => e.kind === 'chainlink' && /priced from the token's own DEX trading/.test(e.text)), brief([g1.premium, g1.reference.chainlink]));
+      // 7. TSLA's oracle paused for a corporate action, its feed still answering inside its heartbeat (half the price, before the multiplier update)
+      const tChain = (paused, answer) => ({ tokens: { [TSLA]: reg({ tokenPaused: false, oraclePaused: paused, stateAt: now - H, supplyRaw: RR.tsla.totalSupply.toString(), supplyAt: now - H }) }, feeds: { [fTS.proxy]: { answer, updatedAt: Math.floor((now - 30 * 60e3) / 1000), at: now - H, description: 'RHTSLA / USD' } } });
+      const tP = rowOf(build({ chain: tChain(true, '19900000000'), gt: { tokens: { [TSLA]: gtOf(TSLA) } } }), TSLA), tZ = rowOf(build({ chain: tChain(false, '0'), gt: { tokens: { [TSLA]: gtOf(TSLA) } } }), TSLA);
+      check('RWA review: while Robinhood\'s price oracle is paused for a corporate action, no premium is worked out (its price is "temporarily unavailable"), and the feed\'s answer says not to trust it; a zero or negative feed answer is never a price',
+        tP.premium.v === null && /paused for a corporate action/.test(tP.premium.why) && tP.flags.includes('oracle-paused') && !tP.flags.includes('premium') && tP.reference.chainlink.oraclePaused === true && /not to trust this price/.test(tP.reference.chainlink.label)
+        && tZ.reference.chainlink.v === null && /not a price/.test(tZ.reference.chainlink.why), brief([tP.premium, tZ.reference.chainlink]));
+      // 1/24/25. market cap: every chain's only for a multi-chain issuer; Robinhood's single-chain tokens stay in the ranking (SPY as GeckoTerminal answered at 17:59 UTC)
+      const spyGt = Object.assign(gtOf(SPYA), { mcap: 20702682.5581889, fdv: 20324917.614719 });
+      const bM = build({ chain: { tokens: { [SPYA]: reg(), [PA]: reg(), [TSLAON]: { beacon: RW.ISSUERS.ondo.beacons[0], beaconAt: now - H, fpAt: now - H } } }, gt: { tokens: { [SPYA]: spyGt, [PA]: gtOf(PA), [TSLAON]: { symbol: 'TSLAon', priceUsd: 400, mcap: 5e6, fdv: 5e6, reserveUsd: 1e5, volume24h: 1e4, at: now - H } } } });
+      const mS = rowOf(bM, SPYA), mP = rowOf(bM, PA), mO = rowOf(bM, TSLAON), gS = RW.groupRows([mS, mP], now - H);
+      check('RWA review: a Robinhood Stock Token\'s market cap above its FDV (SPY ×1.0186, P) is never called every chain\'s — it lives on chain 4663 alone; it stays in the market-cap ranking, said for what it is; only Ondo\'s and Anchored\'s are every chain\'s, and only then do a group\'s and the totals\' words say so',
+        mS.mcap.v === 20702682.5581889 && !mS.mcap.global && mS.mcap.aboveFdv === true && /CoinGecko counts its supply differently/.test(mS.mcap.label) && !/every chain/.test(mS.mcap.label) && !mS.flags.includes('global-mcap') && mS._globalMc === false
+        && mP.mcap.aboveFdv === true && !mP._globalMc && mO.mcap.global === true && mO._globalMc === true && mO.flags.includes('global-mcap') && gS.every((g) => !g.mcap.global && !/every-chain/.test(g.mcap.label)), brief([mS.mcap, mP.mcap, mO.mcap]));
+      // 5/6. GeckoTerminal asked and silent; a null price; no indexed pool behind a 0.0 volume
+      const bA = build({ chain: { tokens: { [SATS]: reg(), [TSLA]: reg() } }, gt: { tokens: { [SATS]: gtOf(SATS), [TSLA]: { absent: true, at: now - 2 * H } } } });
+      const aS = rowOf(bA, SATS), aT = rowOf(bA, TSLA), aG = rowOf(bA, GLDA);
+      check('RWA review: GeckoTerminal\'s token read says why it gave nothing — "has no entry for it" when it answered without one, "has not run yet" only when it has not; a null price is "gave no price"; a 0.0 volume beside no reserve (no pool it indexes: SATS, BND) is not a measured $0',
+        pg.tokens[SATS].noPool === true && pg.tokens[SATS].volume24h === null && aS.volume24h.v === null && /indexes no pool/.test(aS.volume24h.why) && /gave no price for it/.test(aS.priceUsd.why) && aS.liquidity.v === null
+        && /token read \(.* UTC\) has no entry for it/.test(aT.priceUsd.why) && /has no entry for it/.test(aT.liquidity.why) && /has no entry for it/.test(aT.volume24h.why) && /has no entry for it/.test(aT.mcap.why)
+        && /has not run yet/.test(aG.liquidity.why) && /has not run yet/.test(aG.mcap.why), brief([aS.volume24h, aT.priceUsd, aG.mcap]));
+      // 4/11/26. DefiLlama's apps: a failed read keeps its deposits with ITS time (and goes stale), is dropped after two days, and an app never read is never "no deposits"
+      const app = (at, tokens, fail) => Object.assign({ ok: true, at, name: 'Morpho Blue', category: 'Lending', date: at, tokens }, fail ? { failAt: now - 30 * 60e3, failWhy: fail } : {});
+      const catchR = { ok: true, at: now - 30 * 60e3, name: 'Catch Exchange', category: 'RWA', date: now - 40 * 60e3, tokens: { GLD: 1765.48 } };
+      const tvlOf = (morpho) => build({ chain: { tokens: { [NVDA]: reg(), [GLDA]: reg(), [TSLA]: reg() } }, tvl: { readAt: now - 30 * 60e3, picks: ['morpho-blue', 'catch-exchange'], reads: Object.assign({ 'catch-exchange': catchR }, morpho ? { 'morpho-blue': morpho } : {}) } });
+      const k1 = tvlOf(app(now - 20 * H, { NVDA: 1446457.16865 }, 'upstream 503')), k2 = tvlOf(app(now - 5 * D, { NVDA: 1446457.16865 }, 'upstream 503')), k3 = tvlOf({ ok: false, name: 'Morpho Blue', category: 'Lending', failAt: now - 30 * 60e3, failWhy: 'upstream 404' }), k4 = tvlOf(app(now - 30 * 60e3, { NVDA: 1446457.16865 }));
+      const n1 = rowOf(k1, NVDA).tvl, n2 = rowOf(k2, NVDA).tvl, n3 = rowOf(k3, NVDA).tvl, g3 = rowOf(k3, GLDA).tvl, t4 = rowOf(k4, TSLA).tvl;
+      check('RWA review: TVL in DeFi — an app\'s kept deposits carry their own read time (the figure is dated by its oldest app, stale past 12 h, the app marked kept and why); past two days they are dropped and the token is "not read", never a fresh figure; an app never read makes a token "not in the apps read; not read: Morpho Blue (upstream 404)" and a sum "may be low" — "lists no deposits" only when every app was read',
+        n1.v === 1446457.16865 && n1.at === now - 20 * H && n1.stale === true && n1.protocols[0].kept === true && /upstream 503/.test(n1.protocols[0].keptWhy) && n1.protocols[0].at === now - 20 * H
+        && n2.v === null && /not in the 1 app DefiLlama answered for; not read: Morpho Blue \(its last good read, from .* is more than 2 days old\)/.test(n2.why) && n2.missingApps.join() === 'morpho-blue'
+        && n3.v === null && /not read: Morpho Blue \(upstream 404\)/.test(n3.why) && g3.v === 1765.48 && /not read: Morpho Blue \(upstream 404\), so it may be low/.test(g3.label) && g3.missingApps.join() === 'morpho-blue'
+        && ![k2, k3].some((b) => b.rows.some((r) => /lists no DeFi deposits/.test(r.tvl.why || ''))) && /lists no DeFi deposits of it on Robinhood Chain — Morpho Blue as read at .* \(not read since: upstream 503\)/.test(rowOf(k1, TSLA).tvl.why) && /^DefiLlama lists no DeFi deposits of it on Robinhood Chain$/.test(t4.why) && rowOf(k4, NVDA).tvl.at === now - 30 * 60e3 && !rowOf(k4, NVDA).tvl.stale, brief([n1, n2, n3, g3.label]));
+      // 14. no Robinhood artwork: a Stock Token's row draws its letter; any picture named after the token's own address is left out
+      const own = 'https://coin-images.coingecko.com/coins/images/102174112/large/' + TSLAON + '.png?1', other = 'https://assets.geckoterminal.com/img/tslaon.png';
+      const lg = (u) => rowOf(build({ chain: { tokens: { [TSLA]: reg(), [TSLAON]: { beacon: RW.ISSUERS.ondo.beacons[0], beaconAt: now - H, fpAt: now - H } } }, gt: { tokens: { [TSLA]: gtOf(TSLA), [TSLAON]: { symbol: 'TSLAon', priceUsd: 400, logo: u, at: now - H } } } }), TSLAON).logo;
+      const tL = rowOf(build({ chain: { tokens: { [TSLA]: reg() } }, gt: { tokens: { [TSLA]: Object.assign(gtOf(TSLA), { logo: 'https://coin-images.coingecko.com/coins/images/102174112/large/' + TSLA + '.png' }) } } }), TSLA).logo;
+      check('RWA review: no Robinhood artwork — a Robinhood Stock Token\'s row carries no picture (CoinGecko re-hosts Robinhood\'s feather under the token\'s address), and any picture named after a token\'s own address is dropped; another picture is kept',
+        tL === null && lg(own) === null && lg(other) === other, brief([tL, lg(own), lg(other)]));
+      // 10. a group's main token: the registry's first — a token found by the chain alone, however large, never leads the group; a token not confirmed is out of the sums
+      const ATT2 = '0x' + 'cd'.repeat(20);
+      const bR = build({ chain: { tokens: { [TSLA]: reg({ supplyRaw: RR.tsla.totalSupply.toString(), supplyAt: now - H }), [ATT2]: reg({ codeMatch: true, codeAt: now - H, symbol: 'TSLA', name: 'Tesla • Robinhood Token', decimals: 18, supplyRaw: (10n ** 30n).toString(), supplyAt: now - H }), [GOOGL]: reg({ supplyRaw: (10n ** 21n).toString(), supplyAt: now - H }), [GOOGLON]: { supplyRaw: (10n ** 22n).toString(), decimals: 18, supplyAt: now - H } } },
+        gt: { tokens: { [TSLA]: gtOf(TSLA), [ATT2]: Object.assign(gtOf(TSLA), { symbol: 'TSLA' }), [GOOGL]: gtOf(GOOGL), [GOOGLON]: { symbol: 'googlon', priceUsd: 300, at: now - H } } } });
+      const gR = RW.groupRows(bR.rows, now - H), gT = gR.find((g) => g.key === 'TSLA'), gGo = gR.find((g) => g.key === 'GOOGL');
+      check('RWA review: a group is led by the token in Robinhood\'s registry — never by one found by the chain alone, whatever its value — and a token not confirmed on the chain is listed in its group but out of its sums',
+        gT.main === TSLA && gT.tokens[0].address === TSLA && rowOf(bR, ATT2).value.v > rowOf(bR, TSLA).value.v && gGo.main === GOOGL && rowOf(bR, GOOGLON).confidence === 'not-confirmed' && gGo.tokens.length === 2
+        && near(gGo.value.v, rowOf(bR, GOOGL).value.v) && /1 not confirmed on the chain yet is left out/.test(gGo.value.label), brief([gT.main, gGo.value]));
+      // 8. a lookalike's pointer to the real one, worded by that token's own evidence
+      const bW = build({ chain: { tokens: { [WEEK]: reg({ codeMatch: true, codeAt: now - H, symbol: 'WEEK' }) } }, deviations: { readAt: now - H, data: pd } });
+      const wWhy = RW.notRwaWhy(X, null, { symbol: 'WEEK', rows: bW.rows }), oWhy = RW.notRwaWhy(X, null, { symbol: 'googlon', rows: bR.rows }), tWhy = RW.notRwaWhy(X, null, { symbol: 'TSLA', rows: bR.rows });
+      // review two, 4: WEEK before its code is compared (not confirmed, named only by Robinhood's deviation list) is never said to be on "this site's list" nor Robinhood's
+      const bW2 = build({ chain: { tokens: { [WEEK]: reg({ symbol: 'WEEK' }) } }, deviations: { readAt: now - H, data: pd } }), wWhy2 = RW.notRwaWhy(X, null, { symbol: 'WEEK', rows: bW2.rows });
+      // review two, 1: a token whose own check found a spoofed slot is told FIRST that it only wears the ticker, then what its check found
+      const spoofK = RW.classify(X, { asset: null, registryAt: now - H, chain: reg({ codeMatch: false, codeAt: now - H }) }), sWhy = RW.notRwaWhy(X, spoofK, { symbol: 'TSLA', rows: bR.rows });
+      check('RWA review: a lookalike is told where the real one is in that token\'s own terms — "the registry lists" only for a token in Robinhood\'s registry; WEEK (out of it) as Robinhood\'s token running from its registry; a token not confirmed yet is never asserted to be its issuer\'s; and the twin is the registry\'s token, not a chain-only one',
+        rowOf(bW, WEEK).confidence === 'confirmed' && wWhy === 'Same ticker as $WEEK, but not issued by Robinhood Assets (Jersey) — Robinhood\'s $WEEK at ' + RW.short(WEEK) + ' runs from its registry (it is not in the registry\'s active list)'
+        && /^Same ticker as \$googlon, which this site lists at 0xe10c…46dc among Ondo Global Markets' tokens, not confirmed on the chain yet/.test(oWhy) && !/not issued by/.test(oWhy)
+        && rowOf(bW2, WEEK).confidence === 'not-confirmed' && wWhy2 === 'Same ticker as $WEEK at ' + RW.short(WEEK) + ', a token Robinhood\'s own answers name that this site has not confirmed on the chain yet — this token is not that one' && !/this site lists|not issued by/.test(wWhy2)
+        && sWhy.startsWith('Same ticker as $TSLA, but not issued by Robinhood Assets (Jersey) — the registry lists $TSLA at ' + RW.short(TSLA) + '. Its beacon slot names Robinhood\'s registry, but its code is not the code')
+        && tWhy === 'Same ticker as $TSLA, but not issued by Robinhood Assets (Jersey) — the registry lists $TSLA at ' + RW.short(TSLA) && RW.twinOf(X, 'TSLA', bR.rows).address === TSLA, brief([wWhy, oWhy, tWhy, wWhy2, sWhy]));
+      /* review two (2026-10-28) */
+      // 2. a TVL figure that may be low, or rests on a kept read, carries its caveat in a few words for the line a card shows in sight
+      check('RWA review two: a TVL figure summed while an app could not be read carries its caveat in a few words (caveat: "may be low: Morpho Blue not read"), as does one resting on an app\'s kept deposits ("Morpho Blue as read at …, not read since") — what a card shows beside the figure; a figure from every app read well has none',
+        g3.caveat === 'may be low: Morpho Blue not read' && /^Morpho Blue as read at .* UTC, not read since$/.test(n1.caveat) && !('caveat' in rowOf(k4, NVDA).tvl), brief([g3.caveat, n1.caveat]));
+      // 5/19. GeckoTerminal's token read failed for a token: said as failed (never "not run yet"); a token with a good entry keeps it, with its own time
+      const gtF = (o) => build({ chain: { tokens: { [TSLA]: reg(), [SPYA]: reg() } }, gt: { tokens: Object.assign({ [SPYA]: Object.assign(gtOf(SPYA), { at: now - 3 * H, failAt: now - 30 * 60e3, failWhy: 'rate-limited' }) }, o) } });
+      const fT = rowOf(gtF({ [TSLA]: { failAt: now - 30 * 60e3, failWhy: 'rate-limited' } }), TSLA), fS = rowOf(gtF({}), SPYA), fA = rowOf(gtF({ [TSLA]: { absent: true, at: now - 4 * H, failAt: now - 30 * 60e3, failWhy: 'upstream 500' } }), TSLA);
+      check('RWA review two: a token whose GeckoTerminal token read failed says so — "its read at <time> failed (rate-limited) — tried again on the next run", never "has not run yet"; one with a last good read keeps its figures, each with that read\'s own time and a label saying it is the last good read',
+        /^GeckoTerminal's token read of it at .* UTC failed \(rate-limited\) — tried again on the next run$/.test(fT.liquidity.why) && fT.liquidity.v === null && /failed \(rate-limited\)/.test(fT.volume24h.why) && /failed \(rate-limited\)/.test(fT.mcap.why) && !/has not run yet/.test(fT.liquidity.why)
+        && fS.liquidity.v === gtOf(SPYA).reserveUsd && fS.liquidity.at === now - 3 * H && /its last good read; GeckoTerminal could not be read for it at .* \(rate-limited\)/.test(fS.liquidity.label)
+        && /failed \(upstream 500\) — tried again on the next run; the read before it \(.* UTC\) had no entry for it/.test(fA.liquidity.why), brief([fT.liquidity, fS.liquidity, fA.liquidity]));
+      // 7. a group's market cap is this chain's figures only: TSLA ($4.53M, chain-only) never takes in TSLAon's every-chain $60M, so SPY ranks above it
+      const bMc = build({ chain: { tokens: { [TSLA]: reg(), [SPYA]: reg(), [TSLAON]: { beacon: RW.ISSUERS.ondo.beacons[0], beaconAt: now - H, fpAt: now - H } } },
+        gt: { tokens: { [TSLA]: Object.assign(gtOf(TSLA), { mcap: 4528746, fdv: 4528746 }), [SPYA]: Object.assign(gtOf(SPYA), { mcap: 20644458, fdv: 20644458 }), [TSLAON]: { symbol: 'TSLAon', priceUsd: 400, mcap: 6e7, fdv: 27324, reserveUsd: 1e5, volume24h: 1e4, at: now - H } } } });
+      const gMc = RW.groupRows(bMc.rows, now - H), gTs = gMc.find((g) => g.key === 'TSLA'), byMcG = gMc.slice().sort(RW.nullLast('desc', (g) => (g.mcap.global ? null : g.mcap.v)));
+      const onlyOn = RW.groupRows(bMc.rows.filter((r) => r.address === TSLAON), now - H)[0];
+      check('RWA review two: Top RWAs by market cap — a group\'s market cap is this chain\'s figures only (TSLA\'s $4.53M), CoinGecko\'s every-chain figure for Ondo\'s TSLAon ($60M) kept apart (mcapGlobal), never added in nor called the whole group\'s; SPY ($20.6M) ranks first; a group whose only cap is every-chain is that figure, flagged global, kept out of the ranking',
+        gTs.mcap.v === 4528746 && !gTs.mcap.global && /this chain's — CoinGecko's every-chain figure for its multi-chain issuer's token is kept apart, never added in/.test(gTs.mcap.label) && gTs.mcapGlobal && gTs.mcapGlobal.v === 6e7 && gTs.mcapGlobal.global === true && !gTs.flags.includes('global-mcap')
+        && byMcG[0].key === 'SPY' && byMcG[1].key === 'TSLA' && onlyOn.mcap.global === true && onlyOn.mcap.v === 6e7 && onlyOn.flags.includes('global-mcap') && !('mcapGlobal' in onlyOn), brief([gTs.mcap, gTs.mcapGlobal, byMcG.map((g) => g.key)]));
+      // 20. the pools the job read itself (rwa_connected) pair two RWAs too: a pool outside the batch (TSLA / SPY) is in both tokens' volume, and is taken off a total once
+      const pTS = '0x' + 'f1'.repeat(20), cnR = { reads: { [TSLA]: { ok: true, at: now - H, pools: [{ pool: pTS, base: { address: TSLA }, quote: { address: SPYA }, reserveUsd: 5e4, volume24h: 12345 }] } } };
+      const bV = build({ chain: { tokens: { [TSLA]: reg(), [SPYA]: reg() } }, gt: { tokens: { [TSLA]: gtOf(TSLA), [SPYA]: gtOf(SPYA) } }, connected: cnR }), bV0 = build({ chain: { tokens: { [TSLA]: reg(), [SPYA]: reg() } }, gt: { tokens: { [TSLA]: gtOf(TSLA), [SPYA]: gtOf(SPYA) } } });
+      const vT = RW.tokSumFig(bV.rows, 'volume', 't'), vT0 = RW.tokSumFig(bV0.rows, 'volume', 't');
+      check('RWA review two: a pool pairing two RWAs that only the job\'s own pool read holds (TSLA / SPY, outside the most-traded batch) flags both tokens and is taken off the volume total once; without that read the total is the plain sum and says a pool between two of them may be counted twice',
+        rowOf(bV, TSLA).flags.includes('pairs-rwa') && rowOf(bV, SPYA).flags.includes('pairs-rwa') && near(vT.v, vT0.v - 12345) && vT.pairPools === 1 && /less the 24 h volume of the 1 pool pairing two of these tokens/.test(vT.label)
+        && !rowOf(bV0, TSLA).flags.includes('pairs-rwa') && /a pool pairing two of these tokens that this site has not read may be in both tokens' figures/.test(vT0.label), brief([vT, vT0]));
+    }
+
+    /* ── the job and its answers ── */
+    const AMC = '0x05a3d1cd21d0c88145e82600e62e7e496e0f222b', AAPL = '0xaf3d76f1834a1d425780943c99ea8a608f8a93f9';
+    gtMultiLeaveOut.add(AMC); gtMultiLeaveOut.add(AAPL);
+    const dbR = freshDb('rwa'), rmeter = [], rnode = { batches: [] };
+    let rclock = RNOW;
+    const rtake = async (key, wait) => { rmeter.push([key, wait, rclock]); };
+    const rwaRpc = async (calls) => { rnode.batches.push({ at: rclock, calls }); return calls.map(([m, p]) => { const r = nodeAnswer(m, p); return r.error ? null : r.result; }); };
+    const mdR = MD.createMarketData({ db: dbR, now: () => rclock, outboundTake: rtake, rpcBatch: rwaRpc, urls: URLS, bgWaitMs: 1000, askWaitMs: 1000 }); mdR.migrate();
+    const runR = async (job, dt = 30 * 60e3) => { rclock += dt; return mdR.runJob(job); };
+    /* the review's attack, in the job's world (2026-10-28): a contract named like a Stock Token ("Tesla, Inc. • Robinhood Token", $TSLA)
+       that wrote Robinhood's registry address into its own beacon slot and wash-traded a WETH pool into the most-traded batch. All of it
+       is the test's own hypothetical (like X above) — its pool, slot, supply and code; the fake node answers those and nothing else */
+    const ATT = '0x' + 'de'.repeat(20), ATT_POOL = '0x' + 'ee'.repeat(20);
+    const spoofPool = JSON.parse(JSON.stringify(F.gtP1.data.find((d) => /TSLA/.test(d.attributes.name)) || F.gtP1.data[3]));
+    spoofPool.id = 'robinhood_' + ATT_POOL; spoofPool.attributes.address = ATT_POOL; spoofPool.attributes.name = 'TSLA / WETH 0.3%';
+    spoofPool.relationships.base_token.data.id = 'robinhood_' + ATT; spoofPool.relationships.quote_token.data.id = 'robinhood_' + WETH;
+    const spoofInc = { id: 'robinhood_' + ATT, type: 'token', attributes: { address: ATT, name: 'Tesla, Inc. • Robinhood Token', symbol: 'TSLA', decimals: 18, image_url: null, coingecko_coin_id: null } };
+    F.gtP1.data.push(spoofPool); (F.gtP1.included = F.gtP1.included || []).push(spoofInc);
+    RR.beacons[ATT] = REGISTRY; RR.supplies[ATT] = '1000000'; RR.meta[ATT] = { name: 'Tesla, Inc. • Robinhood Token', symbol: 'TSLA', decimals: 18 };
+    RR_EXTRA_CODE[ATT] = '0x6080604052348015600e575f5ffd5b50600436106100365760003560e01c806306fdde031461003b575b5f5ffd5b';   // an ERC-20's opening bytes: not the proxy
+    // the batch, DefiLlama's app list, L2BEAT, the pulse (USDG's supply); then the RWA job until the registry's log walk is whole
+    await runR('pools', 0); await runR('liquidity', 0); await runR('l2beat', 0); node.head = HEAD; await runR('pulse', 0);
+    const r1 = await runR('rwa'), b1 = rnode.batches.filter((b) => b.at === rclock), m1 = rmeter.filter((x) => x[2] === rclock);
+    const wk1 = mdR.rwa({ view: 'tokens' }).body.rows.find((r) => r.address === WEEK), tk1 = mdR.rwaToken({ address: TSLA }).body;   // after the first run
+    const r2 = await runR('rwa'), r3 = await runR('rwa');
+    const st = (n) => (mdR._test.stGet(n) || {}).v;
+    check('RWA: the job ran (every part due on its first run): Robinhood\'s registry, quotes, corporate actions and deviations, Chainlink\'s directory, the stablecoins, the DeFi deposits, the chain, GeckoTerminal — and keeps each in mkt_state',
+      r1.ok && /^read: registry, quotes, corporate actions, deviations, Chainlink directory, stablecoins; fingerprints \d+\/\d+; code \d+\/\d+; state \d+\/\d+; logs to block \d+ of \d+; GT tokens \d+/.test(r1.note) && /; DeFi \d+\/\d+ apps/.test(r1.note) && r1.note.length <= 290 && ['rhj_assets', 'rhj_prices', 'rhj_actions', 'rhj_deviations', 'chainlink_rh', 'rwa_stables', 'rwa_tvl', 'rwa_chain', 'rhj_roles', 'rwa_gt', 'rwa_connected', 'rwa_protocols'].every((n) => st(n)), r1.note);
+    check('  ...and the second run reads only what is due: Robinhood\'s quotes every run, the registry and the rest every 6 h (not again 30 minutes later)', r2.ok && /^read: quotes;/.test(r2.note) && !/registry,|corporate actions|Chainlink directory|stablecoins/.test(r2.note)
+      && (hits['rhj-assets'] || 0) === 1 && (hits['rhj-prices'] || 0) === 3 && (hits['chainlink-dir'] || 0) === 1 && (hits['stables-list'] || 0) === 1, brief([r2.note, hits['rhj-assets'], hits['rhj-prices']]));
+    check('  ...every Robinhood read took Market Data\'s share of Robinhood\'s meter first, then the host\'s; GeckoTerminal only the collectors\' share (never the one kept for people); the chain only Market Data\'s chain share',
+      m1.filter(([k]) => k === 'market:robinhood').length === 4 && m1.findIndex(([k]) => k === 'market:robinhood') < m1.findIndex(([k], i) => i > 0 && k === '127.0.0.1:' + vendor.address().port && m1[i - 1][0] === 'market:robinhood')
+      && rmeter.some(([k]) => k === 'market:geckoterminal') && !rmeter.some(([k]) => k === 'market:geckoterminal-asked') && m1.filter(([k]) => k === 'market:rpc').length === b1.length, brief(m1.map(([k]) => k)));
+    const rwaBatches = rnode.batches.filter((b) => b.at > RNOW);   // the RWA runs' (the pulse read the chain first, at RNOW)
+    const perRun = [...new Set(rwaBatches.map((b) => b.at))].map((t) => rwaBatches.filter((b) => b.at === t).length);
+    const mcMax = Math.max(...node.mc.map((x) => x.n)), ethCallsPer = rwaBatches.map((b) => b.calls.filter(([m]) => m === 'eth_call').length);
+    check('RWA: the chain is read in at most 6 batches a run, each Multicall3 aggregate3 call at most 150 subcalls (and at most 5 of them in a batch); the fingerprints in one batch with the head block',
+      perRun.length === 3 && perRun.every((n) => n <= 6) && mcMax <= 150 && ethCallsPer.every((n) => n <= 5) && rwaBatches.every((b) => b.calls.every(([m, p]) => m !== 'eth_call' || String(p[0].to).toLowerCase() === MC3)) && node.mc.every((x) => x.sel === RW.SELECTORS.aggregate3) && b1[0].calls[0][0] === 'eth_blockNumber' && b1[0].calls.slice(1).every(([m, p]) => m === 'eth_getStorageAt' && [RW.SLOT.beacon, RW.SLOT.impl].includes(p[1])),
+      brief({ perRun, mcMax, ethCallsPer }));
+    const roles = st('rhj_roles');
+    check('  ...the registry\'s logs are walked forward in 10M-block windows, four a run, until the walk is whole (three runs here), and the holders\' kind read once',
+      roles.complete === true && roles.cursor === HEAD && roles.logs === FR.logs.length && /logs to block 39999999 of/.test(r1.note) && /logs to block 79999999 of/.test(r2.note) && /\(whole\)/.test(r3.note)
+      && rnode.batches.filter((b) => b.calls.some(([m]) => m === 'eth_getLogs')).every((b) => b.calls.every(([m, p]) => m === 'eth_getLogs' && p[0].address === REGISTRY && !p[0].topics && parseInt(p[0].toBlock, 16) - parseInt(p[0].fromBlock, 16) < 10000000))
+      && roles.kinds['0xcd8c6182e7c6ca3b5156d6a90a67719d7e2be094'].kind === 'wallet' && !roles.kinds['0x13643b89b19245201b29d556edde5cf18f749c08'], brief({ c: roles.cursor, n: roles.logs, k: Object.keys(roles.kinds).length }));
+    // the answers
+    const A = mdR.rwa({}).body, T = mdR.rwa({ view: 'tokens', limit: 300 }).body;
+    const tRow = T.rows.find((r) => r.address === TSLA), tGroup = A.rows.find((r) => r.key === 'TSLA');
+    const tslaTop = groupBy.get(TSLA).slice().sort((a, b) => Number(b.attributes.reserve_in_usd) - Number(a.attributes.reserve_in_usd))[0];
+    const supT = Number(BigInt(RR.tsla.totalSupply)) / 1e18, feedT = Number(RR.feeds['0x4a1166a659a55625345e9515b32adecea5547c38'].answer) / 1e8;
+    check('RWA: /api/market/rwa answers its contract: { at, chain, view, sort, dir, kind, issuer, total, rows, totals, reads, definitions, notes, sources } — Top RWAs by value on chain by default, every issuer present named',
+      ['at', 'chain', 'view', 'sort', 'dir', 'kind', 'issuer', 'total', 'rows', 'totals', 'reads', 'definitions', 'notes', 'sources', 'issuers'].every((k) => k in A) && A.view === 'assets' && A.sort === 'value' && A.dir === 'desc' && A.chain === 'robinhood'
+      && ['rwa', 'value', 'tvl', 'liquidity', 'mcap', 'premium', 'connected', 'stables'].every((k) => typeof A.definitions[k] === 'string' && A.definitions[k].length > 30) && ['registry', 'prices', 'chain', 'tvl', 'stables', 'chainlink', 'roles'].every((k) => A.reads[k] && 'ok' in A.reads[k] && 'at' in A.reads[k])
+      && A.notes.some((n) => /Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc\./.test(n)) && A.notes.some((n) => /Not advice, never a tip to buy\. Do your own research\./.test(n)) && A.issuers.some((x) => x.key === 'rhj') && A.issuers.some((x) => x.key === 'ondo'), brief(Object.keys(A)));
+    check('  ...TSLA\'s group holds Robinhood\'s TSLA and Ondo\'s TSLAon (both confirmed: its beacon read on the chain), the underlying "Tesla", a stock',
+      tGroup && tGroup.tokens.map((t) => t.symbol + ':' + t.confidence).join() === 'TSLA:confirmed,TSLAon:confirmed' && tGroup.underlying.name === 'Tesla' && tGroup.underlying.kind === 'stock' && tGroup.main === TSLA, brief(tGroup && tGroup.tokens));
+    check('  ...TSLA\'s figures, each with its source: the price of its deepest pool (GeckoTerminal), the supply read on the chain, value = supply × price, its multiplier (Robinhood\'s), Chainlink\'s RHTSLA / USD read on the chain and Robinhood\'s quote, the premium against Chainlink, not halted, not paused',
+      tRow && tRow.priceUsd.v === Number(tslaTop.attributes.base_token_price_usd) && tRow.priceUsd.src === 'geckoterminal' && near(tRow.supply.v, supT) && tRow.supply.src === 'rpc' && near(tRow.value.v, supT * tRow.priceUsd.v) && tRow.value.label === 'on-chain supply × the DEX price'
+      && tRow.multiplier.v === 1 && tRow.multiplier.src === 'robinhood' && near(tRow.reference.chainlink.v, feedT) && tRow.reference.chainlink.label === 'Chainlink RHTSLA / USD' && tRow.reference.chainlink.src === 'chainlink' && tRow.reference.chainlink.stale === false
+      && near(tRow.reference.robinhood.v, (399.31 + 399.4) / 2) && /undocumented field/.test(tRow.reference.robinhood.label) && near(tRow.premium.v, (tRow.priceUsd.v / feedT - 1) * 100) && tRow.premium.ref === 'chainlink'
+      && tRow.halted.v === false && tRow.paused.token.v === false && tRow.paused.oracle.v === false && tRow.confidence === 'confirmed', brief(tRow));
+    const tvlT = FR.proto['morpho-blue'].chainTvls['Robinhood Chain'].tokensInUsd[0].tokens.TSLA + FR.proto['catch-exchange'].chainTvls['Robinhood Chain'].tokensInUsd.slice(-1)[0].tokens.TSLA;
+    check('  ...its TVL in DeFi is what DefiLlama lists it deposited on the chain, matched by symbol, with the apps holding it (Morpho Blue, Catch Exchange); a subcall that reverted (the fake reverts the registry\'s paused(), which the research did not read) is "no such function" — never "not paused"',
+      near(tRow.tvl.v, tvlT) && tRow.tvl.protocols.map((p) => p.slug).sort().join() === 'catch-exchange,morpho-blue' && /matched by symbol/.test(tRow.tvl.label) && tRow.paused.global.v === null && /no such function/.test(tRow.paused.global.why) && tRow.paused.global.absent === true, brief({ tvl: tRow.tvl, g: tRow.paused.global }));
+    const gld = T.rows.find((r) => r.symbol === 'GLD'), gldM = Object.values(pg.tokens).find((t) => t.geckoId === 'spdr-gold-shares-robinhood-token');
+    check('RWA: a token outside the most-traded pools (GLD) is priced from GeckoTerminal\'s multi read, its liquidity GeckoTerminal\'s own total — each label says so; its kind a commodity',
+      gld && gld.priceUsd.v === gldM.priceUsd && /not among the most-traded pools/.test(gld.priceUsd.label) && gld.liquidity.v === gldM.reserveUsd && /GeckoTerminal's total/.test(gld.liquidity.label) && gld.underlying.kind === 'commodity', brief(gld && [gld.priceUsd, gld.liquidity]));
+    const wkR = T.rows.find((r) => r.address === WEEK);
+    check('RWA: WEEK — gone from Robinhood\'s registry, found by its fingerprint (and Robinhood\'s deviation list): confirmed, its status "on the chain, not in the registry\'s active list", a bond, Robinhood\'s −50% deviation on it; its decimals not read, so no supply — said, never 0',
+      wkR && wkR.confidence === 'confirmed' && wkR.status.text === 'On the chain, not in the registry\'s active list' && wkR.underlying.kind === 'bond' && wkR.deviation && wkR.deviation.direction === 'discount' && wkR.deviation.days === 32 && wkR.flags.includes('deviation')
+      && wkR.supply.v === null && /decimals/.test(wkR.supply.why), brief(wkR && [wkR.status, wkR.deviation, wkR.supply]));
+    const nc = T.rows.filter((r) => r.confidence === 'not-confirmed');
+    check('RWA: a listed token whose fingerprint the node has not given yet is shown "not-confirmed" (why: fingerprint not read yet), flagged, and left out of the totals',
+      nc.length > 0 && nc.every((r) => r.why === 'fingerprint not read yet' && r.flags.includes('not-confirmed')) && A.totals.notConfirmed === nc.length && A.totals.count === T.rows.length - nc.length, brief({ nc: nc.length, totals: A.totals.count }));
+    /* liquidity and volume: ONE basis for every token (review, 2026-10-28) — GeckoTerminal's own per-token figure from its token read,
+       whether or not the token has a pool among the most-traded we keep; the totals add those figures up, a pool pairing two RWAs flagged
+       and its 24 h volume (in both tokens' figures) taken off once */
+    const spyR = T.rows.find((r) => r.symbol === 'SPY'), qqqR = T.rows.find((r) => r.symbol === 'QQQ'), nvR = T.rows.find((r) => r.symbol === 'NVDA');
+    const qqqSpy = allPools.find((p) => p.attributes.name === 'QQQ / SPY 0.02%');
+    const counted = new Set(T.rows.filter((r) => r.confidence !== 'not-confirmed').map((r) => r.address));
+    const gtOf = (a) => FR.multi.data.find((d) => d.attributes.address === a).attributes;
+    const liqSum = T.rows.filter((r) => counted.has(r.address) && r.liquidity.v != null).reduce((a, r) => a + r.liquidity.v, 0), volSum = T.rows.filter((r) => counted.has(r.address) && r.volume24h.v != null).reduce((a, r) => a + r.volume24h.v, 0);
+    check('RWA: liquidity and volume are one measure for every token — GeckoTerminal\'s own per-token figures (SPY $9.84M and NVDA $14.28M of volume, not the reserves of the two pools of theirs in the batch), each label saying so; a token GeckoTerminal\'s read has no entry for says that, never "not run yet"',
+      near(spyR.liquidity.v, RW.num(gtOf(spyR.address).total_reserve_in_usd)) && near(nvR.volume24h.v, Number(gtOf(nvR.address).volume_usd.h24)) && T.rows.every((r) => r.liquidity.src === 'geckoterminal' && (r.liquidity.v == null || /GeckoTerminal's total for it across its pools/.test(r.liquidity.label)))
+      && /has no entry for it/.test(T.rows.find((r) => r.address === AMC).liquidity.why) && /has no entry for it/.test(T.rows.find((r) => r.address === TSLAON).priceUsd.why) && !T.rows.some((r) => /has not run yet/.test(r.liquidity.why || '')), brief([spyR.liquidity, nvR.volume24h]));
+    /* the pools pairing two counted RWAs, each once: the batch's (QQQ / SPY), then the ones the job read itself among TSLA's own pools
+       (review two, 20: a pool between two RWAs outside the batch — TSLA / SPY, TSLA / MSTR — is in both tokens' figures too) */
+    const volSet = new Set(T.rows.filter((r) => counted.has(r.address) && r.volume24h.v != null).map((r) => r.address)), sidesOf = (d) => [d.relationships.base_token.data.id.slice(10), d.relationships.quote_token.data.id.slice(10)];
+    const batchIds = new Set(mdR._test.latestBatch('robinhood').rows.map((r) => r.pool)), sharedV = new Map();
+    for (const d of allPools) { const [b0, q0] = sidesOf(d); if (b0 !== q0 && volSet.has(b0) && volSet.has(q0)) sharedV.set(String(d.attributes.address).toLowerCase(), RW.num(d.attributes.volume_usd.h24)); }
+    const ownShared = RW.parseGtTokenPools(FR.tslaPools).pools.slice(0, 30).filter((pp) => !batchIds.has(pp.pool) && pp.base.address !== pp.quote.address && volSet.has(pp.base.address) && volSet.has(pp.quote.address));
+    for (const pp of ownShared) if (!sharedV.has(pp.pool)) sharedV.set(pp.pool, pp.volume24h);
+    const offV = [...sharedV.values()].filter((x) => x != null && x >= 0), offSum = offV.reduce((a, x) => a + x, 0);
+    check('RWA: the QQQ / SPY pool holds two RWAs: each token is flagged pairs-rwa; the totals add GeckoTerminal\'s per-token figures up — liquidity as they are (the label names the shared pools), volume less each shared pool\'s 24 h volume once, since it is in both — and (review two) the pools between two RWAs that the job read itself among TSLA\'s own pools, outside the batch, are taken off too; the label says a pool not read may still be counted twice',
+      spyR.flags.includes('pairs-rwa') && qqqR.flags.includes('pairs-rwa') && spyR.liquidity.pairsRwa === true && qqqSpy && sharedV.has(String(qqqSpy.attributes.address).toLowerCase()) && near(A.totals.liquidity.v, liqSum) && /pools? pairs? two of these tokens/.test(A.totals.liquidity.label)
+      && ownShared.length > 0 && A.totals.volume24h.pairPools === sharedV.size && near(A.totals.volume24h.v, volSum - offSum) && new RegExp('less the 24 h volume of the ' + offV.length + ' pools pairing two of these tokens').test(A.totals.volume24h.label)
+      && /a pool pairing two of these tokens that this site has not read may be in both tokens' figures/.test(A.totals.volume24h.label)
+      && near(A.rows.find((g) => g.key === 'SPY').liquidity.v, spyR.liquidity.v), brief({ tot: [A.totals.liquidity, A.totals.volume24h], want: [liqSum, volSum, offSum], own: ownShared.map((pp) => pp.name) }));
+    check('RWA: the stablecoins total stands apart, and L2BEAT\'s own count of real-world assets on the chain is served as L2BEAT\'s, never mixed into the sums',
+      A.totals.stables.v === usdgS.circulating && A.totals.stables.src === 'defillama' && A.totals.l2beat.rwaPublic.v === F.l2beat.projects.robinhood.tvs.breakdown.rwaPublic && A.totals.l2beat.rwaPublic.src === 'l2beat' && /L2BEAT's count of real-world assets on Robinhood Chain/.test(A.totals.l2beat.rwaPublic.label)
+      && A.totals.l2beat.rwaRestricted.v === F.l2beat.projects.robinhood.tvs.breakdown.rwaRestricted && A.totals.value.src === 'site', brief(A.totals.l2beat));
+    // sorting, filters, views
+    const byTvl = mdR.rwa({ view: 'tokens', sort: 'tvl' }).body.rows, byTvlA = mdR.rwa({ view: 'tokens', sort: 'tvl', dir: 'asc' }).body.rows;
+    const ord = (rows, get, dir) => { const v = rows.map(get), k = v.findIndex((x) => x == null); return (k < 0 || v.slice(k).every((x) => x == null)) && v.filter((x) => x != null).every((x, i, a) => i === 0 || (dir === 'asc' ? a[i - 1] <= x : a[i - 1] >= x)); };
+    check('RWA: ranked by TVL, liquidity, market cap, volume, value or premium, both ways — a token with no figure last in both; the market-cap ranking keeps an every-chain figure out',
+      ord(byTvl, (r) => r.tvl.v, 'desc') && ord(byTvlA, (r) => r.tvl.v, 'asc') && byTvl[0].symbol === 'mGLO' && ['liquidity', 'mcap', 'volume', 'value', 'premium'].every((s) => ['desc', 'asc'].every((d) => ord(mdR.rwa({ view: 'tokens', sort: s, dir: d }).body.rows, (r) => (s === 'mcap' && r.mcap.global ? null : (s === 'volume' ? r.volume24h : r[s]).v), d)))
+      && ['liquidity', 'tvl', 'mcap'].every((s) => ord(mdR.rwa({ sort: s }).body.rows, (r) => r[s].v, 'desc')), brief(byTvl.slice(0, 3).map((r) => [r.symbol, r.tvl.v])));
+    const etf = mdR.rwa({ view: 'tokens', kind: 'etf' }).body.rows, ondoOnly = mdR.rwa({ issuer: 'ondo' }).body.rows, bonds = mdR.rwa({ view: 'tokens', kind: 'bond' }).body.rows;
+    check('  ...filtered by kind and by issuer (the groups holding a token of that issuer), the answer naming every issuer present', etf.length > 0 && etf.every((r) => r.underlying.kind === 'etf') && etf.some((r) => r.symbol === 'SPY') && bonds.some((r) => r.address === WEEK) && bonds.every((r) => r.underlying.kind === 'bond')
+      && ondoOnly.length > 0 && ondoOnly.every((g) => g.issuers.some((x) => x.key === 'ondo')) && mdR.rwa({ issuer: 'nope', kind: 'nope', view: 'nope', sort: 'nope' }).body.view === 'assets', brief({ etf: etf.map((r) => r.symbol) }));
+    const CN = mdR.rwa({ view: 'connected' }).body, SV = mdR.rwa({ view: 'stables' }).body;
+    check('RWA: Connected tokens — TSLA\'s pools read from GeckoTerminal (OPTIMUS, DOGGIE, TSLR…), every row "Not an RWA", the floor and what fell below it said', CN.view === 'connected' && CN.rows.length === wantC.length && CN.rows.every((r) => /^Not an RWA — paired with \$/.test(r.label) && r.reserveUsd.v >= 1000)
+      && CN.belowFloor === 0 && CN.floor === 1000 && CN.notes.some((n) => /Every row here is NOT an RWA/.test(n) && /below that/.test(n)) && (hits['gt-token-pools'] || 0) >= 1, brief({ n: CN.rows.length, notes: CN.notes.slice(-2) }));
+    const usdgRow = SV.rows.find((r) => r.symbol === 'USDG');
+    check('RWA: Stablecoins — USDG, fiat-backed, Paxos, its circulation (DefiLlama) and supply read on the chain (the pulse), "Not counted as an RWA here"; USDe, U and Multipli\'s dollars left out as crypto-backed, and the notes say so',
+      SV.rows.length === 1 && usdgRow.address === USDG && usdgRow.issuer === 'Paxos' && usdgRow.circulating.v === usdgS.circulating && usdgRow.supply.src === 'rpc' && near(usdgRow.supply.v, Number(BigInt(F.state['16'])) / 1e6) && /Not counted as an RWA here/.test(usdgRow.label)
+      && SV.notes.some((n) => /USDe \(crypto-backed\)/.test(n) && /U \(crypto-backed\)/.test(n)), brief(usdgRow));
+    // one token's facts
+    const TK = mdR.rwaToken({ address: TSLA });
+    const tb = TK.body;
+    // the other card fixtures, read at the same moment as TSLA's (dumped below)
+    const cardsNow = [['spy', T.rows.find((r) => r.symbol === 'SPY').address], ['week', WEEK], ['tslaon', TSLAON], ['googlon', '0xe10cc5f0cd0c90322ebeb33e7757b2c9090146dc']].map(([k, a]) => [k, mdR.rwaToken({ address: a }).body]);
+    check('RWA: /api/market/rwa/token — TSLA\'s row plus what the card shows: what you hold (every sentence with its Robinhood page; terms() read on the chain), the issuer\'s controls (registry, beacon, Stock.sol read on the chain, its Sourcify link), the roles with each holder\'s kind, 175 blocked, the Chainlink feed, the lookalikes and the connected tokens',
+      TK.status === 200 && tb.confidence === 'confirmed' && tb.issuerProfile.sentences.length >= 6 && tb.issuerProfile.sentences.every((x) => /^https:\/\/docs\.robinhood\.com\//.test(x.href)) && tb.issuerProfile.terms.v === 'https://robinhood.com/stocktoken/rhj' && tb.issuerProfile.terms.src === 'rpc'
+      && tb.controls.registry === REGISTRY && tb.controls.beacon === REGISTRY && tb.controls.implementation.address === '0xb35490d6f9163de4f80d88dc75c3516eb64c5ae2' && tb.controls.verifiedSource === 'https://sourcify.dev/server/v2/contract/4663/0xb35490d6f9163de4f80d88dc75c3516eb64c5ae2'
+      && tb.controls.powers.find((p) => p.role === 'BEACON_UPGRADER_ROLE').holders[0].kind === 'wallet' && /expected — they are still powers over your tokens/.test(tb.controls.note)
+      && tb.roles.length >= 13 && tb.blocked.count === 175 && tb.chainlink.description === 'RHTSLA / USD' && tb.chainlink.heartbeat === 86400 && tb.chainlink.stale === false && tb.connected.length === wantC.length && Array.isArray(tb.lookalikes)
+      && tb.deployer && tb.deployer.holders[0].address === '0x5516b3451d4d6c9f63353fe7bc9537477ecce000', brief(Object.keys(tb)));
+    // the lookalike trap through the job: someone scanned the "GameStop" memecoin (its CoinGecko name and symbol)
+    dbR.prepare("INSERT INTO mkt_scan (chain, address, at, read_at, src, symbol, name) VALUES ('robinhood', ?, ?, ?, 'scan', ?, ?)").run(GME_MEME, rclock, rclock, cgRow('gamestop-3').symbol, cgRow('gamestop-3').name);
+    await runR('rwa');
+    const gme = mdR.rwaToken({ address: GME_RHJ }).body, meme = mdR.rwaToken({ address: GME_MEME });
+    check('RWA: the "GameStop" memecoin (GME 0x7e86…, a ticker of one): on Robinhood\'s GME it is a lookalike ("same ticker, not issued by…"); asked about itself it is a 404 that says so — "Same ticker as $GME, but not issued by Robinhood Assets (Jersey) — the registry lists $GME at 0x1b0e…153e", with the real one in full beside it',
+      gme.lookalikes.some((x) => x.address === GME_MEME && x.src === 'scan') && meme.status === 404 && meme.body.notRwa === true && meme.body.why === 'Same ticker as $GME, but not issued by Robinhood Assets (Jersey) — the registry lists $GME at ' + RW.short(GME_RHJ) && RW.short(GME_RHJ) === '0x1b0e…153e'
+      && meme.body.twin && meme.body.twin.address === GME_RHJ && meme.body.twin.registry === true && meme.body.twin.issuer.key === 'rhj' && meme.body.twin.confidence === 'confirmed', brief(meme.body));
+    const nms = mdR.rwaToken({ address: '0x4a0ade17fa7602bdfc7d2a9c85f404328687c92d' }), blk = mdR.rwaToken({ address: cgRow('blackrock').platforms.robinhood }), usdb = mdR.rwaToken({ address: cgRow('blockchain-usd').platforms.robinhood }), usdgT = mdR.rwaToken({ address: USDG });
+    check('  ..."Not My Stock", BLACKROCK and Blockchain USD (USDB) are 404s that say which evidence is missing (not in the registry, not on the list — a name is never enough); USDG is a fiat-backed stablecoin, listed apart; a bad address is a 400',
+      [nms, blk, usdb].every((r) => r.status === 404 && r.body.notRwa && /not in Robinhood's Stock Token registry/.test(r.body.why) && /A name or a symbol is never enough/.test(r.body.why)) && usdgT.status === 404 && usdgT.body.stablecoin === true && /fiat-backed stablecoin — listed apart/.test(usdgT.body.why)
+      && mdR.rwaToken({ address: 'nope' }).status === 400, brief([nms.body, usdgT.body]));
+    // the token view's rwa key, the Scanner's lookups
+    check('RWA: the token view (/api/market/token) carries the RWA row for a Robinhood Chain RWA, null for anything else (USDG)', (await mdR.token({ chain: 'robinhood', address: TSLA })).body.rwa.address === TSLA && (await mdR.token({ chain: 'robinhood', address: USDG })).body.rwa === null
+      && 'rwa' in (await mdR.token({ chain: 'robinhood', address: USDG })).body);
+    check('RWA: the Scanner\'s serial-deployer flag is waived only on a confirmed Stock Token deployed by the registry\'s token-deployer role holder — another deployer, an issuer-listed token or a token that is not an RWA keeps it; the server applies it in applyRisk and attaches p.rwa from these stored facts (no read on the scan path)',
+      /token-deployer role/.test(mdR.rwaIssuerDeployer(TSLA, '0x5516b3451d4d6c9f63353fe7bc9537477ecce000') || '') && mdR.rwaIssuerDeployer(TSLA, '0x' + '12'.repeat(20)) === null && mdR.rwaIssuerDeployer(GME_MEME, '0x5516b3451d4d6c9f63353fe7bc9537477ecce000') === null
+      && /waived = MKT\.rwaIssuerDeployer\(e\.token\.address, dep\)/.test(SRC) && /if \(waived\) \{ r\.serialDeployer = false; r\.serialDeployerWaived = waived; \}/.test(SRC) && /rwa = MKT\.rwaFacts\(p\.token\.address\)/.test(SRC) && /pair: withRwa\(r\.pair\)/.test(SRC) && mdR.rwaFacts(TSLA).address === TSLA && mdR.rwaFacts(USDG) === null);
+    /* a token this site has never seen, scanned under an RWA's ticker: its own profile names the symbol, and p.rwa is the lookalike 404
+       that says so; a ticker of its own, a stablecoin, an RWA itself or no symbol at all gets nothing (the symbol is the server's, never a query) */
+    const neverSeen = '0x' + 'ab'.repeat(20), lkT1 = mdR.rwaLookalike(neverSeen, 'TSLA'), lkM = mdR.rwaLookalike(GME_MEME, 'GME');
+    check('RWA: the Scanner\'s lookalike answer — a token sharing an RWA\'s ticker gets the 404 that names the real one ("Same ticker as $TSLA, but not issued by Robinhood Assets (Jersey) — the registry lists $TSLA at 0x322f…3b2d"); its own ticker, USDG, TSLA itself, "Not My Stock" or no symbol get null; withRwa falls back to it',
+      lkT1 && lkT1.notRwa === true && lkT1.why === 'Same ticker as $TSLA, but not issued by Robinhood Assets (Jersey) — the registry lists $TSLA at ' + RW.short(TSLA) && lkM && /^Same ticker as \$GME, but not issued by Robinhood Assets \(Jersey\)/.test(lkM.why)
+      && mdR.rwaLookalike(neverSeen, 'ZZQX') === null && mdR.rwaLookalike(neverSeen, null) === null && mdR.rwaLookalike(USDG, 'USDG') === null && mdR.rwaLookalike(TSLA, 'TSLA') === null && mdR.rwaLookalike('0x4a0ade17fa7602bdfc7d2a9c85f404328687c92d', 'NMS') === null
+      && mdR.rwaToken({ address: neverSeen, symbol: 'TSLA' }).body.why !== lkT1.why && /rwa = MKT\.rwaFacts\(p\.token\.address\) \|\| MKT\.rwaLookalike\(p\.token\.address, p\.token\.symbol\)/.test(SRC), brief([lkT1, lkM]));
+    // a failed read keeps the last good one, with its age and the reason
+    vendorFail.rhj = true; const rf = await runR('rwa', 6 * 3600e3 + 60e3); vendorFail.rhj = false;
+    const tbDown = mdR.rwaToken({ address: TSLA }).body;
+    const AF = mdR.rwa({ view: 'tokens' }).body, tF = AF.rows.find((r) => r.address === TSLA);
+    check('RWA: Robinhood\'s API down — the run says so, the last good registry stays (TSLA still confirmed, its multiplier still Robinhood\'s), and the answer says the read failed, when, why, and that the last good one is shown',
+      /not read: registry \(upstream 503\)/.test(rf.note) && tF && tF.confidence === 'confirmed' && tF.multiplier.v === 1 && AF.reads.registry.ok === false && /could not be read at .* \(upstream 503\) — the last good read, from .*, is shown/.test(AF.reads.registry.why) && st('rhj_assets').data.assets.length === FR.assets.assets.length, brief([rf.note, AF.reads.registry]));
+    // the site's own chain reads waiting: the chain part stands aside (asks the node nothing, keeps what it read), the rest still reads
+    const chainBefore = JSON.stringify(st('rwa_chain')), batchesBefore = rnode.batches.length;
+    const mdY = MD.createMarketData({ db: dbR, now: () => rclock, outboundTake: rtake, rpcBatch: rwaRpc, rpcBusy: () => 'the site\'s own chain reads are queued', urls: URLS, bgWaitMs: 1000, askWaitMs: 1000 });
+    rclock += 30 * 60e3; const ry = await mdY.runJob('rwa');
+    check('RWA: while the site\'s own chain reads wait, the job\'s chain part stands aside — no node read, the chain state it holds kept as it was (its record says why, and the answers\' reads.chain too) — and the run still reads Robinhood\'s quotes, and says why',
+      ry.ok && /chain stood aside: yielded: the site's own chain reads are queued/.test(ry.note) && /^read: [^;]*quotes/.test(ry.note) && rnode.batches.length === batchesBefore && JSON.stringify(Object.assign({}, st('rwa_chain'), { failAt: undefined, failWhy: undefined })) === JSON.stringify(Object.assign(JSON.parse(chainBefore), { failAt: undefined, failWhy: undefined }))
+      && /^stood aside: yielded/.test(st('rwa_chain').failWhy) && mdR.rwa({}).body.reads.chain.ok === false && /could not be read at .* \(stood aside: yielded/.test(mdR.rwa({}).body.reads.chain.why), ry.note);
+    const memoN = () => [...mdR._test.memo.keys()].filter((k) => k.startsWith('rwa|base')).length;
+    mdR._test.memo.clear(); mdR.rwa({}); mdR.rwa({ view: 'tokens', sort: 'tvl' }); mdR.rwaToken({ address: TSLA }); mdR.rwaRowFor(TSLA);
+    check('RWA: the rows are built once per change of the data (memoised, at most 15 s) — the views, one token\'s facts and the token view\'s key all read the same build', memoN() === 1);
+    // the Send API's resources
+    const ar = await mdR.apiResource('rwa', { view: 'tokens' }, { limit: 100 }), at2 = await mdR.apiResource('rwa-token', { address: TSLA }, {}), at3 = await mdR.apiResource('rwa-token', { address: GME_MEME }, {});
+    check('RWA: the Send API\'s rwa (the list, data = its rows, raw logo URLs) and rwa-token (data = one token\'s facts; 404 for a non-RWA) resources', md.RESOURCES.includes('rwa') && md.RESOURCES.includes('rwa-token') && ar.status === 200 && Array.isArray(ar.body.data) && ar.body.data.length > 0 && ar.body.rows === undefined && ar.body.view === 'tokens'
+      && ar.body.data.every((r) => r.logo == null || /^https:\/\//.test(r.logo)) && at2.status === 200 && at2.body.data.address === TSLA && at3.status === 404 && at3.body.notRwa === true);
+    // the new sources are named
+    check('RWA: the answers name every source (Robinhood\'s API, the chain, Chainlink, DefiLlama, GeckoTerminal, L2BEAT) and never a Robinhood logo URL', ['robinhood', 'rpc', 'chainlink', 'defillama', 'geckoterminal', 'l2beat'].every((k) => A.sources.some((x) => x.id === k && /^https:\/\//.test(x.href)))
+      && !JSON.stringify([A, T, tb]).includes('cdn.robinhood.com') && !/logoUrl/.test(JSON.stringify(st('rhj_assets'))));
+    /* the docs' rwa and rwa-token resources name every key they return (public/data.html is the docs' part of this build: until it
+       documents the rwa resource this says PENDING, with the keys — never a pass on docs that are not there) */
+    const docKeys = [...new Set([...Object.keys(ar.body), ...Object.keys(ar.body.data[0] || {}), ...Object.keys(A.rows[0] || {}), ...Object.keys(A.totals), ...Object.keys(A.reads), ...Object.keys(A.definitions),
+      ...Object.keys(CN.rows[0] || {}), ...Object.keys(SV.rows[0] || {}), ...Object.keys(tb)])].filter((k) => ar.body[k] !== undefined || k !== 'rows');
+    const rwaDoc = DOCS.includes('/api/data/v1/rwa') ? DOCS.slice(DOCS.indexOf('/api/data/v1/rwa')) : '';
+    if (!rwaDoc) console.log('PENDING the docs\' rwa and rwa-token resources: public/data.html does not document /api/data/v1/rwa yet (the docs agent\'s part). Keys to name: ' + docKeys.join(', '));
+    else check('RWA: the docs\' rwa and rwa-token resources name every key they return', docKeys.every((k) => new RegExp('\\b' + k + '\\b').test(rwaDoc)) && /<code>rwa-token<\/code>/.test(DOCS), docKeys.filter((k) => !new RegExp('\\b' + k + '\\b').test(rwaDoc)).join(','));
+    /* ── the review's cases through the job (2026-10-28) ── */
+    // 10. the spoofed $TSLA: its slot names the registry, its code is not the Stock Token proxy — not an RWA, counted nowhere
+    const chT = st('rwa_chain').tokens, attT = mdR.rwaToken({ address: ATT });
+    check('RWA review: a contract that wrote the registry into its own beacon slot (the spoofed "Tesla, Inc. • Robinhood Token", $TSLA, in the most-traded pools) is NOT an RWA — its code was read on the chain and is not the registry tokens\' own — so it is in no list, no total, not TSLA\'s group nor the Scanner\'s "confirmed"; it is a lookalike of TSLA, and TSLA keeps its DeFi deposits',
+      chT[ATT] && chT[ATT].beacon === REGISTRY && chT[ATT].codeMatch === false && !T.rows.some((r) => r.address === ATT) && attT.status === 404 && /its code is not the code Robinhood's Stock Tokens run/.test(attT.body.why)
+      && tGroup.tokens.every((t) => t.address !== ATT) && tGroup.main === TSLA && mdR.rwaFacts(ATT) === null && (tb.lookalikes || []).some((x) => x.address === ATT) && tRow.tvl.v != null && A.totals.count === T.rows.filter((r) => r.confidence !== 'not-confirmed').length
+      && rnode.batches.some((b) => b.calls.some(([m, p]) => m === 'eth_getCode' && String(p[0]).toLowerCase() === ATT)), brief({ att: chT[ATT], why: attT.body.why }));
+    // 28. WEEK (only Robinhood's deviation list names it): fingerprinted first, its code compared — confirmed in the first run
+    check('RWA review: WEEK, named only by Robinhood\'s deviation list, is the first fingerprint read, and its code (the registry tokens\' own proxy) is compared in the same run — confirmed after one run, never "Not an RWA here" while its checks wait',
+      b1[0].calls[1][1][0] === WEEK && wk1 && wk1.confidence === 'confirmed' && chT[WEEK].codeMatch === true && wk1.evidence.some((e) => e.tier === 'A2' && /proxy code the registry's own Stock Tokens run/.test(e.text)), brief(wk1 && wk1.evidence));
+    // 27. the roles while the registry's log walk is not whole: the answer says how far it has come
+    check('RWA review: while the registry\'s log walk is not whole, rwa/token says how far it has come (rolesRead: block 39,999,999 of the head) — and once it is whole, says that',
+      tk1.rolesRead && tk1.rolesRead.complete === false && tk1.rolesRead.cursor === 39999999 && tk1.rolesRead.head === HEAD && tb.rolesRead.complete === true && tb.rolesRead.cursor === HEAD, brief([tk1.rolesRead, tb.rolesRead]));
+    // 14. no Robinhood artwork, anywhere an RWA is drawn
+    const tView = (await mdR.token({ chain: 'robinhood', address: TSLA })).body;
+    check('RWA review: no Robinhood artwork — every Robinhood Stock Token\'s row and group carries no picture, nor does its token view\'s header (CoinGecko\'s picture for them is Robinhood\'s feather); other issuers\' tokens keep theirs',
+      T.rows.filter((r) => r.issuer.key === 'rhj').every((r) => r.logo === null) && A.rows.filter((g) => T.rows.some((r) => r.address === g.main && r.issuer.key === 'rhj')).every((g) => g.logo === null) && tView.logo === null && tView.rwa && tView.rwa.issuer.key === 'rhj', brief({ logo: tView.logo }));
+    // 2. GLD: its feed is not a reference, and is not read on the chain as one
+    const gldR = T.rows.find((r) => r.symbol === 'GLD'), gldProxy = pf.feeds.find((x) => x.ticker === 'GLD').proxy;
+    check('RWA review: GLD\'s "GLD / USD" feed is not used as the underlying\'s price (nor read on the chain as one); its premium waits for a quote of the share',
+      gldR.reference.chainlink.v === null && gldR.reference.chainlink.notReference === true && !(st('rwa_chain').feeds || {})[gldProxy] && gldR.premium.v === null && gldR.premium.ref == null, brief(gldR.reference.chainlink));
+    // 6. a 0.0 volume beside no reserve is not $0
+    const satsR = T.rows.find((r) => r.symbol === 'SATS'), bndR = T.rows.find((r) => r.symbol === 'BND');
+    check('RWA review: SATS and BND, which GeckoTerminal indexes no pool with a reserve for, show no volume — "not available" with why, never $0 beside "price not available"',
+      [satsR, bndR].every((r) => r && r.volume24h.v === null && /indexes no pool/.test(r.volume24h.why) && r.liquidity.v === null && /gave no price/.test(r.priceUsd.why)) && !T.rows.some((r) => r.volume24h.v === 0 && r.liquidity.v == null), brief([satsR && satsR.volume24h, bndR && bndR.volume24h]));
+    // 1/24/25. Everpure $P: its market cap above its FDV, ranked with the rest
+    const byMc = mdR.rwa({ view: 'tokens', sort: 'mcap' }).body.rows, pAt = byMc.findIndex((r) => r.symbol === 'P'), firstNull = byMc.findIndex((r) => r.mcap.v == null);
+    check('RWA review: Everpure $P (Robinhood\'s, on this chain alone) with a market cap above its FDV is not "every chain\'s" — it ranks by its market cap like the rest, and no total or group calls the market caps every chain\'s while none is',
+      pAt >= 0 && byMc[pAt].mcap.aboveFdv === true && !byMc[pAt].mcap.global && !byMc[pAt].flags.includes('global-mcap') && (firstNull < 0 || pAt < firstNull) && byMc.slice(pAt + 1).every((r) => r.mcap.global || r.mcap.v == null || r.mcap.v <= byMc[pAt].mcap.v)
+      && !A.totals.mcap.global && !/every-chain/.test(A.totals.mcap.label) && !A.rows.some((g) => g.mcap.global), brief({ pAt, firstNull, p: byMc[pAt] && byMc[pAt].mcap }));
+    // 13. a choice that is an inherited key is the default, never a 500 or an echo
+    const tryQ = (q) => { try { return mdR.rwa(q); } catch (e) { return { threw: String(e && e.message) }; } };
+    const proto = ['__proto__', 'valueOf', 'hasOwnProperty', 'constructor', 'toString'], apiProto = await mdR.apiResource('rwa', { sort: '__proto__', issuer: 'constructor' }, {});
+    check('RWA review: ?sort= and ?issuer= take only their own choices — __proto__, valueOf, hasOwnProperty, constructor or toString fall back to the default (no throw, so no 500; no echo), in the page\'s answer and the Send API\'s',
+      proto.every((k) => { const a = tryQ({ sort: k, view: 'tokens' }), b = tryQ({ issuer: k }); return a.status === 200 && a.body.sort === 'value' && b.status === 200 && b.body.issuer === 'all' && b.body.rows.length === A.rows.length; }) && apiProto.status === 200 && apiProto.body.sort === 'value' && apiProto.body.issuer === 'all',
+      brief(proto.map((k) => [tryQ({ sort: k }).threw || tryQ({ sort: k }).body.sort, tryQ({ issuer: k }).threw || tryQ({ issuer: k }).body.issuer])));
+    // 18. Top RWAs by an issuer: every row that issuer's own
+    const ON = mdR.rwa({ issuer: 'ondo' }).body, onT = ON.rows.find((g) => g.main === TSLAON);
+    check('RWA review: Top RWAs filtered by an issuer builds each row from that issuer\'s tokens only — Ondo\'s rows lead with Ondo\'s tokens, with their own figures, premium and how sure the site is (never Robinhood\'s SPY, its $20.6M or its "confirmed")',
+      ON.rows.length > 0 && ON.rows.every((g) => g.issuers.length === 1 && g.issuers[0].key === 'ondo' && g.tokens.every((t) => t.issuer.key === 'ondo') && T.rows.find((r) => r.address === g.main).issuer.key === 'ondo')
+      && onT && onT.tokens.length === 1 && onT.premium.v === null && (T.rows.find((r) => r.address === TSLAON).value.v == null ? onT.value.v === null : near(onT.value.v, T.rows.find((r) => r.address === TSLAON).value.v)) && ON.notes.some((n) => /built from Ondo Global Markets's tokens only/.test(n)), brief(ON.rows.slice(0, 2)));
+    // 12. the RWAs' own pools: a failed read is said, never folded into a finished round or "no pool pairs it"
+    const spyT = mdR.rwaToken({ address: T.rows.find((r) => r.symbol === 'SPY').address }).body, rc = mdR.rwa({ view: 'connected' }).body.reads.connected, cnS = st('rwa_connected');
+    check('RWA review: when GeckoTerminal could not read an RWA\'s own pools (the fake knows only TSLA\'s: 404 for the rest), reads.connected is not ok and says for how many and why; that token\'s facts say its read failed (connectedWhy); the round tries each again, at most 3 times',
+      rc.ok === false && /GeckoTerminal could not be read for \d+ of 12 RWAs' own pools \(upstream 404\)/.test(rc.why) && /could not be read for this token's own pools at .* \(upstream 404\)/.test(spyT.connectedWhy || '') && !tb.connectedWhy
+      && Object.values(cnS.reads).every((x) => (x.tries || 0) <= 3) && Object.values(cnS.reads).some((x) => !x.ok && (x.tries || 0) >= 2), brief({ rc, why: spyT.connectedWhy }));
+    // 4/11/26. DefiLlama's Morpho Blue read failing in a later round: its deposits kept with their own time, the read said not ok, and tried again next run
+    const morphoFix = FR.proto['morpho-blue']; delete FR.proto['morpho-blue'];
+    const morphoAt = st('rwa_tvl').reads['morpho-blue'].at, hitsP0 = hits['llama-protocol'] || 0;
+    await runR('rwa', 6 * 3600e3 + 60e3);
+    const tvA = mdR.rwa({ view: 'tokens' }).body, nvT = tvA.rows.find((r) => r.symbol === 'NVDA').tvl, hitsP1 = hits['llama-protocol'] || 0;
+    await runR('rwa'); const hitsP2 = hits['llama-protocol'] || 0;
+    FR.proto['morpho-blue'] = morphoFix; await runR('rwa'); const tvB = mdR.rwa({ view: 'tokens' }).body.rows.find((r) => r.symbol === 'NVDA').tvl;
+    check('RWA review: an app DefiLlama could not read in a later round keeps its last good deposits WITH ITS OWN TIME (NVDA\'s figure dated by Morpho Blue\'s earlier read, marked kept, and reads.tvl not ok, naming it) — and it is tried again on the next run, not 6 h later; once it answers, the figure is fresh again',
+      nvT.v != null && nvT.at === morphoAt && nvT.protocols.some((p) => p.slug === 'morpho-blue' && p.kept === true && /upstream 404/.test(p.keptWhy)) && tvA.reads.tvl.ok === false && /kept from an earlier read: Morpho Blue/.test(tvA.reads.tvl.why)
+      && hitsP1 > hitsP0 && hitsP2 - hitsP1 >= 1 && hitsP2 - hitsP1 <= 2 && tvB.at > morphoAt && !tvB.protocols.some((p) => p.kept), brief({ nvT, reads: tvA.reads.tvl, hits: [hitsP0, hitsP1, hitsP2] }));
+    // 29. the run's note keeps the chain's and GeckoTerminal's outcomes, and the chain's failure is kept on its record
+    check('RWA review: the run\'s note fits in 290 characters with the chain\'s and GeckoTerminal\'s outcomes ahead of the DeFi apps; every run\'s note does', [r1, r2, r3, rf, ry].every((r) => r.note.length <= 290 && (!/DeFi/.test(r.note) || r.note.indexOf('DeFi') > Math.max(r.note.indexOf('GT '), r.note.indexOf('chain '), r.note.indexOf('state '))))
+      , brief([r1.note, rf.note]));
+    /* ── review two (2026-10-28), in the job's world ── */
+    // 1. the spoofed $TSLA (its slot names the registry, its code is not the Stock Tokens'): a lookalike on its own Scanner dashboard, as a memecoin $TSLA is
+    const lkA = mdR.rwaLookalike(ATT, 'TSLA'), lkB = mdR.rwaToken({ address: ATT }).body;
+    check('RWA review two: the spoofed "Tesla, Inc. • Robinhood Token" ($TSLA) is a lookalike on its own Scanner dashboard — its answer names TSLA as its twin and leads with "Same ticker as $TSLA … the registry lists $TSLA at 0x322f…3b2d", then what its code check found; it is still no RWA',
+      lkA && lkA.notRwa === true && lkA.twin && lkA.twin.address === TSLA && lkA.twin.registry === true && /^Same ticker as \$TSLA, but not issued by Robinhood Assets \(Jersey\) — the registry lists \$TSLA at 0x322f…3b2d\. Its beacon slot names Robinhood's registry, but its code is not the code Robinhood's Stock Tokens run/.test(lkA.why)
+      && lkB.twin && lkB.twin.address === TSLA && mdR.rwaFacts(ATT) === null && !T.rows.some((r) => r.address === ATT), brief(lkA));
+    // 11/13. the token view: what this site keeps about an RWA needs no market read; a token that only wears an RWA's ticker says so
+    const batchB = new Set(mdR._test.latestBatch('robinhood').rows.map((r) => r.base_addr)), offB = T.rows.find((r) => !batchB.has(r.address) && r.issuer.key === 'rhj');
+    const tvOff = await mdR.token({ chain: 'robinhood', address: offB.address }), tvMeme = await mdR.token({ chain: 'robinhood', address: GME_MEME }), tvAtt = await mdR.token({ chain: 'robinhood', address: ATT }), tvUsdg = await mdR.token({ chain: 'robinhood', address: USDG });
+    check('RWA review two: a link to an RWA whose market read fails (GeckoTerminal does not know it) still carries its RWA row (rwa) on the 404; a token that only wears an RWA\'s ticker carries the lookalike answer (rwaLookalike, its twin in full) whether its market read worked (the spoofed $TSLA, in the pools) or not (the "GameStop" memecoin); anything else carries null',
+      tvOff.status === 404 && tvOff.body.rwa && tvOff.body.rwa.address === offB.address && tvOff.body.rwaLookalike === null
+      && tvMeme.status === 404 && tvMeme.body.rwa === null && tvMeme.body.rwaLookalike && tvMeme.body.rwaLookalike.twin.address === GME_RHJ && /^Same ticker as \$GME/.test(tvMeme.body.rwaLookalike.why)
+      && tvAtt.status === 200 && tvAtt.body.rwa === null && tvAtt.body.rwaLookalike && tvAtt.body.rwaLookalike.twin.address === TSLA
+      && tvUsdg.status === 200 && tvUsdg.body.rwaLookalike === null && (await mdR.token({ chain: 'robinhood', address: TSLA })).body.rwaLookalike === null, brief([tvOff.body, tvMeme.body]));
+    // 3. no Robinhood artwork in the token lists either: no picture for a Stock Token, none named after a token's own address
+    const tokR = mdR.tokens({ chain: 'robinhood', limit: 200 }).body.rows, ttR = (mdR.chain({ key: 'robinhood' }).body.topTokens || {}).rows || [], rhjA = new Set(T.rows.filter((r) => r.issuer.key === 'rhj').map((r) => r.address));
+    const ownNamed = (r) => !!r.logo && decodeURIComponent(r.logo).toLowerCase().includes('/' + r.address.slice(2) + '.');
+    const rawBatch = mdR._test.latestBatch('robinhood').rows.filter((r) => rhjA.has(r.base_addr) && r.base_logo);
+    check('RWA review two: the token lists and the chain view\'s top tokens draw no Robinhood artwork — no picture for a Robinhood Stock Token (the batch gives one for ' + rawBatch.length + '), none named after a token\'s own address — and other tokens keep theirs',
+      rawBatch.length > 0 && tokR.some((r) => rhjA.has(r.address)) && tokR.filter((r) => rhjA.has(r.address)).every((r) => r.logo === null) && ![...tokR, ...ttR].some(ownNamed) && ttR.filter((r) => rhjA.has(r.address)).every((r) => r.logo === null)
+      && tokR.some((r) => !rhjA.has(r.address) && r.logo), brief(tokR.filter((r) => rhjA.has(r.address)).slice(0, 3).map((r) => [r.symbol, r.logo])));
+    // 12. connected tokens: a token whose own pools were never asked (WEEK, outside the 12) is never told they could not be read
+    const wkBasis = mdR.rwaToken({ address: WEEK }).body.connectedBasis, spyBasis = spyT.connectedBasis;
+    check('RWA review two: where a token\'s connected tokens come from — its own pools when read (TSLA: own), else only the most-traded pools kept, with why: WEEK (not among the 12 with the most liquidity) "only the 12 RWAs with the most liquidity have their own pools read", never "could not be read"; SPY, whose own read failed, keeps connectedWhy',
+      tb.connectedBasis && tb.connectedBasis.own === true && wkBasis && wkBasis.own === false && /only the 12 RWAs with the most liquidity have their own pools read/.test(wkBasis.note) && !/could not be read/.test(wkBasis.note) && wkBasis.at === mdR._test.latestBatch('robinhood').at
+      && !mdR.rwaToken({ address: WEEK }).body.connectedWhy && spyBasis.own === false && !!spyT.connectedWhy, brief([tb.connectedBasis, wkBasis, spyBasis]));
+    // 15. a kind or an issuer chosen: the rows' own totals beside the whole chain's
+    const onTk = mdR.rwa({ issuer: 'ondo', view: 'tokens' }).body, etfA = mdR.rwa({ kind: 'etf' }).body;
+    check('RWA review two: with an issuer or a kind chosen, the answer carries the rows\' own totals (totalsShown, the counted tokens among them) beside the whole chain\'s (totals, unchanged) — and a note says which is which; with neither chosen there is no totalsShown',
+      onTk.totalsShown && onTk.totalsShown.count === onTk.rows.filter((r) => r.confidence !== 'not-confirmed').length && onTk.totals.count === A.totals.count && etfA.totalsShown && etfA.totalsShown.count === T.rows.filter((r) => r.confidence !== 'not-confirmed' && r.underlying.kind === 'etf').length
+      && (etfA.totalsShown.value.v == null || etfA.totalsShown.value.v <= A.totals.value.v) && !('totalsShown' in A) && onTk.notes.some((n) => /The totals are the whole chain's, every kind and issuer/.test(n)), brief(onTk.totalsShown));
+    // 6. the run's note: never cut in the middle of a word — reasons dropped from the last part back, then whole parts, counted
+    const fitN = mdR._test.fitNote, bareN = (x) => { let y = x, z; do { z = y; y = y.replace(/\s*\([^()]*\)/g, ''); } while (y !== z); return y.replace(/\s+/g, ' ').trim(); };
+    const partsN = ['not read: quotes (upstream 500), corporate actions (upstream 500), deviations (upstream 500), Chainlink directory (upstream 500), stablecoins (upstream 500)', 'chain not read: rpc http 503', 'GT tokens 0 in 7 calls (upstream 500)', 'GT pools 0/1', 'DeFi deposits not read (DefiLlama\'s app list comes with the liquidity job, which has not run yet)'];
+    const wholeN = (out, parts) => out.replace(/(?:^|; )\+\d+ more$/, '').split('; ').filter(Boolean).every((seg) => parts.some((x) => x === seg || bareN(x) === seg));
+    const nA = fitN(partsN), nB = fitN(partsN.concat(['x'.repeat(150), 'y'.repeat(150)])), nC = fitN(['short', 'parts (fit)']);
+    check('RWA review two: the run\'s note fits in 290 characters without cutting a word — the reasons in brackets go first, from the last part back (each stays in its own record), then whole parts from the end, counted "+N more"; a note that fits is unchanged',
+      nA.length <= 290 && wholeN(nA, partsN) && /; DeFi deposits not read$/.test(nA) && /^not read: quotes/.test(nA) && nB.length <= 290 && /; \+\d+ more$/.test(nB) && wholeN(nB, partsN.concat(['x'.repeat(150), 'y'.repeat(150)])) && nC === 'short; parts (fit)', brief([nA, nB]));
+    // the page and card fixtures (tests/fixtures/market/rwa-*.json, tests/fixtures/rwacard/rwa-token-*.json) are these answers, dumped
+    // (the spoof is this test's hypothetical, never a fixture's: it is left out of what is dumped)
+    const dumpR = (name, o) => dump(name, JSON.parse(JSON.stringify(o, (k, v) => (Array.isArray(v) ? v.filter((x) => !(x && typeof x === 'object' && x.address === ATT)) : v))));
+    dumpR('rwa-assets', A); dumpR('rwa-tokens', T); dumpR('rwa-connected', CN); dumpR('rwa-stables', SV); dumpR('rwa-token-tsla', tb); dumpR('rwa-token-gme-memecoin', meme.body);
+    dumpR('rwa-token-tsla-registry-down', tbDown); dumpR('rwa-token-gme', gme); dumpR('rwa-token-usdg', usdgT.body); dumpR('rwa-token-notmystock', nms.body);
+    for (const [k, body] of cardsNow) dumpR('rwa-token-' + k, body);
+    // 10. a token the pool batch hinted at, gone from it, is dropped from the chain state — never classified forever from an old read
+    F.gtP1.data.splice(F.gtP1.data.indexOf(spoofPool), 1); F.gtP1.included.splice(F.gtP1.included.indexOf(spoofInc), 1);
+    await runR('pools', 10 * 60e3); await runR('rwa');
+    check('RWA review: a token only the pool batch hinted at (the spoof), gone from the batch, is dropped from the chain state on the next run — never classified forever from an old read; the registry\'s and Robinhood\'s own stay', !st('rwa_chain').tokens[ATT] && !!st('rwa_chain').tokens[WEEK] && !!st('rwa_chain').tokens[TSLA]);
+    // review two, 5/19: a run in which every GeckoTerminal multi call fails — the read status names the real last good read; each token says its read failed
+    const gtB = st('rwa_gt'), goodAt = gtB.readAt;
+    vendorFail.gtMulti = true; const rgF = await runR('rwa', 31 * 60e3); vendorFail.gtMulti = false;
+    const gtA2 = st('rwa_gt'), RG = mdR.rwa({ view: 'tokens' }).body, spyG = RG.rows.find((r) => r.symbol === 'SPY'), amcG = RG.rows.find((r) => r.address === AMC);
+    const utcN = (ms) => new Date(ms).toISOString().slice(0, 16).replace('T', ' ') + ' UTC';
+    check('RWA review two: when every GeckoTerminal token call of a run fails, its read time stays the last good read\'s (never the failure\'s own), and reads.gt says so with that time; SPY keeps its last good figure with its own time, said as the last good read; AMC (no entry before) says its read failed — no token says "has not run yet"',
+      Number.isFinite(goodAt) && gtA2.readAt === goodAt && gtA2.failAt === rclock && gtA2.triedAt === rclock && /GT tokens 0 in \d+ calls \(upstream 500\)/.test(rgF.note) && RG.reads.gt.ok === false && RG.reads.gt.at === goodAt
+      && RG.reads.gt.why === 'GeckoTerminal\'s token read could not be read at ' + utcN(rclock) + ' (upstream 500) — the last good read, from ' + utcN(goodAt) + ', is shown'
+      && spyG.liquidity.v != null && spyG.liquidity.at === gtB.tokens[spyG.address].at && /its last good read; GeckoTerminal could not be read for it at/.test(spyG.liquidity.label)
+      && amcG && amcG.liquidity.v === null && /failed \(upstream 500\) — tried again on the next run; the read before it/.test(amcG.liquidity.why) && !RG.rows.some((r) => /has not run yet/.test(r.liquidity.why || '')), brief([RG.reads.gt, spyG && spyG.liquidity, amcG && amcG.liquidity.why]));
+    delete RR.beacons[ATT]; delete RR.supplies[ATT]; delete RR.meta[ATT]; delete RR_EXTRA_CODE[ATT]; gtMultiLeaveOut.clear();
+    dbR.close();
+  }
+
   /* ── the chain market caps, cross-checked (owner, 2026-10-28: "make sure you are showing the right market caps for all of the
      chains pulled from multiple sources and cross verified") — every input one the sources gave that day (README.txt) ── */
   // 1. the rules on their own (lib/chainmcap.js)
@@ -1084,15 +1701,27 @@ try {
   check('the timetable is the contract\'s: pulse 60 s, chains 30 min, radar 10 min (its sweep is the radar\'s full node read), pools 10 min, new pools 3 min (chain) / 15 min (others), others\' pools hourly, histories 6 h, growthepie daily, L2BEAT hourly, re-scan hourly, prune hourly — and a failed DefiLlama run is not retried sooner than DefiLlama refreshes (30 min)',
     MD.JOBS.pulse.every === 60e3 && MD.JOBS.chains.every === 30 * 60e3 && MD.JOBS.radar.every === 10 * 60e3 && MD.JOBS.pools.every === 10 * 60e3 && MD.JOBS.newPoolsRh.every === 3 * 60e3 && MD.JOBS.newPoolsGt.every === 15 * 60e3 && MD.JOBS.poolsOther.every === 3600e3
     && MD.JOBS.chains.retry >= 30 * 60e3 && MD.JOBS.liquidity.retry >= 30 * 60e3 && MD.JOBS.series.retry >= 30 * 60e3
-    && MD.JOBS.series.every === 6 * 3600e3 && MD.JOBS.growthepie.every === 864e5 && MD.JOBS.l2beat.every === 3600e3 && MD.JOBS.scans.every === 3600e3 && MD.JOBS.prune.every === 3600e3 && MD.JOBS.mcapRefs.every === 864e5);
+    && MD.JOBS.series.every === 6 * 3600e3 && MD.JOBS.growthepie.every === 864e5 && MD.JOBS.l2beat.every === 3600e3 && MD.JOBS.scans.every === 3600e3 && MD.JOBS.prune.every === 3600e3 && MD.JOBS.mcapRefs.every === 864e5
+    && MD.JOBS.rwa.every === 30 * 60e3 && MD.JOBS.rwa.first === 210 && MD.JOBS.rwa.retry === 15 * 60e3);
+  check('  ...the RWA job every 30 minutes (first after about 210 s, again 15 minutes after a failed run), each of its parts on its own cadence: the quotes every run, the registry, corporate actions, deviations, stablecoins, DeFi deposits and each RWA\'s pools every 6 h, the directory, the fingerprints\' re-check and the role logs daily',
+    /const RWA_EVERY = \{ assets: 6 \* HOUR, actions: 6 \* HOUR, deviations: 6 \* HOUR, chainlink: DAY, stables: 6 \* HOUR, tvl: 6 \* HOUR, connected: 6 \* HOUR, roles: DAY, fingerprint: DAY \};/.test(LIB)
+    && /const RWA_GT_MULTI = 7, RWA_GT_POOLS = 4, RWA_TOP = 12, RWA_FP_MAX = 120, RWA_FP_SLICE = 40, RWA_RPC_MAX = 6, RWA_LOG_WINDOW = 10000000, RWA_LOG_WINDOWS = 4, RWA_ETH_CALLS_PER_BATCH = 5;/.test(LIB) && RW.MAX_SUBCALLS === 150 && RW.CONNECTED_FLOOR === 1000);
   check('the collectors start only when asked (MARKET_COLLECT=1, or production unless MARKET_COLLECT=0), and the test runner points every vendor URL at a dead address', /const MKT_COLLECT_ON = process\.env\.MARKET_COLLECT === '1' \|\| \(process\.env\.NODE_ENV === 'production' && process\.env\.MARKET_COLLECT !== '0'\);/.test(SRC) && /if \(MKT_COLLECT_ON\) \{/.test(SRC)
-    && ['MARKET_LLAMA_URL', 'MARKET_LLAMA_COINS_URL', 'MARKET_LLAMA_STABLES_URL', 'MARKET_L2BEAT_URL', 'MARKET_GROWTHEPIE_URL', 'MARKET_GT_URL', 'MARKET_DS_URL', 'MARKET_CG_URL', 'MARKET_ETH_RPC_URL', 'MARKET_LOGO_ORIGIN', 'MARKET_COINLORE_URL'].every((k) => new RegExp(k + ": DEAD").test(RUNJS) && SRC.includes('process.env.' + k)) && !/MARKET_COLLECT: '1'/.test(RUNJS));
+    && ['MARKET_LLAMA_URL', 'MARKET_LLAMA_COINS_URL', 'MARKET_LLAMA_STABLES_URL', 'MARKET_L2BEAT_URL', 'MARKET_GROWTHEPIE_URL', 'MARKET_GT_URL', 'MARKET_DS_URL', 'MARKET_CG_URL', 'MARKET_ETH_RPC_URL', 'MARKET_LOGO_ORIGIN', 'MARKET_COINLORE_URL', 'MARKET_RHJ_URL', 'MARKET_CHAINLINK_URL'].every((k) => new RegExp(k + ": DEAD").test(RUNJS) && SRC.includes('process.env.' + k)) && !/MARKET_COLLECT: '1'/.test(RUNJS));
   check('the server\'s busy signal decays: a minute after the node\'s last refusal, or while the shared pace is queued over 5 s — never "the pace has not sped up yet" (one refusal at boot kept every chain job idle for hours)', /const mktRpcBusy = \(\) => now\(\) - _paceRefusedAt < 60000 \? '[^']*'[^\n]*\n\s*: _paceAt - now\(\) > 5000 \? '/.test(SRC) && /const paceRefused = \(attempt\) => \{ _paceRefusedAt = now\(\);/.test(SRC) && /function paceYield\(\) \{ _paceRefusedAt = now\(\);/.test(SRC) && !/_paceMs > PACE_MS_START/.test(SRC));
   // the shares carved out of GeckoTerminal's 10 a minute, read from the server's own table: they leave the chart switch and the Scanner some in the busiest minute
   const rpmOf = (k) => { const m = SRC.match(new RegExp("'" + k.replace(/[.:]/g, '\\$&') + "': (\\d+),")); return m ? Number(m[1]) : null; };
   check('the server meters each new host and Market Data\'s two shares of GeckoTerminal: the collectors\' 3 and 2 kept for people, which with the name search\'s share stay under the site\'s 10 a minute', rpmOf('market:geckoterminal') === 3 && rpmOf('market:geckoterminal-asked') === 2 && rpmOf('market:rpc') === 12
     && rpmOf('market:geckoterminal') + rpmOf('market:geckoterminal-asked') + rpmOf('search:geckoterminal') < rpmOf('api.geckoterminal.com') && rpmOf('api.geckoterminal.com') === 10
     && /'api\.llama\.fi': 30, 'coins\.llama\.fi': 10, 'stablecoins\.llama\.fi': 20, 'l2beat\.com': 10,/.test(SRC) && /'api\.growthepie\.xyz': 10, 'api\.growthepie\.com': 10,/.test(SRC), brief(['market:geckoterminal', 'market:geckoterminal-asked', 'search:geckoterminal', 'api.geckoterminal.com'].map(rpmOf)));
+  // the RWA job's hosts and share, set explicitly (an unknown key would get 60 a minute)
+  const rpmIn = (k) => { const m = SRC.match(new RegExp("'" + k.replace(/[.:]/g, '\\$&') + "': (\\d+)")); return m ? Number(m[1]) : null; };
+  check('  ...and the RWA job\'s: Robinhood\'s API 20 a minute with Market Data\'s share of 6, Chainlink\'s directory 6 — each named in OUTBOUND_RPM, never the 60 a minute an unknown host would get', rpmIn('api.robinhood.com') === 20 && rpmIn('market:robinhood') === 6 && rpmIn('reference-data-directory.vercel.app') === 6 && /share: RWA_RH_SHARE/.test(LIB) && /const RWA_RH_SHARE = 'market:robinhood';/.test(LIB));
+  /* the collectors' average GeckoTerminal spend, from the timetable and the RWA job's caps: pools 10 pages / 10 min, the other networks 24 / h,
+     their new pools 8 / 15 min, the RWA job at most 7 multi reads / 30 min and 36 token-pool reads / 6 h (12, each tried up to 3 times) — about 2.3 a minute, under the share of 3 */
+  const gtAvg = 10 / 10 + 24 / 60 + 8 / 15 + 7 / 30 + 36 / 360;   // the RWAs' own pools: 12 a round, each tried at most 3 times when it fails
+  check('  ...the collectors\' GeckoTerminal spend on average stays under their share of 3 a minute with the RWA job\'s reads (' + gtAvg.toFixed(2) + ' a minute), and the server\'s comment says so', gtAvg < rpmOf('market:geckoterminal') && gtAvg > 2.2 && /about 2\.3 a minute on average with the RWA job's reads/.test(SRC)
+    && /const RWA_CODE_MAX = 40, RWA_CODE_REFS = 3, RWA_GT_TRIES = 3;/.test(LIB));
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join(' | '));
   check('part 1 ran to the end', false, e.message);
@@ -1129,7 +1758,8 @@ const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DI
   MC_DEXSCREENER_URL: V + '/mc/ds', MC_GECKO_URL: 'http://127.0.0.1:9', MC_GOPLUS_URL: V + '/mc/gp', ETH_RPC_URL: V + '/mc/ethnode', SOL_RPC_URL: 'http://127.0.0.1:9/', JUPITER_URL: 'http://127.0.0.1:9',
   MARKET_LLAMA_URL: URLS.llama, MARKET_LLAMA_COINS_URL: URLS.coins, MARKET_LLAMA_STABLES_URL: URLS.stables, MARKET_L2BEAT_URL: URLS.l2beat, MARKET_GROWTHEPIE_URL: URLS.growthepie, MARKET_GT_URL: URLS.gt,
   MARKET_DS_URL: URLS.ds, MARKET_CG_URL: URLS.cg, MARKET_ETH_RPC_URL: URLS.ethRpc, MARKET_LOGO_ORIGIN: V + '/img', MARKET_GROWTHEPIE_METRICS_URL: URLS.growthepieMetrics, MARKET_COINLORE_URL: URLS.coinlore,
-  MARKET_COLLECT: '1', MARKET_JOBS: 'pulse,chains,l2beat,liquidity,pools,newPoolsRh,radar', MARKET_STAGGER_MS: '40',
+  MARKET_RHJ_URL: URLS.rhj, MARKET_CHAINLINK_URL: URLS.chainlink,
+  MARKET_COLLECT: '1', MARKET_JOBS: 'pulse,chains,l2beat,liquidity,pools,newPoolsRh,radar,rwa', MARKET_STAGGER_MS: '40',
   OUTBOUND_MAX_WAIT_MS: '4000', OUTBOUND_RPM_MARKET_GECKOTERMINAL: '600', ['OUTBOUND_RPM_' + vHost.replace(/[^A-Z0-9]/gi, '_')]: '6000' };
 let server = null, slog = '';
 const B = 'http://localhost:' + PORT;
@@ -1161,7 +1791,7 @@ try {
   };
   // wait for the collectors' first runs
   let st = null;
-  const want = ['pulse', 'chains', 'l2beat', 'liquidity', 'pools', 'newPoolsRh', 'radar'];
+  const want = ['pulse', 'chains', 'l2beat', 'liquidity', 'pools', 'newPoolsRh', 'radar', 'rwa'];
   for (let i = 0; i < 120; i++) { st = (await api('/api/market/status')).j; if (st && want.every((j) => (st.collectors.find((c) => c.job === j) || {}).lastAt)) break; await sleep(250); }
   const stOf = (j) => (st.collectors.find((c) => c.job === j) || {});
   check('MARKET_COLLECT=1 starts the collectors on their stagger, only the jobs MARKET_JOBS names; every one ran and is on the status', st.enabled === true && want.every((j) => stOf(j).ok === true && stOf(j).nextAt > Date.now() - 5000) && stOf('series').lastAt === null && stOf('series').nextAt === null,
@@ -1182,7 +1812,31 @@ try {
   const td = await api('/api/market/token?chain=robinhood&address=' + USDG);
   check('GET /api/market/token: one token in full with its candles, the logo through our own proxy', td.status === 200 && td.j.symbol === 'USDG' && td.j.candles.rows.length > 0 && /^\/api\/market\/logo\?u=https%3A%2F%2Fcoin-images\.coingecko\.com/.test(td.j.logo || ''), brief(td.j && { l: td.j.logo, c: td.j.candles && td.j.candles.rows && td.j.candles.rows.length }));
   const sr = await api('/api/market/search?q=USDG'), np = await api('/api/market/new-pools?chain=robinhood&limit=5'), no = await api('/api/market/nope');
-  check('GET /api/market/search, /new-pools; an unknown market endpoint is a 404 that lists them', sr.status === 200 && sr.j.tokens[0].address === USDG && np.status === 200 && np.j.rows.length === 5 && no.status === 404 && /chains, chain, tokens, token, scan, search, new-pools, status, logo/.test(no.j.error));
+  check('GET /api/market/search, /new-pools; an unknown market endpoint is a 404 that lists them', sr.status === 200 && sr.j.tokens[0].address === USDG && np.status === 200 && np.j.rows.length === 5 && no.status === 404 && /chains, chain, tokens, token, scan, search, new-pools, status, logo, rwa, rwa\/token/.test(no.j.error));
+  // the RWA tab, through the routes (the RWA job ran once, on the server's own timer, against the fakes)
+  const ra = await api('/api/market/rwa'), rt = await api('/api/market/rwa?view=tokens&sort=tvl&dir=asc&kind=stock&issuer=rhj&limit=5'), rc = await api('/api/market/rwa?view=connected'), rs = await api('/api/market/rwa?view=stables');
+  check('GET /api/market/rwa: Top RWAs by value on chain, the totals, the reads, the definitions — no-store; view, sort, dir, kind, issuer and limit as asked; the connected and stablecoin views', ra.status === 200 && ra.j.view === 'assets' && ra.j.rows.length > 0 && ra.j.totals && ra.j.reads.registry.ok === true && typeof ra.j.definitions.tvl === 'string' && /no-store/.test(ra.cc)
+    && rt.status === 200 && rt.j.view === 'tokens' && rt.j.sort === 'tvl' && rt.j.dir === 'asc' && rt.j.kind === 'stock' && rt.j.issuer === 'rhj' && rt.j.rows.length <= 5 && rt.j.rows.every((r) => r.issuer.key === 'rhj' && r.underlying.kind === 'stock')
+    && rc.status === 200 && rc.j.view === 'connected' && typeof rc.j.belowFloor === 'number' && rs.status === 200 && rs.j.rows.some((r) => r.symbol === 'USDG'), brief({ a: ra.j && ra.j.reads, t: rt.j && rt.j.rows.map((r) => r.symbol) }));
+  const rk = await api('/api/market/rwa/token?address=' + TSLA), rk4 = await api('/api/market/rwa/token?address=0x4a0ade17fa7602bdfc7d2a9c85f404328687c92d'), rk0 = await api('/api/market/rwa/token?address=nope'), tkR = await api('/api/market/token?chain=robinhood&address=' + TSLA);
+  check('GET /api/market/rwa/token: TSLA\'s facts (confirmed, the issuer\'s controls read on the chain); "Not My Stock" a 404 { notRwa, why }; a bad address a 400 — at 30 a minute per visitor; and /api/market/token carries TSLA\'s RWA row',
+    rk.status === 200 && rk.j.address === TSLA && rk.j.confidence === 'confirmed' && rk.j.controls.registry === REGISTRY && Array.isArray(rk.j.roles) && rk4.status === 404 && rk4.j.notRwa === true && typeof rk4.j.why === 'string' && rk0.status === 400
+    && /rateLimit\('mktrwa:' \+ clientIp\(req\), 30, 6e4\)/.test(SRC) && tkR.status === 200 && tkR.j.rwa && tkR.j.rwa.address === TSLA, brief({ rk: rk.j && rk.j.confidence, rk4: rk4.j, tk: tkR.j && tkR.j.rwa && tkR.j.rwa.symbol }));
+  /* the Scanner's dashboard reads p.rwa: the profile the token popup gets (/api/pairs/lookup) carries the RWA facts Market Data keeps — a
+     lookup, not a read. Two profiles seeded in the token cache (checked just now, so nothing re-reads them): TSLA and $SEND */
+  const prof = (addr, sym) => JSON.stringify({ token: { address: addr, symbol: sym, name: sym, decimals: 18, deployer: null }, pair: { address: '0x' + '9a'.repeat(20), quoteSymbol: 'USDG', createdAt: Date.now() - 864e5 },
+    market: { priceUsd: 1, liquidityUsd: 1000, fdv: 1, marketCap: null }, volume: { h24: 1 }, txns: { h24: { buys: 1, sells: 1 } }, priceChange: {}, holders: {}, indexed: true, risk: { health: 50, triage: 'caution' } });
+  const tcIns = sdb.prepare('INSERT OR REPLACE INTO token_cache (token_addr, pair_json, symbol, name, found, updated_at, last_read_at, reads, checked_at) VALUES (?,?,?,?,1,?,?,0,?)');
+  tcIns.run(TSLA, prof(TSLA, 'TSLA'), 'TSLA', 'TSLA', Date.now(), Date.now(), Date.now() + 2 * 3600e3); tcIns.run(SEND, prof(SEND, 'SEND'), 'SEND', 'SEND', Date.now(), Date.now(), Date.now() + 2 * 3600e3);
+  const lkT = await api('/api/pairs/lookup?token=' + TSLA), lkS = await api('/api/pairs/lookup?token=' + SEND);
+  check('the token profile the Scanner\'s dashboard draws carries p.rwa — TSLA\'s RWA facts (confirmed, the issuer\'s controls) — and p.rwa null for a token that is not an RWA ($SEND); nothing stored with the profile',
+    lkT.status === 200 && lkT.j.pair.rwa && lkT.j.pair.rwa.address === TSLA && lkT.j.pair.rwa.confidence === 'confirmed' && lkT.j.pair.rwa.controls.registry === REGISTRY && lkS.status === 200 && lkS.j.pair.rwa === null
+    && !/"rwa"/.test(sdb.prepare('SELECT pair_json FROM token_cache WHERE token_addr = ?').get(TSLA).pair_json), brief({ t: lkT.j && lkT.j.pair && lkT.j.pair.rwa && lkT.j.pair.rwa.confidence, s: lkS.j && lkS.j.pair && lkS.j.pair.rwa }));
+  // the "GameStop" memecoin ($GME, not Robinhood's): its own profile carries the lookalike answer, so its dashboard says it is not the RWA
+  tcIns.run(GME_MEME, prof(GME_MEME, 'GME'), 'GME', 'GME', Date.now(), Date.now(), Date.now() + 2 * 3600e3);
+  const lkG = await api('/api/pairs/lookup?token=' + GME_MEME);
+  check('  ...and a token that only shares an RWA\'s ticker (the "GameStop" memecoin, $GME) carries the 404 that says so — { notRwa, why: "Same ticker as $GME, but not issued by Robinhood Assets (Jersey) …" }',
+    lkG.status === 200 && lkG.j.pair.rwa && lkG.j.pair.rwa.notRwa === true && /^Same ticker as \$GME, but not issued by Robinhood Assets \(Jersey\) — the registry lists \$GME at /.test(lkG.j.pair.rwa.why), brief(lkG.j && lkG.j.pair && lkG.j.pair.rwa));
 
   // the image proxy
   const imgHits = () => (hits['img-png'] || 0);
@@ -1214,9 +1868,9 @@ try {
   const dsn2 = await api('/api/data/v1/chain-snapshots?limit=4&before=' + (dsn.j && dsn.j.next), { key }), dsc = await api('/api/data/v1/scans?chain=ethereum&address=' + PEPE, { key });
   check('  ...with one: the chains (raw logo URLs — programs, not browsers), a chain\'s history, snapshots paged by before / limit, every scan', dc.status === 200 && dc.j.data.length > 0 && dc.j.data[0].tvl.src === 'defillama' && dh.status === 200 && Array.isArray(dh.j.data)
     && dsn.status === 200 && dsn.j.data.length === 4 && dsn.j.next && dsn2.j.data[0].id < dsn.j.data[3].id && dsc.j.data.length === 2 && dsc.j.data.some((x) => x.src === 'market') && dsc.j.data.some((x) => x.src === 'scan'), brief({ dsn: dsn.j && dsn.j.next, dsc: dsc.j && dsc.j.data.map((x) => x.src) }));
-  const dall = await Promise.all(['chain?key=robinhood', 'tokens?chain=robinhood', 'tokens?chain=all', 'token?chain=robinhood&address=' + USDG, 'pools?network=robinhood&limit=3', 'new-pools?limit=3', 'radar', 'pulse?limit=2', 'collectors'].map((r) => api('/api/data/v1/' + r, { key })));
+  const dall = await Promise.all(['chain?key=robinhood', 'tokens?chain=robinhood', 'tokens?chain=all', 'token?chain=robinhood&address=' + USDG, 'pools?network=robinhood&limit=3', 'new-pools?limit=3', 'radar', 'pulse?limit=2', 'collectors', 'rwa?view=tokens', 'rwa-token?address=' + TSLA].map((r) => api('/api/data/v1/' + r, { key })));
   const dunk = await api('/api/data/v1/nope', { key });
-  check('  ...every one of the new resources answers, and the unknown-resource error lists them all', dall.every((r) => r.status === 200 && r.j && (r.j.data !== undefined)) && dunk.status === 404 && ['chains', 'chain-history', 'chain-snapshots', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'competition'].every((n) => dunk.j.error.includes(n)),
+  check('  ...every one of the new resources answers, and the unknown-resource error lists them all', dall.every((r) => r.status === 200 && r.j && (r.j.data !== undefined)) && dunk.status === 404 && ['chains', 'chain-history', 'chain-snapshots', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'competition', 'rwa', 'rwa-token'].every((n) => dunk.j.error.includes(n)),
     dall.map((r) => r.status).join(' ') + ' ' + brief(dunk.j));
 
   // the admin browser

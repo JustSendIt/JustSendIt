@@ -1,0 +1,21 @@
+{
+ "notRwa": true,
+ "address": "0x7e86381a763f0ecca2bdf27c54eac403ddd48123",
+ "symbol": "gme",
+ "why": "Same ticker as $GME, but not issued by Robinhood Assets (Jersey) — the registry lists $GME at 0x1b0e…153e",
+ "twin": {
+  "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+  "symbol": "GME",
+  "name": "GameStop • Robinhood Token",
+  "issuer": {
+   "key": "rhj",
+   "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+  },
+  "confidence": "confirmed",
+  "registry": true
+ },
+ "notes": [
+  "Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.",
+  "Not advice, never a tip to buy. Do your own research."
+ ]
+}

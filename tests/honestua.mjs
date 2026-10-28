@@ -61,7 +61,7 @@ const brief = (o) => JSON.stringify(o === undefined ? null : o).slice(0, 500);
   const R = (f) => fs.readFileSync(path.join(ROOT, f), 'utf8');
   const PRIV = R('public/privacy.html'), ENV = R('.env.example'), DEP = R('DEPLOY.md'), DATA = R('public/data.html'), README = R('README.md');
   check('the privacy policy names the explorer as read only with a key, and says every request names the site — and its version moved for it',
-    /and from the Blockscout explorer only when the operator has given the server a key for it/.test(PRIV) && /every one says it comes from this site \(it names JustSendIt and sendrh\.com\) — none pretends to be a browser/.test(PRIV) && /Version 2026-10-27 · \$Send \/ JustSendIt/.test(PRIV));
+    /and from the Blockscout explorer only when the operator has given the server a key for it/.test(PRIV) && /every one says it comes from this site \(it names JustSendIt and sendrh\.com\) — none pretends to be a browser/.test(PRIV) && /Version 2026-10-28 · \$Send \/ JustSendIt/.test(PRIV));
   check('  ...and .env.example, DEPLOY.md, the Data API docs and the README say the explorer is not asked without BLOCKSCOUT_URL, and what comes from where instead',
     /with BLOCKSCOUT_URL unset its API is not asked at all/.test(ENV) && /"JustSendIt\/1\.0 \(\+https:\/\/sendrh\.com\)"/.test(ENV) && /with `BLOCKSCOUT_URL` unset the site does not ask the explorer anything at all/.test(DEP)
     && /with none set it is not asked at all/.test(DATA) && /With `BLOCKSCOUT_URL` unset the explorer's API is not asked at all/.test(README) && !/JustSendIt\/1\.0 \(\+BASE_URL\)/.test(ENV));
@@ -209,7 +209,7 @@ const baseEnv = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DAT
   RPC_URL: NODE, BLOCKSCOUT_URL: '', CHART_SRC_DS_URL: DEADURL, CHART_SRC_GT_URL: DEADURL, TOKSEARCH_GT_URL: DEADURL, TOKSEARCH_DS_URL: DEADURL, ETHUSD_URL: DEADURL, STOCK_QUOTE: '0',
   MC_DEXSCREENER_URL: DEADURL, MC_GECKO_URL: DEADURL, MC_GOPLUS_URL: DEADURL, ETH_RPC_URL: DEADURL, SOL_RPC_URL: DEADURL, JUPITER_URL: DEADURL,
   MARKET_COLLECT: '0', MARKET_LLAMA_URL: DEADURL, MARKET_LLAMA_COINS_URL: DEADURL, MARKET_LLAMA_STABLES_URL: DEADURL, MARKET_L2BEAT_URL: DEADURL, MARKET_GROWTHEPIE_URL: DEADURL,
-  MARKET_GROWTHEPIE_METRICS_URL: DEADURL, MARKET_GT_URL: DEADURL, MARKET_DS_URL: DEADURL, MARKET_CG_URL: DEADURL, MARKET_ETH_RPC_URL: DEADURL, MARKET_LOGO_ORIGIN: DEADURL };
+  MARKET_GROWTHEPIE_METRICS_URL: DEADURL, MARKET_GT_URL: DEADURL, MARKET_DS_URL: DEADURL, MARKET_CG_URL: DEADURL, MARKET_ETH_RPC_URL: DEADURL, MARKET_LOGO_ORIGIN: DEADURL, MARKET_RHJ_URL: DEADURL, MARKET_CHAINLINK_URL: DEADURL };
 let server = null, slog = '';
 async function boot(extra) {
   slog = '';

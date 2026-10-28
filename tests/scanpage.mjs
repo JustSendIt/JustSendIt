@@ -2,8 +2,13 @@
    behind it, for members only. Throwaway session only; removed in the finally block. */
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomBytes } from 'node:crypto';
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, readFile, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import vm from 'node:vm';
+import http from 'node:http';
+import { spawn } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { DB_PATH, ROOT, SERVER_JS } from './_paths.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
@@ -16,6 +21,8 @@ const SRC = readFileSync(SERVER_JS, 'utf8');
 const HTML = read('newpairs.html'), NP = read('newpairs.js'), SC = read('scanner.js'), CSS = read('styles.css'), APP = read('app.js');
 const SEND = '0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105', SEND_POOL = '0xf30bb531d0255969be155533abac34b22bd63414';
 const made = [];
+const CF = createRequire(import.meta.url)(path.join(ROOT, 'lib', 'contractfacts.js'));
+const RWL = createRequire(import.meta.url)(path.join(ROOT, 'lib', 'rwa.js'));   // the server's own words for a lookalike's twin (lib/rwa.js twinWhy)
 /* The rows this suite writes outside the users table — the scan store and the token cache for $SEND — are put back
    exactly as they were, so a by-hand run against a real database leaves the public community count untouched. */
 const snap = { scans: [], cache: [] };
@@ -39,6 +46,286 @@ function mkUser(name) {
   const raw = 'tok_' + name + '_' + randomBytes(8).toString('hex');
   db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed) VALUES (?,?,?,?,1)').run(createHash('sha256').update(raw).digest('hex'), id, Date.now(), Date.now() + 864e5);
   return { id, sid: raw };
+}
+
+/* ═══ The real-world-asset card (owner's RWA spec, 2026-10-28) ═══════════════════════════════════════════════════════════
+   The dashboard's own code (newpairs.js) run in a sandbox and fed the server's real /api/market/rwa/token answers as p.rwa
+   (tests/fixtures/rwacard: TSLA confirmed by Robinhood's registry and its code on the chain, Ondo's TSLAon, an Ondo token not
+   confirmed yet, WEEK out of the registry's list, SPY with a dividend, GME with a lookalike scanned, and the 404s), on a TSLA
+   profile built from what Dexscreener and GoPlus answered for it. Then the same card in a real browser — headless Chrome,
+   muted — at 320, 390, 1280 and 1920 px. */
+const RWA_FX = (n) => JSON.parse(readFileSync(path.join(ROOT, 'tests', 'fixtures', 'rwacard', n), 'utf8'));
+const TSLA = '0x322f0929c4625ed5bad873c95208d54e1c003b2d';
+function npSandbox(extra) {
+  const noop = () => {}, nil = () => null;
+  const document = { addEventListener: noop, getElementById: nil, querySelector: nil, querySelectorAll: () => [], body: { classList: { toggle: noop, remove: noop } }, hidden: false };
+  const window = Object.assign({ document, addEventListener: noop, CSS: { escape: (x) => x } }, extra || {});
+  const ctx = { window, document, localStorage: { getItem: nil, setItem: noop }, fetch: () => Promise.reject(new Error('offline')), setTimeout, clearTimeout, setInterval: noop, requestAnimationFrame: noop, cancelAnimationFrame: noop, console, CustomEvent: function () {}, Node: {} };
+  Object.assign(ctx, extra || {});   // what the page would have loaded, as globals (a browser's window properties are)
+  ctx.globalThis = ctx; window.window = window; vm.createContext(ctx); vm.runInContext(NP, ctx);
+  return window.NPCard;
+}
+// the waiver sentence is the server's own (lib/marketdata.js rwaIssuerDeployer), read from its source, never retyped
+const RWA_WAIVED = (/'(its deployer holds Robinhood\\'s registry\\'s token-deployer role[^\n]*?by design)'/.exec(readFileSync(path.join(ROOT, 'lib', 'marketdata.js'), 'utf8')) || [])[1]?.replace(/\\'/g, '\'');
+// a Robinhood Chain profile of TSLA as the Scanner builds it, from the pool Dexscreener lists and GoPlus Security's reading
+function rwaProfile(rwa, over) {
+  const ds = RWA_FX('ds-pair-tsla.json').pair, gp = RWA_FX('goplus-4663-tsla.json').result;
+  return Object.assign({ chain: 'robinhood', indexed: true,
+    token: { address: TSLA, name: ds.baseToken.name, symbol: ds.baseToken.symbol, decimals: 18, isVerified: gp.is_open_source === '1', deployer: gp.creator_address, deployerSource: 'goplus', renounced: null, owner: null },
+    pair: { address: ds.pairAddress.toLowerCase(), ageMinutes: Math.round((Date.parse('2026-10-28T10:05:00Z') - ds.pairCreatedAt) / 60000), quoteSymbol: ds.quoteToken.symbol },
+    market: { priceUsd: Number(ds.priceUsd), liquidityUsd: ds.liquidity.usd, marketCap: ds.marketCap, fdv: ds.fdv }, volume: ds.volume, txns: ds.txns, priceChange: ds.priceChange,
+    holders: { count: Number(gp.holder_count), source: 'goplus', top: [] }, links: { explorer: 'https://robinhoodchain.blockscout.com/token/' + TSLA, dex: ds.url },
+    chainFacts: CF.evmFacts(gp),
+    risk: { health: 100, triage: 'ok', thinData: false, sniperOk: true, serialDeployer: false, serialDeployerWaived: RWA_WAIVED, dataKnown: { indexed: true, liquidity: true, holders: true, concentration: true, verified: true, snipers: true } },
+    rwa }, over || {});
+}
+const rwaText = (h) => String(h).replace(/<[^>]+>/g, ' ').replace(/&#39;/g, '\'').replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/\s+/g, ' ');
+const rwaCardOf = (html) => { const i = html.indexOf('<section class="tkd-card tkd-card--rwa"'); return i < 0 ? '' : html.slice(i, html.indexOf('</section>', i) + 10); };
+async function rwaCardChecks() {
+  const NPC = npSandbox();
+  const dash = (rwa, over, opts) => NPC.dashboardHTML(rwaProfile(rwa, over), opts);
+  const T = RWA_FX('rwa-token-tsla.json');
+  const full = dash(T), card = rwaCardOf(full), ct = rwaText(card);
+  /* review two (2026-10-28), 16: in source order (a phone's reading order) the card follows the side pair — the Safety read and the
+     Contract card come first — in a wrapper of its own that styles.css places in the wide column, wider */
+  check('RWA card: a Robinhood Chain profile carrying p.rwa gets a 🏛️ Real-world asset card of its own column — after the safety read, the contract and the side cards in the source (a phone\'s order), before the score breakdown; wider, the CSS places it in the wide column (never a tall wall in the narrow side column; the server waived serial deployer, read from its source)',
+    !!RWA_WAIVED && card.length > 0 && full.indexOf('tkd-col tkd-col--c"') < full.indexOf('tkd-card--activity') && full.indexOf('<div class="tkd-side">') < full.indexOf('tkd-card--safety') && full.indexOf('tkd-card--safety') < full.indexOf('tkd-card--contract')
+    && full.indexOf('tkd-card--contract') < full.indexOf('tkd-col tkd-col--rwa') && full.indexOf('tkd-card--links') < full.indexOf('tkd-col tkd-col--rwa') && full.indexOf('tkd-col tkd-col--rwa') < full.indexOf('tkd-card--rwa') && full.indexOf('tkd-card--rwa') < full.indexOf('tkd-col tkd-col--c2')
+    && /class="tkd-grid tkd-grid--rwa"/.test(full) && !/tkd-grid--rwa/.test(dash(RWA_FX('rwa-token-tsla.json'), { rwa: null })) && full.indexOf('tkd-card--contract') > full.indexOf('tkd-col tkd-col--l')
+    && /🏛️ Real-world asset/.test(ct) && /✓ Registry \+ on-chain/.test(ct), ct.slice(0, 200));
+  const order = ['🔎 Is this the real one?', '💼 What you hold', '⚖️ Price check', '🗓️ Corporate actions', '📏 Size', '🔐 Issuer controls — powers a regulated issuer keeps', '🔗 Connected tokens',
+    'Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.', 'Not advice, never a tip to buy. Do your own research.'].map((s) => ct.indexOf(s));
+  const affAt = card.indexOf('Not affiliated with'), before = card.slice(0, affAt);
+  check('  ...its parts in the spec\'s order — is this the real one, what you hold, price check, corporate actions, size, issuer controls, connected tokens — then the not-affiliated and not-advice lines last, never behind a pop-down',
+    order.every((x, i) => x >= 0 && (i === 0 || x > order[i - 1])) && (before.match(/<details/g) || []).length === (before.match(/<\/details>/g) || []).length
+    && /<div class="tkd-rwa-sec tkd-rwa-foot"><p class="tkd-rwa-fine">Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc\.<\/p><p class="tkd-rwa-fine"><b>Not advice, never a tip to buy\. Do your own research\.<\/b><\/p>/.test(card), order.join());
+  check('  ...is this the real one: each piece of evidence with its tier, its source and its age; the registry\'s own list linked ("a token with the same ticker at another address is not one")',
+    /A1 · proof Listed in Robinhood's Stock Token registry \(api\.robinhood\.com\/rhj\/assets\) Robinhood’s Stock Token API · /.test(ct) && /A2 · proof Its code runs from Robinhood's token registry contract \(checked on the chain\) the chain’s node · /.test(ct)
+    && /B · supporting only CoinGecko files it as "tesla-robinhood-tokenized-stock"/.test(ct) && /Status Active in Robinhood's registry/.test(ct)
+    && /a token with the same ticker at another address is not one\. Robinhood’s list ↗/.test(ct) && card.includes('href="https://docs.robinhood.com/chain/contracts/"'), ct.slice(0, 600));
+  const dds = [...card.matchAll(/<dd>([\s\S]*?)<\/dd>/g)].map((m) => m[1]);
+  check('  ...every figure names its source and its age; one nobody read says "not available" and why — never a $0',
+    dds.length > 15 && dds.filter((d) => /tkd-rwa-v/.test(d)).every((d) => /tkd-rwa-src/.test(d) && /<time datetime=|time not recorded/.test(d)) && dds.filter((d) => /not available/.test(d)).every((d) => /tkd-rwa-why/.test(d)) && !/\$0(?![.\d])/.test(ct),
+    dds.filter((d) => (/tkd-rwa-v/.test(d) && !/tkd-rwa-src/.test(d)) || (/not available/.test(d) && !/tkd-rwa-why/.test(d))).slice(0, 2).join(' | ').slice(0, 300));
+  check('  ...the price check: the DEX price against Chainlink (within its 24 h heartbeat) and Robinhood\'s quote, the premium naming its reference; registry paused() that reverted is "not read — no such function", never a no',
+    /DEX price \$396\.7435 price in its deepest pool here \(GeckoTerminal\) GeckoTerminal · /.test(ct) && /Chainlink \$397\.946 Chainlink RHTSLA \/ USD updated within its 24 h heartbeat Chainlink · /.test(ct)
+    && /Robinhood’s quote \$399\.355 Robinhood's quote, multiplier applied — an undocumented field/.test(ct) && /Premium \/ discount −0\.30% \(a discount\) DEX price against Chainlink RHTSLA \/ USD this site · /.test(ct)
+    && /Paused — every Stock Token not read no such function on this contract \(the call reverted\) — not the same as "not paused"/.test(ct) && /Paused — this token no /.test(ct)
+    && /Stock markets close while DEX pools trade around the clock/.test(ct), (ct.match(/⚖️ Price check[\s\S]{0,700}/) || [''])[0]);
+  check('  ...what you hold: Robinhood\'s own sentences, each linked to the page it comes from; terms() as the contract names it, read on the chain',
+    /Underlying: Tesla \(\$TSLA\) — a stock/.test(ct) && /no voting rights, no shareholder status\. source ↗/.test(ct) && /Not offered to US persons/.test(ct) && card.includes('href="https://docs.robinhood.com/rhj/restricted-jurisdictions/"')
+    && /The terms its contract names \( terms\(\) \): robinhood\.com\/stocktoken\/rhj ↗ the chain’s node · /.test(ct));
+  check('  ...size: value on chain, supply, market cap, liquidity, TVL in DeFi with the apps holding it (DefiLlama links), primary mint and burn, 24h volume — each with what it means',
+    /Value on chain \$4\.51M on-chain supply × the DEX price this site · /.test(ct) && /TVL in DeFi \$3\.9k deposited in DeFi apps on Robinhood Chain \(DefiLlama, matched by symbol\) — not read: Longbow \(upstream 404\), so it may be low DefiLlama · /.test(ct)
+    && /📏 Size Value on chain \$4\.51M this site · .* · liquidity \$1\.23M GeckoTerminal · .* · TVL in DeFi \$3\.9k DefiLlama · .* Every size figure and what each one means/.test(ct) && card.includes('href="https://defillama.com/protocol/morpho-blue"')
+    && /Primary mint & burn \$533\.8k primary-market mint and burn, USD — Robinhood does not document its window/.test(ct) && /TVL in DeFi: USD of the token deposited in DeFi apps/.test(ct), (ct.match(/📏 Size[\s\S]{0,500}/) || [''])[0]);
+  const ctl = ct.slice(ct.indexOf('🔐 Issuer controls'), ct.indexOf('🔗 Connected tokens'));
+  check('  ...issuer controls said as powers a regulated issuer keeps (the server\'s words), never as a verdict: who can replace every token\'s code (a wallet, with its explorer link), 175 wallets blocked, the verified source, all 12 powers with their holders',
+    /Powers a regulated issuer keeps, shown as such, not as a verdict: for a regulated issuer they are expected — they are still powers over your tokens\. The Scanner's health score does not count them\./.test(ctl) && !/marks these powers in red/.test(ct)
+    && /12 of 12 powers held · 175 wallets blocked from moving these tokens/.test(ctl)
+    && /Who can replace the code of every Stock Token at once 0xcd8c…e094 ↗ 📋 \(a wallet\) since block 8,646/.test(ctl) && card.includes('href="https://robinhoodchain.blockscout.com/address/0xcd8c6182e7c6ca3b5156d6a90a67719d7e2be094"')
+    && /Wallets blocked from moving these tokens 175 the chain’s node · /.test(ctl) && card.includes('href="https://sourcify.dev/server/v2/contract/4663/0xb35490d6f9163de4f80d88dc75c3516eb64c5ae2"')
+    && /Every power and who holds it \(12\)/.test(ctl) && /Burn tokens from any wallet \(adminBurn\) ADMIN_BURNER_ROLE 0x957b…74d4/.test(ctl) && !/class="tkd-bad"/.test(card.slice(card.indexOf('🔐 Issuer controls'), card.indexOf('🔗 Connected tokens'))), ctl.slice(0, 400));
+  const ctFull = rwaText(full);
+  check('  ...the serial-deployer waiver is said: the Contract card says why the flag is not raised (and points to this card), this card names the registry\'s token-deployer role and its holder; nothing else in the verdict changes',
+    ctFull.includes('Not flagged as a serial deployer — ' + RWA_WAIVED + '. The real-world asset card says more.') && !/Serial deployer —/.test(ctFull)
+    && /Robinhood's registry deploys every Stock Token from its token-deployer role, so the Scanner does not raise "serial deployer" on a confirmed Stock Token deployed by it\. The token-deployer role \( TOKEN_DEPLOYER_ROLE \) is held by 0x5516…e000/.test(ct)
+    && !rwaText(dash(T, {}, { hideRwa: true })).includes('The real-world asset card says more.') && !rwaCardOf(dash(T, {}, { hideRwa: true })));
+  check('  ...connected tokens: how many in a line ("7 tokens paired with it in a pool — not one of them is an RWA"), then each "Not an RWA — paired with $TSLA" in a pop-down, opening in the Scanner, with its pool\'s reserve and its source',
+    /🔗 Connected tokens 7 tokens paired with it in a pool — not one of them is an RWA\. Every token paired with it \(7\)/.test(ct) && /\$OPTIMUS Not an RWA — paired with \$TSLA pons-v2-dex pool 0xa177…663a · reserve \$155\.8k · 24h \$36\.9k GeckoTerminal · /.test(ct) && card.includes('href="/newpairs?scan=0x0ff9072a1ead154d92c2d2fef16afba6028ce2b2"')
+    && (ct.match(/Not an RWA — paired with \$TSLA/g) || []).length === 7);
+  // parts 2–7: what matters in a line, the rest one press down — and what a holder must know stays in sight (review, 2026-10-28)
+  const secOf = (id) => { const i = card.indexOf('tkd-rwa-sec--' + id); return i < 0 ? '' : card.slice(i, card.indexOf('<div class="tkd-rwa-sec ', i + 10) > 0 ? card.indexOf('<div class="tkd-rwa-sec ', i + 10) : undefined); };
+  const sight = (h) => rwaText(h.replace(/<details[\s\S]*?<\/details>/g, ''));
+  check('  ...parts 2–7 each show a line of what matters and keep the rest in a pop-down of their own; "What you hold" keeps in sight that it is a debt security, how it is redeemed (after the issuer\'s KYC) and that it is not offered to US persons (Robinhood\'s list linked)',
+    ['hold', 'price', 'actions', 'size', 'controls', 'connected'].every((id) => /<details class="tkd-more tkd-more--in">/.test(secOf(id))) && !/<details class="tkd-more tkd-more--in"><summary[^>]*><span class="tkd-more-lbl">[^<]*evidence/i.test(secOf('real'))
+    && /tokenised debt securities/.test(sight(secOf('hold'))) && /KYC\/AML/.test(sight(secOf('hold'))) && /Not offered to US persons/.test(sight(secOf('hold'))) && /⚖️ Price check DEX price \$396\.7435 GeckoTerminal · .* · premium or discount −0\.30% \(a discount\) this site · .* against Chainlink’s feed/.test(sight(secOf('price'))),
+    sight(secOf('hold')).slice(0, 300));
+  // the registry's log walk not whole yet (the first runs after a deploy, or a refused window): every holder list says how far it has read
+  const part = rwaText(rwaCardOf(dash(Object.assign({}, T, { rolesRead: { complete: false, cursor: 39999999, head: 100264436, at: T.rolesAt } }))));
+  check('  ...while the registry\'s log walk is not whole, every holder list says it is read up to block N of M and that a holder granted later is not shown yet — never a partial list under a plain header',
+    (part.match(/from the registry’s logs read up to block 39,999,999 of 100,264,436 — a holder granted later is not shown yet/g) || []).length >= 10 && /the registry’s logs are not read whole yet/.test(part) && !/a holder granted later/.test(ct), (part.match(/Every power[\s\S]{0,300}/) || [''])[0]);
+  // beside the verdict (which is unchanged): a real-world asset whose issuer keeps powers the score does not count; and no Robinhood artwork in the header
+  const withLogo = dash(T, { brand: { imageUrl: 'https://cdn.dexscreener.com/cms/images/tsla.png' } });
+  check('RWA beside the verdict: one line that it is a real-world-asset token whose issuer keeps powers over every holder\'s tokens (replacing their code, minting, burning from any wallet, pausing, blocking wallets) that the health score does not count — the verdict and score unchanged; its header draws its letter, never its listed picture (Robinhood\'s mark)',
+    /<p class="tkd-verdict-rwa">🏛️ <b>A real-world-asset token<\/b> — issued by Robinhood Assets \(Jersey\) Limited \(RHJ\)\. Its issuer keeps powers over every holder’s tokens \(replacing their code, minting, burning from any wallet, pausing them and blocking wallets: 12 powers read from its registry\) that the health score does not count/.test(full)
+    && full.indexOf('tkd-verdict-rwa') > full.indexOf('tkd-health') && full.indexOf('tkd-verdict-rwa') < full.indexOf('tkd-stats') && !/<img\b/.test(withLogo.slice(0, withLogo.indexOf('tkd-idt'))) && /<img\b/.test(dash(RWA_FX('rwa-token-tslaon.json'), { brand: { imageUrl: 'https://cdn.dexscreener.com/cms/images/tslaon.png' } }).slice(0, 2000)));
+  // beside the Swap button (the owner decides whether it shows): who Robinhood says its Stock Tokens are not offered to
+  const NPS = npSandbox({ SwapKit: { buttonHTML: () => '<button class="btn btn-sm np-swap" type="button" data-tip="Opens a panel that quotes a buy of this token">🚀 Swap in my wallet</button>' } });
+  const sw = NPS.dashboardHTML(rwaProfile(T)), swAt = sw.indexOf('np-swap'), noteAt = sw.indexOf('tkd-rwa-swapnote');
+  check('  ...beside "Swap in my wallet" on a Robinhood Stock Token: Robinhood\'s own sentence that Stock Tokens are not offered to US persons and are restricted elsewhere, with its list linked — and none on another issuer\'s token',
+    swAt > 0 && noteAt > swAt && noteAt < sw.indexOf('tkd-grid') && /Not offered to US persons, and restricted in other places/.test(rwaText(sw.slice(noteAt, noteAt + 600))) && sw.includes('href="https://docs.robinhood.com/rhj/restricted-jurisdictions/"')
+    && !NPS.dashboardHTML(rwaProfile(RWA_FX('rwa-token-tslaon.json'))).includes('tkd-rwa-swapnote'));
+  const ids = [...card.matchAll(/\bid="([^"]+)"/g)].map((m) => m[1]);
+  const btns = [...card.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]), outs = [...card.matchAll(/<a\b[^>]*target="_blank"[^>]*>/g)].map((m) => m[0]);
+  check('  ...every button and outside link carries a data-tip of 8+ characters (copy buttons too); outside links open with rel="noopener nofollow"; no inline handlers, inline styles, pictures (no Robinhood artwork) or repeated ids',
+    btns.length > 10 && btns.every((b) => /data-tip="[^"]{8,}"/.test(b)) && outs.length > 10 && outs.every((a) => /data-tip="[^"]{8,}"/.test(a) && /rel="noopener nofollow"/.test(a))
+    && !/\son[a-z]+=|\sstyle=|javascript:|<img\b/i.test(card) && new Set(ids).size === ids.length && ids.every((x) => x.startsWith('tkd')),
+    [btns.find((b) => !/data-tip="[^"]{8,}"/.test(b)), outs.find((a) => !/data-tip="[^"]{8,}"/.test(a))].filter(Boolean).join(' '));
+  check('  ...nothing tells anyone to buy or calls anything safe', !/\b(you should buy|buy now|great investment|guaranteed|risk-free|safe|to the moon)\b/i.test(ct));
+  // another issuer, a token not confirmed yet, a token out of the registry, a dividend, a lookalike, a failed read
+  const on = rwaText(rwaCardOf(dash(RWA_FX('rwa-token-tslaon.json'))));
+  check('RWA card on Ondo\'s TSLAon: confirmed by its beacon ("✓ Issuer list + on-chain"); Robinhood\'s references, premium and multiplier not available, each with the server\'s reason; the issuer\'s powers not read here, said so; no Sourcify link claimed',
+    /✓ Issuer list \+ on-chain/.test(on) && /✓ Confirmed — issued by Ondo Global Markets\./.test(on) && /Premium \/ discount not available no reference price is read for this issuer's tokens/.test(on)
+    && /Multiplier not available only Robinhood's Stock Tokens carry this multiplier/.test(on) && /This site reads the roles of Robinhood's registry only; this issuer's contract keeps powers of its own/.test(on)
+    && /Verified source not checked this site has not checked a verified source for this issuer's code/.test(on) && /Halts and pauses not read Robinhood's pause functions — not read for this issuer's tokens/.test(on)
+    && !/Stock markets close/.test(on) && /Its page on CoinGecko ↗/.test(on) && !/\$0(?![.\d])/.test(on), on.slice(0, 300));
+  const gg = rwaText(rwaCardOf(dash(RWA_FX('rwa-token-googlon.json'))));
+  check('  ...an Ondo token whose beacon is not read yet: "Not confirmed" in the heading and on a chip, and why', /Real-world asset Not confirmed/.test(gg) && /⚠️ Not confirmed on the chain yet/.test(gg) && /⚠️ Not confirmed yet — fingerprint not read yet\./.test(gg) && /Issuer Ondo Global Markets/.test(gg), gg.slice(0, 300));
+  /* review two (2026-10-28). 14: a token not confirmed on the chain is never asserted to be its issuer's — beside the verdict it is "listed
+     as" one, and its issuer-list item is "listed, not proof yet"; 17: the "What you hold" pop-down is named by what it holds, never "(0)" */
+  const ggDash = dash(RWA_FX('rwa-token-googlon.json'));
+  check('RWA review two: an Ondo token not confirmed on the chain — beside the verdict "Listed as a real-world-asset token of Ondo Global Markets, not confirmed on the chain yet — not counted", never "A real-world-asset token — issued by"; its issuer-list evidence "A3 · listed, not proof yet", never "proof"; its "What you hold" pop-down named by what it holds, never "(0)"',
+    /<p class="tkd-verdict-rwa tkd-warn">⚠️ <b>Listed as a real-world-asset token of Ondo Global Markets, not confirmed on the chain yet<\/b> — not counted\./.test(ggDash) && !/A real-world-asset token<\/b> — issued by/.test(ggDash)
+    && /A3 · listed, not proof yet On this site's list of Ondo Global Markets tokens/.test(gg) && !/A3 · proof/.test(gg) && !/\(0\)/.test(gg) && /<span class="tkd-more-lbl">Its page on CoinGecko<\/span>/.test(rwaCardOf(ggDash))
+    && /<span class="tkd-more-lbl">Its page on CoinGecko<\/span>/.test(rwaCardOf(dash(RWA_FX('rwa-token-tslaon.json')))), (gg.match(/A3[\s\S]{0,120}/) || [''])[0]);
+  // 4: a lookalike whose twin is not confirmed yet (WEEK before its code is compared) is never told the twin is "Robinhood's" or "the real" one
+  const WEEKA = RWA_FX('rwa-token-week.json').address, rhjIs = RWA_FX('rwa-token-week.json').issuer;
+  const ncTw = { address: WEEKA, symbol: 'WEEK', name: 'WEEK', issuer: rhjIs, confidence: 'not-confirmed', registry: false };
+  const ncBody = Object.assign({}, RWA_FX('rwa-token-gme-memecoin.json'), { address: '0x' + 'ab'.repeat(20), symbol: 'WEEK', twin: ncTw, why: RWL.twinWhy(Object.assign({ evidence: [{ tier: 'B', kind: 'robinhood-api' }] }, ncTw)) });
+  const ncDash = dash(ncBody, { token: { address: '0x' + 'ab'.repeat(20), name: 'Weekly', symbol: 'WEEK', decimals: 18 } }), nc = rwaText(rwaCardOf(ncDash));
+  check('RWA review two: a lookalike whose twin is not confirmed on the chain yet (WEEK, named only by Robinhood\'s own answers) — "Same ticker as $WEEK — not the token this site found for it" beside the verdict, "The $WEEK this site found, not confirmed on the chain yet" in the card; never "Robinhood’s $WEEK" nor "The real $WEEK (Robinhood Assets (Jersey) …)"',
+    /<b>Same ticker as \$WEEK — not the token this site found for it\.<\/b>/.test(ncDash) && !/Robinhood’s \$WEEK/.test(ncDash) && /The \$WEEK this site found, not confirmed on the chain yet: /.test(nc) && !/The real \$WEEK/.test(nc) && /a token Robinhood's own answers name that this site has not confirmed on the chain yet/.test(nc), nc.slice(0, 400));
+  // 2: a TVL figure that may be low says so in the Size line, in sight
+  check('RWA review two: TSLA\'s Size line, in sight, says its TVL in DeFi may be low ("⚠️ may be low: Longbow not read") — a partial sum never stands as a plain figure',
+    /TVL in DeFi \$3\.9k DefiLlama · .* ⚠️ may be low: Longbow not read/.test(sight(secOf('size'))), sight(secOf('size')).slice(0, 300));
+  const wk = rwaText(rwaCardOf(dash(RWA_FX('rwa-token-week.json'))));
+  // 12: WEEK (its own pools never asked: not among the 12 with the most liquidity) is never told its pools "could not be read"
+  const wkCn = wk.slice(wk.indexOf('🔗 Connected tokens'));
+  check('RWA review two: WEEK\'s connected tokens — no pool pairs it among the most-traded pools kept, and why ("only the 12 RWAs with the most liquidity have their own pools read") — never "the pools paired with it could not be read" for pools that were never asked',
+    /No pool among the most-traded pools this site keeps pairs it with another token from \$1,000 of reserve \(only the 12 RWAs with the most liquidity have their own pools read\)\. GeckoTerminal · /.test(wkCn) && !/could not be read/.test(wkCn), wkCn.slice(0, 300));
+  check('  ...WEEK, out of the registry\'s active list but running Robinhood\'s code: "✓ On-chain", that status, and Robinhood\'s own deviation flag in words (50.1% below the NYSE close, 32 days in a row)',
+    /Real-world asset ✓ On-chain/.test(wk) && /Status On the chain, not in the registry's active list/.test(wk) && /Robinhood flags its price: on the chain it is 50\.1% below the NYSE close, 32 days in a row \(since 2026-09-14, as of 2026-10-27\)\./.test(wk)
+    && /Supply on the chain not available its decimals have not been read yet/.test(wk), (wk.match(/Robinhood flags[\s\S]{0,200}/) || [''])[0]);
+  const sp = rwaText(rwaCardOf(dash(RWA_FX('rwa-token-spy.json'))));
+  check('  ...SPY: its dividend in progress and its multiplier (one token = 1.001718 × one share\'s economics); a pool pairing it with another RWA is said, counted once',
+    /Cash dividend · in progress · 2026-10-30 · rate 1\.888834/.test(sp) && /Multiplier 1\.001718 .* one token = 1\.001718 × one share’s economics Robinhood’s Stock Token API · /.test(sp) && /ℹ️ A pool pairs it with another RWA/.test(sp) && /that pool is in both tokens’ figures, and a total takes its volume once/.test(sp)
+    && /🗓️ Corporate actions One token = 1\.001718 × one share’s economics .* 1 corporate action listed, 1 in progress/.test(sp), (sp.match(/🗓️[\s\S]{0,300}/) || [''])[0]);
+  const gm = rwaCardOf(dash(RWA_FX('rwa-token-gme.json'))), gmT = rwaText(gm);
+  check('  ...GME: the "GameStop" memecoin a scan found is named as a lookalike — "Same ticker, not issued by Robinhood Assets (Jersey) Limited (RHJ)" — with its explorer link',
+    /⚠️ Same ticker, not issued by Robinhood Assets \(Jersey\) Limited \(RHJ\): \$gme “GameStop” 0x7e86…8123/.test(gmT) && gm.includes('href="https://robinhoodchain.blockscout.com/address/0x7e86381a763f0ecca2bdf27c54eac403ddd48123"') && /seen in a Scanner read/.test(gmT), (gmT.match(/Same ticker[\s\S]{0,160}/) || [''])[0]);
+  const dn = rwaText(rwaCardOf(dash(RWA_FX('rwa-token-tsla-registry-down.json'))));
+  check('  ...Robinhood\'s API down: the card says each read that failed (the registry, the quotes), when and why, and that the last good read is shown — the token stays confirmed on that read',
+    /⏳ Robinhood's registry could not be read at 2026-10-28 \d\d:\d\d UTC \(upstream 503\) — the last good read, from 2026-10-28 15:30 UTC, is shown[.;]/.test(dn) && /Robinhood's quotes could not be read/.test(dn) && /✓ Registry \+ on-chain/.test(dn), (dn.match(/⏳[\s\S]{0,200}/) || [''])[0]);
+  const lkDash = dash(RWA_FX('rwa-token-gme-memecoin.json'), { token: { address: '0x7e86381a763f0ecca2bdf27c54eac403ddd48123', name: 'GameStop', symbol: 'gme', decimals: 18 } }), lkFull = rwaCardOf(lkDash), lk = rwaText(lkFull);
+  check('  ...a lookalike\'s own profile carrying the server\'s 404 says it is not an RWA here, why, and where Robinhood lists its tokens — with both closing lines; a stablecoin\'s or any other token\'s 404, null, another chain or a profile without p.rwa gets no card',
+    /🏛️ Real-world asset\? not an RWA/.test(lk) && /⚠️ Not an RWA here — a lookalike\. Same ticker as \$GME, but not issued by Robinhood Assets \(Jersey\) — the registry lists \$GME at 0x1b0e…153e\./.test(lk) && /its contracts page ↗/.test(lk)
+    && /The real \$GME \(Robinhood Assets \(Jersey\) Limited \(RHJ\)\): 0x1b0e…153e ↗ .* 0x1b0e319c6a659f002271b69db8a7df2f911c153e Open it in the Scanner/.test(lk) && lkFull.includes('href="/newpairs?scan=0x1b0e319c6a659f002271b69db8a7df2f911c153e"')
+    && lkFull.includes('href="https://robinhoodchain.blockscout.com/address/0x1b0e319c6a659f002271b69db8a7df2f911c153e"')
+    && /<p class="tkd-verdict-rwa tkd-warn">⚠️ <b>Same ticker as Robinhood’s \$GME — not it\.<\/b>/.test(lkDash) && lkDash.indexOf('tkd-verdict-rwa') < lkDash.indexOf('tkd-stats')
+    && /Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc\. Not advice, never a tip to buy\. Do your own research\./.test(lk)
+    && !rwaCardOf(dash(RWA_FX('rwa-token-usdg.json'))) && !rwaCardOf(dash(RWA_FX('rwa-token-notmystock.json'))) && !rwaCardOf(dash(null)) && !rwaCardOf(dash(T, { chain: 'ethereum', pools: [] })) && !rwaCardOf(dash(undefined)), lk.slice(0, 300));
+  // the card's CSS: on the text floor, no reordering, nothing cut short
+  const RC = CSS.slice(CSS.indexOf('/* ===== The real-world-asset card'), CSS.indexOf('/* =====', CSS.indexOf('/* ===== The real-world-asset card') + 10));
+  const sizes = [...RC.matchAll(/font-size\s*:\s*([^;}]+)/g)].map((m) => m[1].trim());
+  check('RWA card CSS: every font-size on the text floor (max(var(--text-floor), …)), no CSS order, no ellipsis or line clamp, chips allowed to wrap',
+    RC.length > 500 && sizes.length >= 6 && sizes.every((v) => v.startsWith('max(var(--text-floor)')) && !/\border\s*:|text-overflow|line-clamp|white-space:\s*nowrap/.test(RC) && /\.tkd-card--rwa \.np-flag \{ white-space: normal;/.test(RC), sizes.join(' | '));
+  await rwaCardWalk();
+}
+// the card in a real browser: muted headless Chrome on a page of its own (styles.css, newpairs.js and a fixture profile)
+async function rwaCardWalk() {
+  const CHROME = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium',
+    '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/snap/bin/chromium'].find((p) => p && existsSync(p));
+  if (!CHROME) { if (process.env.CI) console.log('skipping the RWA card browser walk: no Chrome or Chromium on this runner (set CHROME_PATH to run it)'); else check('a Chrome or Chromium to walk the RWA card in (set CHROME_PATH)', false, 'none found'); return; }
+  const TYPES = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.json': 'application/json', '.woff2': 'font/woff2', '.woff': 'font/woff', '.ttf': 'font/ttf', '.png': 'image/png', '.svg': 'image/svg+xml', '.webp': 'image/webp' };
+  const PAGE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>RWA card</title><link rel="stylesheet" href="/styles.css"></head>' +
+    '<body><main><div class="sc-result" id="rwa-host"></div></main><script src="/newpairs.js"></script><script src="/__rwa/page.js"></script></body></html>';
+  const PAGE_JS = '(async () => { const q = new URLSearchParams(location.search); const p = await (await fetch("/__rwa/p.json?f=" + encodeURIComponent(q.get("f")))).json();' +
+    ' document.getElementById("rwa-host").innerHTML = window.NPCard.dashboardHTML(p); if (q.get("open")) document.querySelectorAll(".tkd-card--rwa details").forEach((d) => { d.open = true; }); window.__drawn = true; })();';
+  const site = http.createServer((req, res) => {
+    const u = new URL(req.url, 'http://x'), send = (code, type, body) => { res.writeHead(code, { 'Content-Type': type }); res.end(body); };
+    if (u.pathname === '/__rwa/') return send(200, 'text/html', PAGE);
+    if (u.pathname === '/__rwa/page.js') return send(200, 'text/javascript', PAGE_JS);
+    if (u.pathname === '/__rwa/p.json') { const f = u.searchParams.get('f'); return /^rwa-token-[a-z-]+\.json$/.test(f || '') ? send(200, 'application/json', JSON.stringify(rwaProfile(RWA_FX(f)))) : send(404, 'text/plain', ''); }
+    const file = path.join(PUB, path.normalize(decodeURIComponent(u.pathname)).replace(/^(\.\.[/\\])+/, ''));
+    if (!file.startsWith(PUB)) return send(404, 'text/plain', '');
+    readFile(file, (e, b) => (e ? send(404, 'text/plain', '') : send(200, TYPES[path.extname(file)] || 'application/octet-stream', b)));
+  });
+  await new Promise((ok) => site.listen(0, '127.0.0.1', ok));
+  const ORIGIN = 'http://127.0.0.1:' + site.address().port;
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  let chrome = null, profile = null, ws = null, n = 0, session = null;
+  const pend = new Map(), exceptions = [];
+  const cdp = (method, params = {}, sid = session) => new Promise((ok, bad) => { const id = ++n; pend.set(id, { ok, bad }); ws.send(JSON.stringify({ id, method, params, ...(sid ? { sessionId: sid } : {}) })); });
+  const ev = async (expr) => { const r = await cdp('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true }); if (r.exceptionDetails) throw new Error('page: ' + ((r.exceptionDetails.exception && r.exceptionDetails.exception.description) || r.exceptionDetails.text)); return r.result.value; };
+  // what a reader can see: no sideways scroll, nothing outside the card, no text under the floor, every pop-down 44px tall
+  const LAYOUT = `(() => {
+    const card = document.querySelector('.tkd-card--rwa'); if (!card) return null;
+    const cr = card.getBoundingClientRect();
+    const probe = document.createElement('span'); probe.style.fontSize = 'var(--text-floor)'; document.body.appendChild(probe);
+    const floor = parseFloat(getComputedStyle(probe).fontSize); probe.remove();
+    const out = [], small = [];
+    for (const el of card.querySelectorAll('*')) {
+      if (el.closest('.sr-only') || el.closest('details:not([open]) > :not(summary)')) continue;
+      const r = el.getBoundingClientRect(); if (!r.width && !r.height) continue;
+      if (r.right > cr.right + 1 || r.left < cr.left - 1) out.push(String(el.className || el.tagName) + ' ' + Math.round(r.left) + '–' + Math.round(r.right));
+      if ([...el.childNodes].some((x) => x.nodeType === 3 && x.textContent.trim()) && parseFloat(getComputedStyle(el).fontSize) < floor - 0.5) small.push(String(el.className || el.tagName) + ' ' + getComputedStyle(el).fontSize);
+    }
+    const low = [...card.querySelectorAll('summary')].filter((s) => s.getBoundingClientRect().height < 43.5).map((s) => Math.round(s.getBoundingClientRect().height));
+    // every run of text, line by line (a Range's rects — an inline link that cannot break runs past its box, which an element's box hides)
+    const runs = [], walker = document.createTreeWalker(card, NodeFilter.SHOW_TEXT);
+    for (let t = walker.nextNode(); t; t = walker.nextNode()) {
+      if (!t.textContent.trim() || (t.parentElement && (t.parentElement.closest('.sr-only') || t.parentElement.closest('details:not([open]) > :not(summary)')))) continue;
+      const rg = document.createRange(); rg.selectNodeContents(t);
+      for (const q of rg.getClientRects()) if (q.width && (q.right > cr.right + 1 || q.left < cr.left - 1)) { runs.push(t.textContent.trim().slice(0, 30) + ' ' + Math.round(q.left) + '–' + Math.round(q.right) + ' card ' + Math.round(cr.left) + '–' + Math.round(cr.right)); break; }
+    }
+    const mk = document.querySelector('.tkd-card--market');
+    const topOf = (sel) => { const e = document.querySelector(sel); return e ? Math.round(e.getBoundingClientRect().top + window.scrollY) : null; };
+    const ch = document.querySelector('.tkd-card--chart'), chr = ch ? ch.getBoundingClientRect() : null;
+    return { sw: document.documentElement.scrollWidth, iw: window.innerWidth, out: out.slice(0, 4).concat(runs.slice(0, 3)), small: small.slice(0, 4), low: low.slice(0, 4), h: Math.round(cr.height), market: mk ? Math.round(mk.getBoundingClientRect().top + window.scrollY) : null,
+      top: Math.round(cr.top + window.scrollY), safety: topOf('.tkd-card--safety'), contract: topOf('.tkd-card--contract'), left: Math.round(cr.left), w: Math.round(cr.width), chartLeft: chr ? Math.round(chr.left) : null, chartW: chr ? Math.round(chr.width) : null };
+  })()`;
+  try {
+    profile = mkdtempSync(path.join(os.tmpdir(), 'jsi-rwacard-'));
+    const args = ['--headless=new', '--remote-debugging-port=0', '--user-data-dir=' + profile, '--mute-audio', '--no-first-run', '--no-default-browser-check',
+      '--disable-extensions', '--disable-background-networking', '--disable-component-update', '--lang=en-US', 'about:blank'];
+    if (process.platform === 'linux') args.unshift('--no-sandbox');
+    chrome = spawn(CHROME, args, { stdio: ['ignore', 'ignore', 'pipe'] });
+    let err = ''; chrome.stderr.on('data', (d) => { err += d; });
+    const portFile = path.join(profile, 'DevToolsActivePort');
+    for (let i = 0; i < 150 && !existsSync(portFile); i++) await sleep(100);
+    if (!existsSync(portFile)) throw new Error('Chrome did not open its debugging port: ' + err.slice(0, 300));
+    const [port, wsPath] = readFileSync(portFile, 'utf8').trim().split('\n');
+    ws = new WebSocket('ws://127.0.0.1:' + port + wsPath);
+    await new Promise((ok, bad) => { ws.onopen = ok; ws.onerror = () => bad(new Error('could not connect to Chrome')); });
+    ws.onmessage = (m) => {
+      const d = JSON.parse(typeof m.data === 'string' ? m.data : m.data.toString());
+      if (d.id && pend.has(d.id)) { const p = pend.get(d.id); pend.delete(d.id); d.error ? p.bad(new Error(JSON.stringify(d.error))) : p.ok(d.result); }
+      else if (d.method === 'Runtime.exceptionThrown') exceptions.push(d.params.exceptionDetails);
+    };
+    const t = await cdp('Target.createTarget', { url: 'about:blank' }, null);
+    session = (await cdp('Target.attachToTarget', { targetId: t.targetId, flatten: true }, null)).sessionId;
+    await cdp('Page.enable'); await cdp('Runtime.enable');
+    const fits = [];
+    for (const f of ['rwa-token-tsla.json', 'rwa-token-tslaon.json', 'rwa-token-gme-memecoin.json']) for (const w of [320, 390, 1280, 1920]) for (const open of [false, true]) {
+      await cdp('Emulation.setDeviceMetricsOverride', { width: w, height: 900, deviceScaleFactor: 1, mobile: w < 768 });
+      await cdp('Page.navigate', { url: ORIGIN + '/__rwa/?f=' + f + (open ? '&open=1' : '') });
+      let drawn = false; for (let i = 0; i < 160 && !drawn; i++) { try { drawn = await ev('!!window.__drawn'); } catch {} if (!drawn) await sleep(50); }
+      const L = drawn ? await ev(LAYOUT) : null;
+      fits.push({ f, w, open, L });
+    }
+    const bad = fits.filter((x) => !x.L || x.L.sw > x.L.iw || x.L.out.length || x.L.small.length || x.L.low.length);
+    check('RWA card in a real browser (headless Chrome, muted) at 320, 390, 1280 and 1920 px, its pop-downs shut and open — TSLA, TSLAon and a lookalike: no sideways scroll, nothing outside the card (not one run of text, links included), no text under the floor, every pop-down 44px tall, no script error',
+      fits.length === 24 && !bad.length && !exceptions.length, bad.slice(0, 3).map((x) => x.f + ' ' + x.w + (x.open ? ' open ' : ' ') + JSON.stringify(x.L)).join(' | ') + (exceptions.length ? ' exceptions: ' + JSON.stringify(exceptions[0]).slice(0, 200) : ''));
+    /* the review (2026-10-28): in the narrow side column, every part open, TSLA's card was 8,883 px tall at 1280 (4,529 at 390) and pushed
+       the Market card ~9,200 px down. In the wide column with parts 2–7 behind their pop-downs: measured, shut */
+    const tall = fits.filter((x) => x.f === 'rwa-token-tsla.json' && !x.open), t1280 = tall.find((x) => x.w === 1280), t390 = tall.find((x) => x.w === 390);
+    check('  ...TSLA\'s card, its pop-downs shut, stands at well under half its old height — under 3,400 px at 1280 in the wide column (8,883 before), under 2,800 at 390 (4,529) — and the Market card at 1280 starts under 5,000 px down (15,053 before)',
+      !!(t1280 && t390 && t1280.L && t390.L) && t1280.L.h < 3400 && t390.L.h < 2800 && t1280.L.market != null && t1280.L.market < 5000, JSON.stringify(tall.map((x) => ({ w: x.w, h: x.L && x.L.h, market: x.L && x.L.market }))));
+    /* review two (2026-10-28), 16: on a phone the card came before the Safety read and the Contract card (the score's reasons and red facts
+       pushed down by its whole height); it now follows them, as SPEC §6 says, and wider it stays in the wide column with the chart */
+    const phones = fits.filter((x) => x.f === 'rwa-token-tsla.json' && x.w <= 390 && x.L), wides = fits.filter((x) => x.f === 'rwa-token-tsla.json' && x.w >= 1280 && x.L);
+    check('  ...on a phone (320, 390) the RWA card comes after the Safety read and the Contract card, never in front of them; at 1280 and 1920 it sits in the wide column, under the chart and as wide as it',
+      phones.length === 4 && phones.every((x) => x.L.safety != null && x.L.contract != null && x.L.top > x.L.safety && x.L.top > x.L.contract) && wides.length === 4 && wides.every((x) => x.L.chartLeft != null && Math.abs(x.L.left - x.L.chartLeft) <= 1 && Math.abs(x.L.w - x.L.chartW) <= 1),
+      JSON.stringify(phones.concat(wides).map((x) => ({ w: x.w, open: x.open, top: x.L.top, safety: x.L.safety, contract: x.L.contract, left: x.L.left, chartLeft: x.L.chartLeft, cw: x.L.w, chartW: x.L.chartW }))));
+  } catch (e) {
+    check('the RWA card browser walk ran', false, e && e.message);
+  } finally {
+    try { ws && ws.close(); } catch {}
+    if (chrome) { try { chrome.kill('SIGTERM'); } catch {} await new Promise((r) => { const t = setTimeout(r, 2000); chrome.once('exit', () => { clearTimeout(t); r(); }); }); }
+    if (profile) { try { rmSync(profile, { recursive: true, force: true }); } catch {} }
+    await new Promise((r) => site.close(r));
+  }
 }
 
 try {
@@ -278,6 +565,7 @@ try {
     db.prepare('DELETE FROM squad_members WHERE squad_id = ?').run(sq);
     db.prepare('DELETE FROM squads WHERE id = ?').run(sq);
   } catch {}
+  await rwaCardChecks();
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
 } finally {

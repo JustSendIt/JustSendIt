@@ -1,0 +1,623 @@
+{
+ "address": "0xc93a8c440cea26d7445df01729f193b27965099f",
+ "symbol": "WEEK",
+ "name": null,
+ "logo": null,
+ "issuer": {
+  "key": "rhj",
+  "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+ },
+ "underlying": {
+  "symbol": "WEEK",
+  "name": null,
+  "kind": "bond"
+ },
+ "confidence": "confirmed",
+ "evidence": [
+  {
+   "tier": "A2",
+   "kind": "fingerprint",
+   "text": "Its code runs from Robinhood's token registry contract (checked on the chain: its beacon slot names the registry, and its code is the very proxy code the registry's own Stock Tokens run)",
+   "src": "rpc",
+   "at": 1793201400000
+  },
+  {
+   "tier": "B",
+   "kind": "robinhood-api",
+   "text": "Robinhood's own /price-deviations answer names this address (supporting evidence only — the registry's list and the chain are what count)",
+   "src": "robinhood",
+   "at": 1793201400000
+  }
+ ],
+ "status": {
+  "code": null,
+  "text": "On the chain, not in the registry's active list"
+ },
+ "priceUsd": {
+  "v": null,
+  "src": "geckoterminal",
+  "at": 1793205000000,
+  "why": "not among the most-traded pools we keep, and GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
+ },
+ "supply": {
+  "v": null,
+  "src": "rpc",
+  "at": 1793205000000,
+  "why": "its decimals have not been read yet"
+ },
+ "value": {
+  "v": null,
+  "src": "site",
+  "at": null,
+  "why": "neither its on-chain supply nor a DEX price has been read",
+  "label": "on-chain supply × the DEX price"
+ },
+ "mcap": {
+  "v": null,
+  "src": "geckoterminal",
+  "at": 1793205000000,
+  "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
+ },
+ "liquidity": {
+  "v": null,
+  "src": "geckoterminal",
+  "at": 1793205000000,
+  "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
+ },
+ "tvl": {
+  "v": null,
+  "src": "defillama",
+  "at": 1793201400000,
+  "why": "not in the 5 apps DefiLlama answered for; not read: Longbow (upstream 404)",
+  "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol)",
+  "protocols": [],
+  "missingApps": [
+   "longbow"
+  ]
+ },
+ "volume24h": {
+  "v": null,
+  "src": "geckoterminal",
+  "at": 1793205000000,
+  "why": "GeckoTerminal's token read (2026-10-28 16:30 UTC) has no entry for it"
+ },
+ "reference": {
+  "chainlink": {
+   "v": null,
+   "src": "chainlink",
+   "at": 1793201400000,
+   "why": "Chainlink's public directory lists no feed for this ticker (it lists 13)"
+  },
+  "robinhood": {
+   "v": null,
+   "src": "robinhood",
+   "at": 1793205000000,
+   "why": "Robinhood's /prices answer has no quote for it"
+  }
+ },
+ "premium": {
+  "v": null,
+  "src": "site",
+  "at": null,
+  "why": "no DEX price has been read for it"
+ },
+ "deviation": {
+  "pct": -50.0877395553657,
+  "direction": "discount",
+  "days": 32,
+  "since": "2026-09-14",
+  "asOf": "2026-10-27",
+  "src": "robinhood",
+  "at": 1793201400000
+ },
+ "multiplier": {
+  "v": null,
+  "src": "rpc",
+  "at": 1793205000000,
+  "label": "shares of the underlying one token carries (uiMultiplier() on the chain)",
+  "pending": null,
+  "why": "its multiplier has not been read on the chain yet"
+ },
+ "halted": {
+  "v": null,
+  "src": "robinhood",
+  "at": null,
+  "why": "Robinhood's /prices answer has no quote for it"
+ },
+ "paused": {
+  "global": {
+   "v": null,
+   "src": "rpc",
+   "at": 1793205000000,
+   "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
+   "absent": true,
+   "label": "paused() on Robinhood's registry: every Stock Token at once"
+  },
+  "token": {
+   "v": null,
+   "src": "rpc",
+   "at": 1793205000000,
+   "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
+   "absent": true,
+   "label": "tokenPaused(): this token alone"
+  },
+  "oracle": {
+   "v": null,
+   "src": "rpc",
+   "at": 1793205000000,
+   "why": "no such function on this contract (the call reverted) — not the same as \"not paused\"",
+   "absent": true,
+   "label": "oraclePaused(): Robinhood's advisory price-oracle flag"
+  }
+ },
+ "mintBurnUsd": {
+  "v": null,
+  "src": "robinhood",
+  "at": 1793205000000,
+  "why": "Robinhood's /prices answer has no quote for it"
+ },
+ "flags": [
+  "deviation"
+ ],
+ "issuerProfile": {
+  "issuer": {
+   "key": "rhj",
+   "name": "Robinhood Assets (Jersey) Limited (RHJ)"
+  },
+  "sentences": [
+   {
+    "text": "Stock Tokens are tokenised debt securities issued by Robinhood Assets (Jersey) Limited. They give economic exposure to the underlying share or ETF but no legal or beneficial rights in it, or against its issuer — no voting rights, no shareholder status.",
+    "href": "https://docs.robinhood.com/rhj/product/"
+   },
+   {
+    "text": "Robinhood's FAQ says every Stock Token in circulation is backed 1:1 by the underlying, held by its US-based custody partner.",
+    "href": "https://docs.robinhood.com/rhj/faq/"
+   },
+   {
+    "text": "Robinhood's service-providers page names Alpaca Securities LLC as the broker and custodian.",
+    "href": "https://docs.robinhood.com/rhj/service-providers/"
+   },
+   {
+    "text": "Holders can sell on the secondary market, or redeem directly with the issuer where no authorised participant does it for them, after completing the issuer's KYC/AML checks.",
+    "href": "https://docs.robinhood.com/rhj/faq/"
+   },
+   {
+    "text": "Robinhood's product page lists no fee to subscribe, none to redeem in the first 90 days from issuance, and 0.05% to redeem after that.",
+    "href": "https://docs.robinhood.com/rhj/product/"
+   },
+   {
+    "text": "Not offered to US persons, and restricted in other places, including Canada, the United Kingdom and Switzerland; Robinhood lists the prohibited jurisdictions.",
+    "href": "https://docs.robinhood.com/rhj/restricted-jurisdictions/"
+   },
+   {
+    "text": "Dividends are not paid out: they raise the token's multiplier, so one token comes to stand for more than one share.",
+    "href": "https://docs.robinhood.com/rhj/faq/"
+   },
+   {
+    "text": "Robinhood publishes the Base Prospectus and Final Terms; the Liechtenstein Financial Market Authority approved the Base Prospectus, which Robinhood notes is not an endorsement.",
+    "href": "https://docs.robinhood.com/rhj"
+   },
+   {
+    "text": "Robinhood lists its Stock Tokens at docs.robinhood.com/chain/contracts — a token with the same ticker at another address is not one.",
+    "href": "https://docs.robinhood.com/chain/contracts/"
+   }
+  ],
+  "terms": {
+   "v": "https://robinhood.com/stocktoken/rhj",
+   "src": "rpc",
+   "at": 1793201400000,
+   "label": "terms() read on the chain"
+  }
+ },
+ "controls": {
+  "kind": "beacon proxy",
+  "beacon": "0xe10b6f6b275de231345c20d14ab812db62151b00",
+  "registry": "0xe10b6f6b275de231345c20d14ab812db62151b00",
+  "implementation": {
+   "address": "0xb35490d6f9163de4f80d88dc75c3516eb64c5ae2",
+   "src": "rpc",
+   "at": 1793205000000
+  },
+  "verifiedSource": "https://sourcify.dev/server/v2/contract/4663/0xb35490d6f9163de4f80d88dc75c3516eb64c5ae2",
+  "powers": [
+   {
+    "power": "Replace the code of every Robinhood Stock Token at once (the beacon's upgradeTo)",
+    "role": "BEACON_UPGRADER_ROLE",
+    "holders": [
+     {
+      "address": "0xcd8c6182e7c6ca3b5156d6a90a67719d7e2be094",
+      "kind": "wallet"
+     }
+    ]
+   },
+   {
+    "power": "Mint new tokens",
+    "role": "MINTER_ROLE",
+    "holders": [
+     {
+      "address": "0x2b94105fff37630f98e1f24811dad588fc5c3a87",
+      "kind": "wallet"
+     },
+     {
+      "address": "0x13643b89b19245201b29d556edde5cf18f749c08",
+      "kind": null
+     }
+    ]
+   },
+   {
+    "power": "Burn tokens",
+    "role": "BURNER_ROLE",
+    "holders": [
+     {
+      "address": "0x6e40b50a40c1db42a85a0e8fe8ff7d9cbfc2d8c1",
+      "kind": "wallet"
+     },
+     {
+      "address": "0x13643b89b19245201b29d556edde5cf18f749c08",
+      "kind": null
+     }
+    ]
+   },
+   {
+    "power": "Burn tokens from any wallet (adminBurn)",
+    "role": "ADMIN_BURNER_ROLE",
+    "holders": [
+     {
+      "address": "0x957b6de6525c63349f7619743ef1e0ad93cd74d4",
+      "kind": "wallet"
+     }
+    ]
+   },
+   {
+    "power": "Pause every Stock Token at once (the registry's pause)",
+    "role": "PAUSER_ROLE",
+    "holders": [
+     {
+      "address": "0xe7bcb188254bc6ebbff63014dfed4cd4a024f22a",
+      "kind": "wallet"
+     }
+    ]
+   },
+   {
+    "power": "Pause one token",
+    "role": "TOKEN_PAUSER_ROLE",
+    "holders": [
+     {
+      "address": "0xfccf56b674113d9c4eb0f9b3370930ced9e6ab23",
+      "kind": "wallet"
+     }
+    ]
+   },
+   {
+    "power": "Pause the price-oracle flag",
+    "role": "ORACLE_PAUSER_ROLE",
+    "holders": [
+     {
+      "address": "0x7369d100c00f28e45d779ac9d4b1c7afa61e4abc",
+      "kind": "wallet"
+     }
+    ]
+   },
+   {
+    "power": "Block wallets from moving these tokens",
+    "role": "BLOCKER_ROLE",
+    "holders": [
+     {
+      "address": "0x913ca87347391218e5de2c17c5a0aeba8b0b28fd",
+      "kind": "wallet"
+     }
+    ]
+   },
+   {
+    "power": "Change the corporate-action multiplier",
+    "role": "MULTIPLIER_UPDATER_ROLE",
+    "holders": [
+     {
+      "address": "0x92905e8d0e2301ba143215b8d86d63ffd4188143",
+      "kind": "wallet"
+     }
+    ]
+   },
+   {
+    "power": "Change a token's name and metadata",
+    "role": "METADATA_UPDATER_ROLE",
+    "holders": [
+     {
+      "address": "0xcba16c2b9048af033c5b34e43dd1d47d1358524a",
+      "kind": "wallet"
+     }
+    ]
+   },
+   {
+    "power": "Deploy new Stock Tokens",
+    "role": "TOKEN_DEPLOYER_ROLE",
+    "holders": [
+     {
+      "address": "0x5516b3451d4d6c9f63353fe7bc9537477ecce000",
+      "kind": "wallet"
+     }
+    ]
+   },
+   {
+    "power": "Grant and revoke every role above",
+    "role": "DEFAULT_ADMIN_ROLE",
+    "holders": [
+     {
+      "address": "0xd6f8378f8e440c65f8382f5f2728c78dfd55b66d",
+      "kind": "wallet"
+     }
+    ]
+   }
+  ],
+  "note": "Powers a regulated issuer keeps, shown as such, not as a verdict: for a regulated issuer they are expected — they are still powers over your tokens. The Scanner's health score does not count them."
+ },
+ "roles": [
+  {
+   "role": "BEACON_UPGRADER_ROLE",
+   "roleId": "0x5ab8bd28475e0dc8d5764e9ce50f85ffe2f14ec40c5b74e45f541485ad510c39",
+   "holder": "0xcd8c6182e7c6ca3b5156d6a90a67719d7e2be094",
+   "since": {
+    "block": 8646
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "MINTER_ROLE",
+   "roleId": "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6",
+   "holder": "0x13643b89b19245201b29d556edde5cf18f749c08",
+   "since": {
+    "block": 95361240
+   },
+   "kind": null
+  },
+  {
+   "role": "MINTER_ROLE",
+   "roleId": "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6",
+   "holder": "0x2b94105fff37630f98e1f24811dad588fc5c3a87",
+   "since": {
+    "block": 7817
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "BURNER_ROLE",
+   "roleId": "0x3c11d16cbaffd01df69ce1c404f6340ee057498f5f00246190ea54220576a848",
+   "holder": "0x13643b89b19245201b29d556edde5cf18f749c08",
+   "since": {
+    "block": 95363462
+   },
+   "kind": null
+  },
+  {
+   "role": "BURNER_ROLE",
+   "roleId": "0x3c11d16cbaffd01df69ce1c404f6340ee057498f5f00246190ea54220576a848",
+   "holder": "0x6e40b50a40c1db42a85a0e8fe8ff7d9cbfc2d8c1",
+   "since": {
+    "block": 7820
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "ADMIN_BURNER_ROLE",
+   "roleId": "0x25e7ebc863fa4efd16243c82323b71f247c0cf439aca64c51b84a74afb738936",
+   "holder": "0x957b6de6525c63349f7619743ef1e0ad93cd74d4",
+   "since": {
+    "block": 7828
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "PAUSER_ROLE",
+   "roleId": "0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a",
+   "holder": "0xe7bcb188254bc6ebbff63014dfed4cd4a024f22a",
+   "since": {
+    "block": 7833
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "TOKEN_PAUSER_ROLE",
+   "roleId": "0xe95e22ec6dbf4c911d1fae59680a3e9cb71dd35b3a1c697d232e4b01a8ff30a2",
+   "holder": "0xfccf56b674113d9c4eb0f9b3370930ced9e6ab23",
+   "since": {
+    "block": 7844
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "ORACLE_PAUSER_ROLE",
+   "roleId": "0x155fc2c2b00b801014447f9d3a1522625740f8e592e4c0b0bb7c5867c150aa11",
+   "holder": "0x7369d100c00f28e45d779ac9d4b1c7afa61e4abc",
+   "since": {
+    "block": 8638
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "BLOCKER_ROLE",
+   "roleId": "0x8f2e0057cd5e35397007bcc8f5418f73dd64cc6e4073a0276563f247c3079037",
+   "holder": "0x913ca87347391218e5de2c17c5a0aeba8b0b28fd",
+   "since": {
+    "block": 8687
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "MULTIPLIER_UPDATER_ROLE",
+   "roleId": "0x7158cf42e4a4f01c5456c8d75cdbd375748d45e9db7e812f5bcd18844122b615",
+   "holder": "0x92905e8d0e2301ba143215b8d86d63ffd4188143",
+   "since": {
+    "block": 8675
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "METADATA_UPDATER_ROLE",
+   "roleId": "0x7f5260842512b02356ff92de24be96e7e1aac2e234d9371b076ac2b4cddda61e",
+   "holder": "0xcba16c2b9048af033c5b34e43dd1d47d1358524a",
+   "since": {
+    "block": 8682
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "TOKEN_DEPLOYER_ROLE",
+   "roleId": "0x5f077d4e72bed5b3b14877559c782788e60c3fbb27bf29d3586097d8fa36bbeb",
+   "holder": "0x5516b3451d4d6c9f63353fe7bc9537477ecce000",
+   "since": {
+    "block": 8643
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "DEFAULT_ADMIN_ROLE",
+   "roleId": "0x0000000000000000000000000000000000000000000000000000000000000000",
+   "holder": "0xd6f8378f8e440c65f8382f5f2728c78dfd55b66d",
+   "since": {
+    "block": 7802
+   },
+   "kind": "wallet"
+  },
+  {
+   "role": "an unnamed role",
+   "roleId": "0xb4e5de7340a2fee2ff9be79f5ec0e8feae4b633bc8cc663711520e08f24984f8",
+   "holder": "0x697e774d60c1a3769f2ed0b919aacf17be0ae553",
+   "since": {
+    "block": 8654
+   },
+   "kind": "wallet"
+  }
+ ],
+ "rolesAt": 1793205000000,
+ "rolesRead": {
+  "complete": true,
+  "cursor": 98587507,
+  "head": 98587507,
+  "at": 1793205000000
+ },
+ "blocked": {
+  "count": 175,
+  "at": 1793205000000,
+  "complete": true
+ },
+ "corporateActions": [],
+ "connected": [],
+ "lookalikes": [],
+ "connectedBasis": {
+  "own": false,
+  "src": "geckoterminal",
+  "at": 1793199600000,
+  "note": "No pool among the most-traded pools this site keeps pairs it with another token from $1,000 of reserve (only the 12 RWAs with the most liquidity have their own pools read)"
+ },
+ "chainlink": null,
+ "chainlinkWhy": "Chainlink's public directory lists no feed for this ticker",
+ "deployer": {
+  "role": "TOKEN_DEPLOYER_ROLE",
+  "holders": [
+   {
+    "address": "0x5516b3451d4d6c9f63353fe7bc9537477ecce000",
+    "kind": "wallet"
+   }
+  ],
+  "note": "Robinhood's registry deploys every Stock Token from its token-deployer role, so the Scanner does not raise \"serial deployer\" on a confirmed Stock Token deployed by it."
+ },
+ "reads": {
+  "registry": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "prices": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "actions": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "deviations": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "chain": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "tvl": {
+   "at": 1793201400000,
+   "ok": false,
+   "apps": 5,
+   "why": "DefiLlama's per-app deposits — not read: Longbow (upstream 404)"
+  },
+  "stables": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "chainlink": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "roles": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "gt": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "connected": {
+   "at": 1793201400000,
+   "ok": false,
+   "failed": 11,
+   "why": "GeckoTerminal could not be read for 11 of 12 RWAs' own pools (upstream 404) — tried again on the next runs"
+  }
+ },
+ "at": 1793205000000,
+ "notes": [
+  "Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.",
+  "Not advice, never a tip to buy. Do your own research.",
+  "Stock markets close while DEX pools trade around the clock: a gap from the reference price can open outside market hours."
+ ],
+ "definitions": {
+  "rwa": "An RWA here is a token an identified issuer issues to stand for a real-world asset (a share, an ETF, a bond or T-bill fund, a commodity fund, a credit or fund share), counted only on evidence — Robinhood's registry and the token's code on the chain, or this site's list of other issuers checked on the chain — never on a name.",
+  "value": "Value on chain: the token's supply read on the chain times its DEX price — not the company's market value.",
+  "tvl": "TVL in DeFi: USD of the token deposited in DeFi apps on Robinhood Chain (lending markets, vaults), from DefiLlama and matched by symbol — DEX pools are counted under Liquidity instead.",
+  "liquidity": "Liquidity: GeckoTerminal's figure for the token across its DEX pools on Robinhood Chain (its token read) — GeckoTerminal's own total, which comes to less than the pools' whole reserves; every token is ranked on that one figure, and a total adds them up.",
+  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains (Ondo, Anchored) it is every chain's, kept out of the market-cap ranking and never added to this chain's — and never mixed with the value on chain.",
+  "volume": "Volume 24h: GeckoTerminal's figure for the token's DEX trading over the last 24 hours, across its pools on Robinhood Chain (its token read). A total takes a pool pairing two RWAs once when this site has read that pool (the most-traded pools, and the top RWAs' own pools); one it has not read may be in both tokens' figures, and the total says so.",
+  "premium": "Premium or discount: the DEX price against the token's reference price — the price of one token, which is the underlying's price times the token's multiplier: Chainlink's feed read on the chain, else Robinhood's token quote (multiplier applied). Stock markets close while DEX pools trade around the clock.",
+  "connected": "Connected tokens: tokens with a DEX pool against an RWA (a memecoin paired with TSLA) — not RWAs, listed apart and never counted.",
+  "stables": "Fiat-backed stablecoins are listed apart and not counted as RWAs here — DefiLlama and rwa.xyz count stablecoins apart."
+ },
+ "sources": [
+  {
+   "id": "robinhood",
+   "name": "Robinhood's Stock Token API (registry, quotes, corporate actions, price deviations)",
+   "href": "https://docs.robinhood.com/chain/stock-token-apis/"
+  },
+  {
+   "id": "rpc",
+   "name": "Robinhood Chain (its public node), read by this site",
+   "href": "https://docs.robinhood.com/chain/"
+  },
+  {
+   "id": "chainlink",
+   "name": "Chainlink price feeds (its public directory; each feed read on the chain)",
+   "href": "https://docs.chain.link/data-feeds/tokenized-equity-feeds/robinhood"
+  },
+  {
+   "id": "defillama",
+   "name": "DefiLlama (per-app deposits, stablecoins)",
+   "href": "https://defillama.com"
+  },
+  {
+   "id": "geckoterminal",
+   "name": "GeckoTerminal (prices, market caps, pools)",
+   "href": "https://www.geckoterminal.com"
+  },
+  {
+   "id": "l2beat",
+   "name": "L2BEAT (its count of real-world assets on the chain)",
+   "href": "https://l2beat.com/scaling/projects/robinhood"
+  }
+ ]
+}

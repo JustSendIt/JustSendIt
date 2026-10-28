@@ -1,0 +1,10 @@
+{
+ "notRwa": true,
+ "address": "0x4a0ade17fa7602bdfc7d2a9c85f404328687c92d",
+ "symbol": "NMS",
+ "why": "Not an RWA here: it is not in Robinhood's Stock Token registry, and it is not on this site's list of other issuers' tokens. A name or a symbol is never enough.",
+ "notes": [
+  "Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc.",
+  "Not advice, never a tip to buy. Do your own research."
+ ]
+}

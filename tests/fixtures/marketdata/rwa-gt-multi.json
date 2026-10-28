@@ -1,0 +1,614 @@
+{
+ "data": [
+  {
+   "id": "robinhood_0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+   "type": "token",
+   "attributes": {
+    "address": "0xaf3d76f1834a1d425780943c99ea8a608f8a93f9",
+    "name": "Apple • Robinhood Token",
+    "symbol": "AAPL",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174123/large/0xaf3d76f1834a1d425780943c99ea8a608f8a93f9.png?1782444598",
+    "coingecko_coin_id": "apple-robinhood-tokenized-stock",
+    "total_supply": "11533401251270000000000.0",
+    "normalized_total_supply": "11533.40125127",
+    "price_usd": "345.6134223898",
+    "fdv_usd": "3986053.32983409",
+    "total_reserve_in_usd": "1322104.98902491472756142477974640664923903289399147177527",
+    "volume_usd": {
+     "h24": "1797384.25793757"
+    },
+    "market_cap_usd": "3986098.27824582"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0xeab0adac76db99a233ed077ca6be7a3f708baee6f98b17df69f7e1a07d1dc2e4",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
+   "type": "token",
+   "attributes": {
+    "address": "0x05a3d1cd21d0c88145e82600e62e7e496e0f222b",
+    "name": "AMC Entertainment Holdings, Inc. • Robinhood Token",
+    "symbol": "amc",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102175476/large/AMC.png?1786375197",
+    "coingecko_coin_id": "amc-entertainment-holdings-inc-robinhood-token",
+    "total_supply": "641148390190000000000000.0",
+    "normalized_total_supply": "641148.39019",
+    "price_usd": "2.918520548",
+    "fdv_usd": "1871198.62016411",
+    "total_reserve_in_usd": "1360502.68903116163143675571230245445075996203984917632",
+    "volume_usd": {
+     "h24": "2033218.29086171"
+    },
+    "market_cap_usd": "1863591.07523213"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0x27ccf0a6d1ee74840220715bcca7d3b01e0d33aa30d0259b47ae1585b3f4c071",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x2f62fc9fabb470c690f141c28340ed832bb27020",
+   "type": "token",
+   "attributes": {
+    "address": "0x2f62fc9fabb470c690f141c28340ed832bb27020",
+    "name": "Vanguard Total Bond Market ETF • Robinhood Token",
+    "symbol": "bnd",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102175450/large/BND.png?1786367471",
+    "coingecko_coin_id": null,
+    "total_supply": "0.0",
+    "normalized_total_supply": "0.0",
+    "price_usd": null,
+    "fdv_usd": null,
+    "total_reserve_in_usd": "0.0",
+    "volume_usd": {
+     "h24": "0.0"
+    },
+    "market_cap_usd": null
+   },
+   "relationships": {
+    "top_pools": {
+     "data": []
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
+   "type": "token",
+   "attributes": {
+    "address": "0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5",
+    "name": "Circle Internet Group • Robinhood Token",
+    "symbol": "CRCL",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174121/large/0xdf0992e440dd0be65bd8439b609d6d4366bf1cb5.png?1782444593",
+    "coingecko_coin_id": "circle-internet-group-robinhood-tokenized-stock",
+    "total_supply": "128505359990000000000000.0",
+    "normalized_total_supply": "128505.35999",
+    "price_usd": "80.0020533025",
+    "fdv_usd": "10280691.7445149",
+    "total_reserve_in_usd": "3104075.04506257214243150727158217374098486495350425798388",
+    "volume_usd": {
+     "h24": "2507803.57903622"
+    },
+    "market_cap_usd": "10149637.420762"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0x654e4143e82a5824445ade0824351c2a9acd95a8",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xd95b44124e475743a7589e68f3d74008a5536d44",
+   "type": "token",
+   "attributes": {
+    "address": "0xd95b44124e475743a7589e68f3d74008a5536d44",
+    "name": "Salesforce, Inc. • Robinhood Token",
+    "symbol": "crm",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102175348/large/CRM.png?1786124241",
+    "coingecko_coin_id": "salesforce-inc-robinhood-token",
+    "total_supply": "118985865830000000000.0",
+    "normalized_total_supply": "118.98586583",
+    "price_usd": "243.7096046392",
+    "fdv_usd": "28997.9980137672",
+    "total_reserve_in_usd": "13200.25320954696456114783139568679702592",
+    "volume_usd": {
+     "h24": "1345.5433048905"
+    },
+    "market_cap_usd": "28579.0551698232"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0x5d0434f1dcf45ff9450c1a63b5c9e088f90cfebf483458164e81be6fb96e2b2a",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+   "type": "token",
+   "attributes": {
+    "address": "0xc9a981fee1f9dec688bb123ccdecc63d0debfc4e",
+    "name": "SPDR Gold Shares • Robinhood Token",
+    "symbol": "gld",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102175452/large/GLD.png?1786367509",
+    "coingecko_coin_id": "spdr-gold-shares-robinhood-token",
+    "total_supply": "20625618800000000000000.0",
+    "normalized_total_supply": "20625.6188",
+    "price_usd": "369.6488597664",
+    "fdv_usd": "7624232.60218638",
+    "total_reserve_in_usd": "4408939.27508717957938069040285219609769524176291014708993",
+    "volume_usd": {
+     "h24": "3572454.18027474"
+    },
+    "market_cap_usd": "7603393.98308383"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0xba2f1ed4ceb2169d538d1e614d847e83c5a55913",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+   "type": "token",
+   "attributes": {
+    "address": "0x1b0e319c6a659f002271b69db8a7df2f911c153e",
+    "name": "GameStop • Robinhood Token",
+    "symbol": "GME",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174150/large/0x1b0e319c6a659f002271b69db8a7df2f911c153e.png?1782444670",
+    "coingecko_coin_id": "gamestop-robinhood-tokenized-stock",
+    "total_supply": "120021893950000000000000.0",
+    "normalized_total_supply": "120021.89395",
+    "price_usd": "22.9976584686",
+    "fdv_usd": "2759579.28555723",
+    "total_reserve_in_usd": "1496174.068292411691645901216280134394627964375822867804049843405056",
+    "volume_usd": {
+     "h24": "654381.936841003"
+    },
+    "market_cap_usd": "2760222.52582071"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0xe9713f453adb9245b19559790c96f470a18f2fdf",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3",
+   "type": "token",
+   "attributes": {
+    "address": "0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3",
+    "name": "Alphabet Class A • Robinhood Token",
+    "symbol": "GOOGL",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174124/large/0x2e0847e8910a9732eb3fb1bb4b70a580adad4fe3.png?1782444601",
+    "coingecko_coin_id": "alphabet-class-a-robinhood-tokenized-stock",
+    "total_supply": "20384789971590000000000.0",
+    "normalized_total_supply": "20384.78997159",
+    "price_usd": "324.7225746425",
+    "fdv_usd": "6618416.39407284",
+    "total_reserve_in_usd": "2033629.999741419193494833556133312833064929938198723909383",
+    "volume_usd": {
+     "h24": "3241712.99564368"
+    },
+    "market_cap_usd": "6585627.02972862"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0x6d0f67069596c7ef9d1ce6981c1b6dbcd9a91b0c5393aebe9dd07c35e412df30",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xc0d6457c16cc70d6790dd43521c899c87ce02f35",
+   "type": "token",
+   "attributes": {
+    "address": "0xc0d6457c16cc70d6790dd43521c899c87ce02f35",
+    "name": "Meta Platforms • Robinhood Token",
+    "symbol": "META",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174122/large/0xc0d6457c16cc70d6790dd43521c899c87ce02f35.png?1782444595",
+    "coingecko_coin_id": "meta-platforms-robinhood-tokenized-stock",
+    "total_supply": "11009270681830000000000.0",
+    "normalized_total_supply": "11009.27068183",
+    "price_usd": "612.5549144122",
+    "fdv_usd": "6743776.8370246",
+    "total_reserve_in_usd": "2115754.93011462878265833184455585841903463474563823451645",
+    "volume_usd": {
+     "h24": "1690860.09015173"
+    },
+    "market_cap_usd": "6743782.86024914"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0x5875d407a42965b0e768c8925cea290e06fa50603ef34fc99eb92a1050e6ae36",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xec262a75e413fafd0df80480274532c79d42da09",
+   "type": "token",
+   "attributes": {
+    "address": "0xec262a75e413fafd0df80480274532c79d42da09",
+    "name": "Strategy Inc. • Robinhood Token",
+    "symbol": "MSTR",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174143/large/0xec262a75e413fafd0df80480274532c79d42da09.png?1782444651",
+    "coingecko_coin_id": "strategy-inc-robinhood-tokenized-stock",
+    "total_supply": "48904693950000000000000.0",
+    "normalized_total_supply": "48904.69395",
+    "price_usd": "138.7575668606",
+    "fdv_usd": "6785887.38970348",
+    "total_reserve_in_usd": "3936787.44988855354845025776175703857813224067042176",
+    "volume_usd": {
+     "h24": "2141145.74875385"
+    },
+    "market_cap_usd": "6675200.97636935"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0x319bac87e616a89e241c10aeb8afd4892a852cdd8b373cd9765ecddc40b87cfe",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xf7181b63fdb858558a74ba96bc42732684cd7965",
+   "type": "token",
+   "attributes": {
+    "address": "0xf7181b63fdb858558a74ba96bc42732684cd7965",
+    "name": "Navan, Inc. • Robinhood Token",
+    "symbol": "navn",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102175423/large/NAVN.png?1786299132",
+    "coingecko_coin_id": "navan-inc-robinhood-token",
+    "total_supply": "93973010000000000000.0",
+    "normalized_total_supply": "93.97301",
+    "price_usd": "28.8872094817",
+    "fdv_usd": "2714.6180254959",
+    "total_reserve_in_usd": "654.8261216680089171039416616022725671743229801205504",
+    "volume_usd": {
+     "h24": "0.0"
+    },
+    "market_cap_usd": "2714.6180254959"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0xf2258c6da58ed3f1ca3d26c0fdcf241684b32b46e641032a2e26cb3d31d878f4",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+   "type": "token",
+   "attributes": {
+    "address": "0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec",
+    "name": "NVIDIA • Robinhood Token",
+    "symbol": "NVDA",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174110/large/0xd0601ce157db5bdc3162bbac2a2c8af5320d9eec.png?1782444565",
+    "coingecko_coin_id": "nvidia-robinhood-tokenized-stock",
+    "total_supply": "85550866781530000000000.0",
+    "normalized_total_supply": "85550.86678153",
+    "price_usd": "217.7253359204",
+    "fdv_usd": "18626466.5756955",
+    "total_reserve_in_usd": "9705139.74554107447699975734246017161140517199688472226158152354587184186",
+    "volume_usd": {
+     "h24": "14283902.2307839"
+    },
+    "market_cap_usd": "18629587.3120671"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0xd4eb21209c4d6093f80b5b84f5c45cc093ea14a3",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x1cdad396db64bda184d5182a97dd9b3c62100b7d",
+   "type": "token",
+   "attributes": {
+    "address": "0x1cdad396db64bda184d5182a97dd9b3c62100b7d",
+    "name": "Everpure • Robinhood Token",
+    "symbol": "P",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174199/large/0x1cdad396db64bda184d5182a97dd9b3c62100b7d.png?1782444800",
+    "coingecko_coin_id": "everpure-robinhood-tokenized-stock",
+    "total_supply": "107259490000000000000.0",
+    "normalized_total_supply": "107.25949",
+    "price_usd": "138.0253257072",
+    "fdv_usd": "14804.5260277514",
+    "total_reserve_in_usd": "31862.808123764669797941976231377816312024",
+    "volume_usd": {
+     "h24": "370.4404714365"
+    },
+    "market_cap_usd": "15382.9915627322"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0x3ffaca631ee693b72ab83857393d3ef11915d5ce6675cbb1e30732fc5b8c9fa1",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+   "type": "token",
+   "attributes": {
+    "address": "0xd5f3879160bc7c32ebb4dc785f8a4f505888de68",
+    "name": "Invesco QQQ • Robinhood Token",
+    "symbol": "QQQ",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174119/large/0xd5f3879160bc7c32ebb4dc785f8a4f505888de68.png?1782444588",
+    "coingecko_coin_id": "invesco-qqq-robinhood-tokenized-stock",
+    "total_supply": "7263407957340000000000.0",
+    "normalized_total_supply": "7263.40795734",
+    "price_usd": "723.3033241554",
+    "fdv_usd": "5253646.35149822",
+    "total_reserve_in_usd": "2258186.74254119221939640375389665305911633358657961087396",
+    "volume_usd": {
+     "h24": "2016839.99719005"
+    },
+    "market_cap_usd": "5253647.12024105"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0x8493982435e4273028008cd181c84c0d6a548f96792fdb5acddcbb6a8c82d305",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x95052ddcd5dc25641657424a8cf04834997e1730",
+   "type": "token",
+   "attributes": {
+    "address": "0x95052ddcd5dc25641657424a8cf04834997e1730",
+    "name": "EchoStar • Robinhood Token",
+    "symbol": "SATS",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174181/large/0x95052ddcd5dc25641657424a8cf04834997e1730.png?1782444753",
+    "coingecko_coin_id": "echostar-robinhood-tokenized-stock",
+    "total_supply": "103000000000000000.0",
+    "normalized_total_supply": "0.103",
+    "price_usd": null,
+    "fdv_usd": null,
+    "total_reserve_in_usd": "0.0",
+    "volume_usd": {
+     "h24": "0.0"
+    },
+    "market_cap_usd": null
+   },
+   "relationships": {
+    "top_pools": {
+     "data": []
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x92fd66527192e3e61d4ddd13322aa222de86f9b5",
+   "type": "token",
+   "attributes": {
+    "address": "0x92fd66527192e3e61d4ddd13322aa222de86f9b5",
+    "name": "iShares 0-3 Month Treasury Bond • Robinhood Token",
+    "symbol": "SGOV",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174130/large/0x92fd66527192e3e61d4ddd13322aa222de86f9b5.png?1782444616",
+    "coingecko_coin_id": "ishares-0-3-month-treasury-bond-etf-robinhood-tokenized-stock",
+    "total_supply": "16397489038140000000000.0",
+    "normalized_total_supply": "16397.48903814",
+    "price_usd": "101.2541954845",
+    "fdv_usd": "1660314.55425322",
+    "total_reserve_in_usd": "484505.259796376479185176703435744474379571952804352",
+    "volume_usd": {
+     "h24": "33846.8954441525"
+    },
+    "market_cap_usd": "1660461.75800563"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0xfab520051f96f4d2a32c22b6a3dd7fffdf231bfe",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0xbe274710bf3d9567e1b290ef6a5f9f90ca016fd8",
+   "type": "token",
+   "attributes": {
+    "address": "0xbe274710bf3d9567e1b290ef6a5f9f90ca016fd8",
+    "name": "iShares 1-3 Year Treasury Bond ETF • Robinhood Token",
+    "symbol": "shy",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102175480/large/SHY.png?1786401178",
+    "coingecko_coin_id": "ishares-1-3-year-treasury-bond-etf-robinhood-token",
+    "total_supply": "100285179820000000000.0",
+    "normalized_total_supply": "100.28517982",
+    "price_usd": "83.0304774203",
+    "fdv_usd": "8326.7263586352",
+    "total_reserve_in_usd": "905.16333982263477772624920732677457497738065461404",
+    "volume_usd": {
+     "h24": "0.0"
+    },
+    "market_cap_usd": "8326.7263586352"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0x768b3c7809afd191f99027866d40a43960408d39554835821b1159ea208daa2e",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
+   "type": "token",
+   "attributes": {
+    "address": "0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea",
+    "name": "Space Exploration Technologies Corp. Class A Common Stock • Robinhood Token",
+    "symbol": "SPCX",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174129/large/0x4a0e65a3eccec6dbe60ae065f2e7bb85fae35eea.png?1782444614",
+    "coingecko_coin_id": "spacex-robinhood-tokenized-stock",
+    "total_supply": "89976277160000000000000.0",
+    "normalized_total_supply": "89976.27716",
+    "price_usd": "143.7233860538",
+    "fdv_usd": "12931485.4619723",
+    "total_reserve_in_usd": "5542537.9718452236808158731756016602517995309652099295076815424704",
+    "volume_usd": {
+     "h24": "11267617.7302016"
+    },
+    "market_cap_usd": "12829677.0284568"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0xc61284332117c3fb23a2a56cceffd07f7af60029",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
+   "type": "token",
+   "attributes": {
+    "address": "0x117cc2133c37b721f49de2a7a74833232b3b4c0c",
+    "name": "SPDR S&amp;P 500 ETF Trust • Robinhood Token",
+    "symbol": "SPY",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174115/large/0x117cc2133c37b721f49de2a7a74833232b3b4c0c.png?1782444578",
+    "coingecko_coin_id": "spdr-s-p-500-etf-trust-robinhood-tokenized-stock",
+    "total_supply": "26787812035140000000000.0",
+    "normalized_total_supply": "26787.81203514",
+    "price_usd": "770.5421648506",
+    "fdv_usd": "20641114.7722156",
+    "total_reserve_in_usd": "9841751.5341905933954163803503483420810662006552894129091355131654",
+    "volume_usd": {
+     "h24": "24230488.3334257"
+    },
+    "market_cap_usd": "20644458.202726"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0xddcbba3666f578e3f09516f21ff85bfee859ab5e",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  },
+  {
+   "id": "robinhood_0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+   "type": "token",
+   "attributes": {
+    "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+    "name": "Tesla • Robinhood Token",
+    "symbol": "TSLA",
+    "decimals": 18,
+    "image_url": "https://coin-images.coingecko.com/coins/images/102174112/large/0x322f0929c4625ed5bad873c95208d54e1c003b2d.png?1782444570",
+    "coingecko_coin_id": "tesla-robinhood-tokenized-stock",
+    "total_supply": "11324660610000000000000.0",
+    "normalized_total_supply": "11324.66061",
+    "price_usd": "399.8427743473",
+    "fdv_usd": "4528049.30989109",
+    "total_reserve_in_usd": "1228631.08677776355510389668174022159728085933842147643622",
+    "volume_usd": {
+     "h24": "1485775.11931864"
+    },
+    "market_cap_usd": "4528745.60857586"
+   },
+   "relationships": {
+    "top_pools": {
+     "data": [
+      {
+       "id": "robinhood_0x3ea70ce0b34473692549f97e630a1d82dc05cea94fa55f81b50f10c8c6d8186f",
+       "type": "pool"
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

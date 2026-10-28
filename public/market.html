@@ -69,7 +69,7 @@
 
 <header class="np-hero mkt-hero">
   <h1 class="section-title display green" style="margin-bottom:0.35rem;">Market Data 📊</h1>
-  <p class="section-sub" style="margin-bottom:0.5rem;">Robinhood Chain first, then every chain the public sources cover: TVL, DEX volume, fees, stablecoins, activity and the most-traded tokens — each figure with its source and the time it was read.</p>
+  <p class="section-sub" style="margin-bottom:0.5rem;">Robinhood Chain first, then every chain the public sources cover: TVL, DEX volume, fees, stablecoins, activity, the most-traded tokens and Robinhood Chain’s real-world-asset tokens — each figure with its source and the time it was read.</p>
   <p class="np-hero-warn">⚠️ Figures can be late, wrong or missing — a missing one is shown as missing, never as zero. Not advice, never a tip to buy. <b>Do your own research.</b></p>
 </header>
 
@@ -89,11 +89,12 @@
     </form>
 
     <div class="mkt-layout">
-      <!-- the side column: the two top lists -->
-      <aside class="mkt-side" id="mkt-side" aria-label="Top chains and top tokens">
+      <!-- the side column: the top lists (chains, tokens) and Robinhood Chain's real-world-asset tokens -->
+      <aside class="mkt-side" id="mkt-side" aria-label="Top chains, top tokens and RWAs">
         <div class="sc-tabs mkt-tabs" role="tablist" aria-label="Top lists">
           <button class="sc-tab is-on" id="mkt-tab-chains" type="button" role="tab" aria-selected="true" aria-controls="mkt-panel" data-tab="chains" data-tip="Lists the chains, ranked by the figure you pick">🔗 Top chains</button>
           <button class="sc-tab" id="mkt-tab-tokens" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="tokens" data-tip="Lists the most-traded tokens of every chain this site reads, or of the one chain you pick from its list">🪙 Top tokens</button>
+          <button class="sc-tab" id="mkt-tab-rwa" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="rwa" data-tip="Lists the real-world-asset tokens on Robinhood Chain — tokenised shares, ETFs, bond and commodity funds — each counted only on evidence, with the tokens paired with them and the stablecoins apart">🏛️ RWAs</button>
         </div>
 
         <div class="mkt-panel" id="mkt-panel" role="tabpanel" aria-labelledby="mkt-tab-chains">
@@ -184,14 +185,84 @@
             </div>
           </div>
 
+          <!-- the RWA list's controls: Robinhood Chain's real-world-asset tokens, decided on evidence by the server (lib/rwa.js) —
+               what is shown, how it is ranked, the order, the kind of asset and the issuer (market.js draws the issuers the answer names) -->
+          <div class="mkt-ctl" id="mkt-ctl-rwa" hidden>
+            <p class="mkt-note mkt-rwa-lede">Robinhood Chain’s real-world-asset tokens — shares, ETFs, bond and commodity funds — counted on evidence, never on a name. Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc. Not advice, never a tip to buy.</p>
+            <div class="mkt-group" role="group" aria-labelledby="mkt-rv-l">
+              <p class="mkt-group-l" id="mkt-rv-l">Show</p>
+              <div class="mkt-chips">
+                <button class="np-chip" type="button" aria-pressed="true" data-rview="assets" data-tip="One row per underlying asset — Tesla, the S&amp;P 500, gold — with every issuer’s token of it added together"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Top RWAs</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-rview="tokens" data-tip="One row per token, each with its issuer, how sure this site is that it is the real one, and its own figures"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>All RWA tokens</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-rview="connected" data-tip="Lists tokens that trade in a pool against an RWA, such as memecoins paired with TSLA — none of them is an RWA, and none is counted"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Connected tokens</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-rview="stables" data-tip="Lists the fiat-backed stablecoins on the chain, which are kept apart and never counted as RWAs here"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Stablecoins</button>
+              </div>
+            </div>
+            <div class="mkt-group" role="group" aria-labelledby="mkt-rs-l" id="mkt-rs-g">
+              <p class="mkt-group-l" id="mkt-rs-l">Rank by</p>
+              <div class="mkt-chips">
+                <button class="np-chip" type="button" aria-pressed="true" data-rsort="value" data-tip="Ranks by the supply read on the chain times the DEX price — not the company’s own market value"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Value on chain</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-rsort="tvl" data-tip="Ranks by what is deposited in DeFi apps on the chain, such as lending markets (DefiLlama, matched by symbol)"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>TVL in DeFi</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-rsort="liquidity" data-tip="Ranks by the USD in the DEX pools holding the token (GeckoTerminal)"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Liquidity</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-rsort="mcap" data-tip="Ranks by GeckoTerminal’s market cap; for an issuer on several chains it is every chain’s"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Market cap</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-rsort="volume" data-tip="Ranks by DEX trading over the last 24 hours in the pools holding the token"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Volume 24h</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-rsort="premium" data-tip="Ranks by how far the DEX price sits above or below its reference — one token’s price, the share’s × its multiplier (Chainlink, else Robinhood’s quote)"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Premium/discount</button>
+              </div>
+            </div>
+            <div class="mkt-group" role="group" aria-labelledby="mkt-rsc-l" id="mkt-rsc-g" hidden>
+              <p class="mkt-group-l" id="mkt-rsc-l">Rank by</p>
+              <div class="mkt-chips">
+                <button class="np-chip" type="button" aria-pressed="true" data-rsort="liquidity" data-tip="Ranks the pools pairing a token with an RWA by what the pool holds, both sides"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Pool reserve</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-rsort="volume" data-tip="Ranks the pools pairing a token with an RWA by their trading over the last 24 hours"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Volume 24h</button>
+              </div>
+            </div>
+            <div class="mkt-group" role="group" aria-labelledby="mkt-rss-l" id="mkt-rss-g" hidden>
+              <p class="mkt-group-l" id="mkt-rss-l">Rank by</p>
+              <div class="mkt-chips">
+                <button class="np-chip" type="button" aria-pressed="true" data-rsort="value" data-tip="Ranks the stablecoins by what circulates on Robinhood Chain (DefiLlama)"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Circulating</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-rsort="liquidity" data-tip="Ranks the stablecoins by the USD in the DEX pools holding them (GeckoTerminal)"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Liquidity</button>
+              </div>
+            </div>
+            <!-- Order, Kind and Issuer: one pop-down, its summary naming what is chosen (Show and Rank by stay in sight) -->
+            <details class="mkt-filters" id="mkt-rf">
+              <summary class="mkt-filters-s"><span class="mkt-filters-l">Order and filters</span> <span class="mkt-filters-now" id="mkt-rf-now">highest first · every kind · every issuer</span></summary>
+              <div class="mkt-filters-b">
+                <div class="mkt-group" role="group" aria-labelledby="mkt-rd-l">
+                  <p class="mkt-group-l" id="mkt-rd-l">Order</p>
+                  <div class="mkt-chips">
+                    <button class="np-chip" type="button" aria-pressed="true" data-rdir="desc" data-tip="Puts the biggest figure at the top"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>↓ Highest first</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rdir="asc" data-tip="Puts the smallest figure at the top; a token with no figure stays last"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>↑ Lowest first</button>
+                  </div>
+                </div>
+                <div class="mkt-group" role="group" aria-labelledby="mkt-rk-l" id="mkt-rk-g">
+                  <p class="mkt-group-l" id="mkt-rk-l">Kind</p>
+                  <div class="mkt-chips">
+                    <button class="np-chip" type="button" aria-pressed="true" data-rkind="all" data-tip="Lists every kind of real-world asset together"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>All</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rkind="stock" data-tip="Lists only tokens of company shares, depositary receipts included"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Stocks</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rkind="etf" data-tip="Lists only tokens of index and sector funds traded on an exchange"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>ETFs</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rkind="bond" data-tip="Lists only tokens of treasury, T-bill and bond funds"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Bonds &amp; T-bills</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rkind="commodity" data-tip="Lists only tokens of gold, silver, oil, copper and miners’ funds"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Commodities</button>
+                    <button class="np-chip" type="button" aria-pressed="false" data-rkind="credit" data-tip="Lists only tokens of credit and other fund shares"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Credit &amp; funds</button>
+                  </div>
+                </div>
+                <div class="mkt-group" role="group" aria-labelledby="mkt-ri-l" id="mkt-ri-g">
+                  <p class="mkt-group-l" id="mkt-ri-l">Issuer</p>
+                  <div class="mkt-chips" id="mkt-ri-c">
+                    <button class="np-chip" type="button" aria-pressed="true" data-rissuer="all" data-tip="Lists the tokens of every issuer this site counts"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>All</button>
+                  </div>
+                </div>
+              </div>
+            </details>
+          </div>
+
           <p class="mkt-cap" id="mkt-cap" aria-live="polite"></p>
           <ol class="mkt-list" id="mkt-list" aria-labelledby="mkt-tab-chains"></ol>
           <div class="mkt-more" id="mkt-more"></div>
-          <p class="mkt-foot" id="mkt-foot"></p>
+          <div class="mkt-foot" id="mkt-foot"></div>
         </div>
       </aside>
 
-      <!-- the main view: one chain or one token, in full -->
+      <!-- the main view: one chain or one token, in full (an RWA's token with its RWA facts) -->
       <section class="mkt-view" id="mkt-view" tabindex="-1" aria-label="Main view">
         <p class="tm-loading"><span class="np-live-dot" aria-hidden="true"></span> Reading Robinhood Chain…</p>
       </section>
@@ -204,7 +275,7 @@
 <footer>
   <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
   <p class="fine">
-    Market figures come from DefiLlama, L2BEAT, growthepie (CC BY 4.0), CoinGecko, CoinLore, GeckoTerminal, Dexscreener and Robinhood Chain’s public node, read by this site’s server — your browser contacts none of them. Data is best-effort from public sources — not a guarantee, not an audit, not advice. Not affiliated with Robinhood Markets, Inc.<br>
+    Market figures come from DefiLlama, L2BEAT, growthepie (CC BY 4.0), CoinGecko, CoinLore, GeckoTerminal, Dexscreener, Robinhood’s Stock Token API, Chainlink’s feed directory and Robinhood Chain’s public node, read by this site’s server — your browser contacts none of them. Data is best-effort from public sources — not a guarantee, not an audit, not advice. Not affiliated with Robinhood Markets, Inc.<br>
     Powered by <a href="https://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/sendrh_" target="_blank" rel="me noopener">X 🐦</a> 💸
   </p>
   <div class="nav-foot">

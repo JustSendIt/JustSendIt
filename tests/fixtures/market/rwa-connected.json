@@ -1,0 +1,390 @@
+{
+ "at": 1793205000000,
+ "chain": "robinhood",
+ "view": "connected",
+ "sort": "value",
+ "dir": "desc",
+ "kind": "all",
+ "issuer": "all",
+ "total": 7,
+ "rows": [
+  {
+   "address": "0x0ff9072a1ead154d92c2d2fef16afba6028ce2b2",
+   "symbol": "OPTIMUS",
+   "name": null,
+   "rwa": {
+    "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+    "symbol": "TSLA"
+   },
+   "pool": "0xa1771923045e0dade6578f8c99de248d5a6029b97fb928328f9e767674e7663a",
+   "dex": "pons-v2-dex",
+   "reserveUsd": {
+    "v": 155813.7148,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's whole reserve, both sides (GeckoTerminal)"
+   },
+   "volume24h": {
+    "v": 36869.8450833286,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's DEX volume, 24 h (GeckoTerminal)"
+   },
+   "label": "Not an RWA — paired with $TSLA",
+   "src": "geckoterminal",
+   "logo": null
+  },
+  {
+   "address": "0xa9efe2fc94de79734c03051515f48f254ce61e18",
+   "symbol": "DOGGIE",
+   "name": null,
+   "rwa": {
+    "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+    "symbol": "TSLA"
+   },
+   "pool": "0x141be60316aeb3aa7c0e0d8e4fbdc0aa78105e6e462cfc03b8a0f0c59f0bf3f8",
+   "dex": "long-xyz",
+   "reserveUsd": {
+    "v": 84999.6222,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's whole reserve, both sides (GeckoTerminal)"
+   },
+   "volume24h": {
+    "v": 1349.2279997899,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's DEX volume, 24 h (GeckoTerminal)"
+   },
+   "label": "Not an RWA — paired with $TSLA",
+   "src": "geckoterminal",
+   "logo": null
+  },
+  {
+   "address": "0x24117e8e9312223e8fe02078c1ef8077e9b66ba3",
+   "symbol": "TSLR",
+   "name": null,
+   "rwa": {
+    "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+    "symbol": "TSLA"
+   },
+   "pool": "0x7bba397eba6a5031c60df68ab0885f5de37fce30e9607bedf53c90880a5fce26",
+   "dex": "bankr-robinhood",
+   "reserveUsd": {
+    "v": 60629.6348,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's whole reserve, both sides (GeckoTerminal)"
+   },
+   "volume24h": {
+    "v": 898.2415478074,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's DEX volume, 24 h (GeckoTerminal)"
+   },
+   "label": "Not an RWA — paired with $TSLA",
+   "src": "geckoterminal",
+   "logo": null
+  },
+  {
+   "address": "0xb5d553cc06f9b3569731b7a74fc269b939841e18",
+   "symbol": "OPTIMUS",
+   "name": null,
+   "rwa": {
+    "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+    "symbol": "TSLA"
+   },
+   "pool": "0xef3422f03f45e33527e9837a30328c36368f0d5b10455d4098760ba75c18d4c3",
+   "dex": "long-xyz",
+   "reserveUsd": {
+    "v": 45899.8519,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's whole reserve, both sides (GeckoTerminal)"
+   },
+   "volume24h": {
+    "v": 1562.6704482216,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's DEX volume, 24 h (GeckoTerminal)"
+   },
+   "label": "Not an RWA — paired with $TSLA",
+   "src": "geckoterminal",
+   "logo": null
+  },
+  {
+   "address": "0xa605875d620753f4fb06024b788b2b6552a81e18",
+   "symbol": "FTR",
+   "name": null,
+   "rwa": {
+    "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+    "symbol": "TSLA"
+   },
+   "pool": "0x42b961e421c08741fe9b25dda1d1090d42c7f782a0d73e099b4248d67357a612",
+   "dex": "long-xyz",
+   "reserveUsd": {
+    "v": 36819.8026,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's whole reserve, both sides (GeckoTerminal)"
+   },
+   "volume24h": {
+    "v": 2061.6193129116,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's DEX volume, 24 h (GeckoTerminal)"
+   },
+   "label": "Not an RWA — paired with $TSLA",
+   "src": "geckoterminal",
+   "logo": null
+  },
+  {
+   "address": "0xe8a45505c70a33cfc30383b12092afb758fe1e18",
+   "symbol": "ROBOTAXI",
+   "name": null,
+   "rwa": {
+    "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+    "symbol": "TSLA"
+   },
+   "pool": "0x90b6675dc859215228e86636f94ab19cc260d1c9ca919b117a5e486b6b2565b9",
+   "dex": "long-xyz",
+   "reserveUsd": {
+    "v": 20827.3112,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's whole reserve, both sides (GeckoTerminal)"
+   },
+   "volume24h": {
+    "v": 17921.6375883477,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's DEX volume, 24 h (GeckoTerminal)"
+   },
+   "label": "Not an RWA — paired with $TSLA",
+   "src": "geckoterminal",
+   "logo": null
+  },
+  {
+   "address": "0x1303f5d0686349e4e34e74ecac77b994fb542162",
+   "symbol": "Robotaxi",
+   "name": null,
+   "rwa": {
+    "address": "0x322f0929c4625ed5bad873c95208d54e1c003b2d",
+    "symbol": "TSLA"
+   },
+   "pool": "0xf741d39c5980a86ffe049bceb7b4c2eb58b59d3b",
+   "dex": "pons-v2",
+   "reserveUsd": {
+    "v": 4446.7903,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's whole reserve, both sides (GeckoTerminal)"
+   },
+   "volume24h": {
+    "v": 13437.4925911065,
+    "src": "geckoterminal",
+    "at": 1793205000000,
+    "label": "the pool's DEX volume, 24 h (GeckoTerminal)"
+   },
+   "label": "Not an RWA — paired with $TSLA",
+   "src": "geckoterminal",
+   "logo": null
+  }
+ ],
+ "belowFloor": 0,
+ "unreadReserve": 0,
+ "floor": 1000,
+ "issuers": [
+  {
+   "key": "rhj",
+   "name": "Robinhood Assets (Jersey) Limited (RHJ)",
+   "count": 21
+  },
+  {
+   "key": "ondo",
+   "name": "Ondo Global Markets",
+   "count": 15
+  },
+  {
+   "key": "anchored",
+   "name": "Anchored (aStock)",
+   "count": 4
+  },
+  {
+   "key": "st0x",
+   "name": "ST0x (S01 Issuer GmbH)",
+   "count": 7
+  },
+  {
+   "key": "midas",
+   "name": "Midas",
+   "count": 1
+  }
+ ],
+ "totals": {
+  "value": {
+   "v": 106644045.12403426,
+   "src": "site",
+   "at": 1793199600000,
+   "label": "value on chain of the 25 RWA tokens counted — 8 without one are left out",
+   "missing": 8
+  },
+  "liquidity": {
+   "v": 46202736.159673795,
+   "src": "geckoterminal",
+   "at": 1793205000000,
+   "label": "GeckoTerminal's liquidity figures of the RWA tokens counted, added up — 9 without one are left out — 4 pools pair two of these tokens",
+   "missing": 9,
+   "pairPools": 4
+  },
+  "tvl": {
+   "v": 40159813.105440006,
+   "src": "defillama",
+   "at": 1793201400000,
+   "label": "deposited in DeFi apps on Robinhood Chain (DefiLlama, matched by symbol) — not read: Longbow (upstream 404), so it may be low — 11 without one are left out",
+   "missing": 11,
+   "missingApps": [
+    "longbow"
+   ]
+  },
+  "mcap": {
+   "v": 105645696.56025593,
+   "src": "geckoterminal",
+   "at": 1793199600000,
+   "label": "market caps summed (GeckoTerminal), this chain's only — 8 without one are left out",
+   "missing": 8
+  },
+  "volume24h": {
+   "v": 60749839.330517605,
+   "src": "geckoterminal",
+   "at": 1793205000000,
+   "label": "GeckoTerminal's 24 h volume figures of the RWA tokens counted, added up — 9 without one are left out — less the 24 h volume of the 4 pools pairing two of these tokens, which is in both tokens' figures — a pool pairing two of these tokens that this site has not read may be in both tokens' figures",
+   "missing": 9,
+   "pairPools": 4
+  },
+  "count": 25,
+  "notConfirmed": 23,
+  "stables": {
+   "v": 711728847.7855448,
+   "src": "defillama",
+   "at": 1793201400000,
+   "label": "fiat-backed stablecoins circulating on Robinhood Chain (DefiLlama) — apart from the RWA totals"
+  },
+  "l2beat": {
+   "rwaPublic": {
+    "v": 166200819.82714844,
+    "src": "l2beat",
+    "at": 1793199600000,
+    "label": "L2BEAT's count of real-world assets on Robinhood Chain — its own measure, never mixed with this site's sums"
+   },
+   "rwaRestricted": {
+    "v": 0,
+    "src": "l2beat",
+    "at": 1793199600000,
+    "label": "L2BEAT's count of real-world assets on Robinhood Chain — its own measure, never mixed with this site's sums (restricted)"
+   }
+  }
+ },
+ "reads": {
+  "registry": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "prices": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "actions": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "deviations": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "chain": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "tvl": {
+   "at": 1793201400000,
+   "ok": false,
+   "apps": 5,
+   "why": "DefiLlama's per-app deposits — not read: Longbow (upstream 404)"
+  },
+  "stables": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "chainlink": {
+   "at": 1793201400000,
+   "ok": true
+  },
+  "roles": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "gt": {
+   "at": 1793205000000,
+   "ok": true
+  },
+  "connected": {
+   "at": 1793201400000,
+   "ok": false,
+   "failed": 11,
+   "why": "GeckoTerminal could not be read for 11 of 12 RWAs' own pools (upstream 404) — tried again on the next runs"
+  }
+ },
+ "definitions": {
+  "rwa": "An RWA here is a token an identified issuer issues to stand for a real-world asset (a share, an ETF, a bond or T-bill fund, a commodity fund, a credit or fund share), counted only on evidence — Robinhood's registry and the token's code on the chain, or this site's list of other issuers checked on the chain — never on a name.",
+  "value": "Value on chain: the token's supply read on the chain times its DEX price — not the company's market value.",
+  "tvl": "TVL in DeFi: USD of the token deposited in DeFi apps on Robinhood Chain (lending markets, vaults), from DefiLlama and matched by symbol — DEX pools are counted under Liquidity instead.",
+  "liquidity": "Liquidity: GeckoTerminal's figure for the token across its DEX pools on Robinhood Chain (its token read) — GeckoTerminal's own total, which comes to less than the pools' whole reserves; every token is ranked on that one figure, and a total adds them up.",
+  "mcap": "Market cap: GeckoTerminal's (CoinGecko's) figure — for an issuer on several chains (Ondo, Anchored) it is every chain's, kept out of the market-cap ranking and never added to this chain's — and never mixed with the value on chain.",
+  "volume": "Volume 24h: GeckoTerminal's figure for the token's DEX trading over the last 24 hours, across its pools on Robinhood Chain (its token read). A total takes a pool pairing two RWAs once when this site has read that pool (the most-traded pools, and the top RWAs' own pools); one it has not read may be in both tokens' figures, and the total says so.",
+  "premium": "Premium or discount: the DEX price against the token's reference price — the price of one token, which is the underlying's price times the token's multiplier: Chainlink's feed read on the chain, else Robinhood's token quote (multiplier applied). Stock markets close while DEX pools trade around the clock.",
+  "connected": "Connected tokens: tokens with a DEX pool against an RWA (a memecoin paired with TSLA) — not RWAs, listed apart and never counted.",
+  "stables": "Fiat-backed stablecoins are listed apart and not counted as RWAs here — DefiLlama and rwa.xyz count stablecoins apart."
+ },
+ "notes": [
+  "Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc. No Robinhood logos or artwork are used.",
+  "Not advice, never a tip to buy. Do your own research.",
+  "How a token counts as an RWA here: it is in Robinhood's Stock Token registry and its code runs from Robinhood's registry on the chain (\"confirmed\"); or the registry lists it and the chain has not been read yet (\"issuer-listed\"); or it is on this site's list of other issuers, confirmed only once its own fingerprint is read on the chain. A name or a symbol never qualifies a token.",
+  "Stablecoins and tokens merely paired with an RWA are listed apart and never counted.",
+  "Every row here is NOT an RWA: a token with a DEX pool against one. Pools from $1,000 of reserve are listed; 0 pools below that are left out.",
+  "Ranked by the pool's reserve. Read from the most-traded pools we keep and each top RWA's own pools (GeckoTerminal).",
+  "TVL in DeFi is summed over the apps DefiLlama lists with the largest deposits on the chain (Catch Exchange, Solon Stocks, Morpho Blue, Grove Finance, Spark Savings); DEX pools, exchanges and apps that deposit into other apps are left out so nothing is counted twice."
+ ],
+ "sources": [
+  {
+   "id": "robinhood",
+   "name": "Robinhood's Stock Token API (registry, quotes, corporate actions, price deviations)",
+   "href": "https://docs.robinhood.com/chain/stock-token-apis/"
+  },
+  {
+   "id": "rpc",
+   "name": "Robinhood Chain (its public node), read by this site",
+   "href": "https://docs.robinhood.com/chain/"
+  },
+  {
+   "id": "chainlink",
+   "name": "Chainlink price feeds (its public directory; each feed read on the chain)",
+   "href": "https://docs.chain.link/data-feeds/tokenized-equity-feeds/robinhood"
+  },
+  {
+   "id": "defillama",
+   "name": "DefiLlama (per-app deposits, stablecoins)",
+   "href": "https://defillama.com"
+  },
+  {
+   "id": "geckoterminal",
+   "name": "GeckoTerminal (prices, market caps, pools)",
+   "href": "https://www.geckoterminal.com"
+  },
+  {
+   "id": "l2beat",
+   "name": "L2BEAT (its count of real-world assets on the chain)",
+   "href": "https://l2beat.com/scaling/projects/robinhood"
+  }
+ ]
+}

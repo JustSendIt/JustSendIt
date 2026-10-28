@@ -1,0 +1,67 @@
+{
+ "name": "Catch Exchange",
+ "category": "RWA",
+ "chainTvls": {
+  "Robinhood Chain": {
+   "tvl": [
+    {
+     "date": 1793145600,
+     "totalLiquidityUSD": 2463
+    },
+    {
+     "date": 1793179943,
+     "totalLiquidityUSD": 2459
+    }
+   ],
+   "tokensInUsd": [
+    {
+     "date": 1793145600,
+     "tokens": {
+      "GLD": 1770.82812,
+      "SPY": 617.70333,
+      "NVDA": 9.91634,
+      "SGOV": 10.42769,
+      "SLV": 11.39711,
+      "WETH": 9.7878,
+      "PONS": 3.4752,
+      "SPCX": 10.18401,
+      "TSLA": 11.58137,
+      "EWY": 8.68659
+     }
+    },
+    {
+     "date": 1793179943,
+     "tokens": {
+      "GLD": 1765.48135,
+      "SPY": 618.3171,
+      "NVDA": 10.0125,
+      "EWY": 8.92191,
+      "SGOV": 10.42769,
+      "SLV": 11.30438,
+      "WETH": 9.86606,
+      "PONS": 3.8094,
+      "SPCX": 10.23251,
+      "TSLA": 11.62681
+     }
+    }
+   ],
+   "tokens": [
+    {
+     "date": 1793179943,
+     "tokens": {
+      "GLD": 4.75269,
+      "SPY": 0.80231,
+      "NVDA": 0.04558,
+      "EWY": 0.05473,
+      "SGOV": 0.10356,
+      "SLV": 0.23181,
+      "WETH": 0.00417,
+      "PONS": 12.99724,
+      "SPCX": 0.06831,
+      "TSLA": 0.0284
+     }
+    }
+   ]
+  }
+ }
+}

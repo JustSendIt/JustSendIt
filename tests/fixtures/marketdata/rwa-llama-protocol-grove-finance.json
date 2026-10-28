@@ -1,0 +1,16 @@
+{
+ "name": "Grove Finance",
+ "category": "Onchain Capital Allocator",
+ "chainTvls": {
+  "Robinhood Chain": {
+   "tokensInUsd": [
+    {
+     "date": 1793189519,
+     "tokens": {
+      "USDG": 15112845.10156
+     }
+    }
+   ]
+  }
+ }
+}

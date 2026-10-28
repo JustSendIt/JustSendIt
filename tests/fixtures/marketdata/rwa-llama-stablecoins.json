@@ -1,0 +1,271 @@
+{
+ "peggedAssets": [
+  {
+   "id": "1",
+   "name": "Tether",
+   "symbol": "USDT",
+   "gecko_id": "tether",
+   "pegType": "peggedUSD",
+   "priceSource": "defillama",
+   "pegMechanism": "fiat-backed",
+   "circulating": {
+    "peggedUSD": 181171522733.18787
+   },
+   "chainCirculating": {
+    "Ethereum": {
+     "current": {
+      "peggedUSD": 71853338858.26292
+     },
+     "circulatingPrevDay": {
+      "peggedUSD": 72191264211.92546
+     },
+     "circulatingPrevWeek": {
+      "peggedUSD": 72865744849.03113
+     },
+     "circulatingPrevMonth": {
+      "peggedUSD": 73257656052.57886
+     }
+    }
+   },
+   "chains": [
+    "Ethereum"
+   ],
+   "price": 0.9987779471634382
+  },
+  {
+   "id": "146",
+   "name": "Ethena USDe",
+   "symbol": "USDe",
+   "gecko_id": "ethena-usde",
+   "pegType": "peggedUSD",
+   "priceSource": "coingecko",
+   "pegMechanism": "crypto-backed",
+   "circulating": {
+    "peggedUSD": 4533311131.481769
+   },
+   "chainCirculating": {
+    "Robinhood Chain": {
+     "current": {
+      "peggedUSD": 359595574.6296693
+     },
+     "circulatingPrevDay": {
+      "peggedUSD": 368772525.0464951
+     },
+     "circulatingPrevWeek": {
+      "peggedUSD": 362598547.4866273
+     },
+     "circulatingPrevMonth": {
+      "peggedUSD": 347699112.58545834
+     }
+    },
+    "Ethereum": {
+     "current": {
+      "peggedUSD": 2442878267.1989164
+     },
+     "circulatingPrevDay": {
+      "peggedUSD": 2466143087.367487
+     },
+     "circulatingPrevWeek": {
+      "peggedUSD": 2454910920.4879193
+     },
+     "circulatingPrevMonth": {
+      "peggedUSD": 2808842803.0233903
+     }
+    }
+   },
+   "chains": [
+    "Ethereum",
+    "Robinhood Chain"
+   ],
+   "price": 0.9992197162712346
+  },
+  {
+   "id": "286",
+   "name": "Global Dollar",
+   "symbol": "USDG",
+   "gecko_id": "global-dollar",
+   "pegType": "peggedUSD",
+   "priceSource": "coingecko",
+   "pegMechanism": "fiat-backed",
+   "circulating": {
+    "peggedUSD": 3055524516.6817307
+   },
+   "chainCirculating": {
+    "Robinhood Chain": {
+     "current": {
+      "peggedUSD": 711728847.7855448
+     },
+     "circulatingPrevDay": {
+      "peggedUSD": 679610766.3299747
+     },
+     "circulatingPrevWeek": {
+      "peggedUSD": 689799767.6780056
+     },
+     "circulatingPrevMonth": {
+      "peggedUSD": 684531376.7561313
+     }
+    },
+    "Ethereum": {
+     "current": {
+      "peggedUSD": 324925509.39322954
+     },
+     "circulatingPrevDay": {
+      "peggedUSD": 320730723.3304507
+     },
+     "circulatingPrevWeek": {
+      "peggedUSD": 314054030.0572738
+     },
+     "circulatingPrevMonth": {
+      "peggedUSD": 268055793.8478387
+     }
+    }
+   },
+   "chains": [
+    "Robinhood Chain",
+    "Ethereum"
+   ],
+   "price": 0.9997930470059471
+  },
+  {
+   "id": "336",
+   "name": "United Stables",
+   "symbol": "U",
+   "gecko_id": "united-stables",
+   "pegType": "peggedUSD",
+   "priceSource": "coingecko",
+   "pegMechanism": "crypto-backed",
+   "circulating": {
+    "peggedUSD": 1626844772.7889645
+   },
+   "chainCirculating": {
+    "Robinhood Chain": {
+     "current": {
+      "peggedUSD": 29967044.07957411
+     },
+     "circulatingPrevDay": {
+      "peggedUSD": 29967044.07957411
+     },
+     "circulatingPrevWeek": {
+      "peggedUSD": 29967044.07957411
+     },
+     "circulatingPrevMonth": {
+      "peggedUSD": 29967044.07957411
+     }
+    },
+    "Ethereum": {
+     "current": {
+      "peggedUSD": 465636014.2564359
+     },
+     "circulatingPrevDay": {
+      "peggedUSD": 456146413.67176104
+     },
+     "circulatingPrevWeek": {
+      "peggedUSD": 424181779.7511081
+     },
+     "circulatingPrevMonth": {
+      "peggedUSD": 341772858.0349438
+     }
+    }
+   },
+   "chains": [
+    "Ethereum",
+    "Robinhood Chain"
+   ],
+   "price": 0.9988948100204036
+  },
+  {
+   "id": "340",
+   "name": "Multipli rwaUSDi",
+   "symbol": "rwaUSDi",
+   "gecko_id": null,
+   "pegType": "peggedUSD",
+   "priceSource": "defillama",
+   "pegMechanism": "crypto-backed",
+   "circulating": {
+    "peggedUSD": 487092831.50618035
+   },
+   "chainCirculating": {
+    "Robinhood Chain": {
+     "current": {
+      "peggedUSD": 3937314.4968042406
+     },
+     "circulatingPrevDay": {
+      "peggedUSD": 3937314.4968042406
+     },
+     "circulatingPrevWeek": {
+      "peggedUSD": 3937314.4968042406
+     },
+     "circulatingPrevMonth": {
+      "peggedUSD": 3937314.4968042406
+     }
+    },
+    "Ethereum": {
+     "current": {
+      "peggedUSD": 151557615.419103
+     },
+     "circulatingPrevDay": {
+      "peggedUSD": 151557615.419103
+     },
+     "circulatingPrevWeek": {
+      "peggedUSD": 151557615.419103
+     },
+     "circulatingPrevMonth": {
+      "peggedUSD": 151557615.419103
+     }
+    }
+   },
+   "chains": [
+    "Ethereum",
+    "Robinhood Chain"
+   ],
+   "price": 0.9992828926901686
+  },
+  {
+   "id": "432",
+   "name": "Multipli rwaUSD",
+   "symbol": "rwaUSD",
+   "gecko_id": "rwausd",
+   "pegType": "peggedUSD",
+   "priceSource": "defillama",
+   "pegMechanism": "crypto-backed",
+   "circulating": {
+    "peggedUSD": 1042608.7728316138
+   },
+   "chainCirculating": {
+    "Robinhood Chain": {
+     "current": {
+      "peggedUSD": 10
+     },
+     "circulatingPrevDay": {
+      "peggedUSD": 10
+     },
+     "circulatingPrevWeek": {
+      "peggedUSD": 10
+     },
+     "circulatingPrevMonth": {
+      "peggedUSD": 10
+     }
+    },
+    "Ethereum": {
+     "current": {
+      "peggedUSD": 42555.77283161376
+     },
+     "circulatingPrevDay": {
+      "peggedUSD": 42555.77283161376
+     },
+     "circulatingPrevWeek": {
+      "peggedUSD": 42555.77283161376
+     },
+     "circulatingPrevMonth": {
+      "peggedUSD": 42601.42507961377
+     }
+    }
+   },
+   "chains": [
+    "Ethereum",
+    "Robinhood Chain"
+   ],
+   "price": 1
+  }
+ ]
+}
