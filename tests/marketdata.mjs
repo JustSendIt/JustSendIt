@@ -1315,11 +1315,20 @@ try {
       /not read: registry \(upstream 503\)/.test(rf.note) && tF && tF.confidence === 'confirmed' && tF.multiplier.v === 1 && AF.reads.registry.ok === false && /could not be read at .* \(upstream 503\) — the last good read, from .*, is shown/.test(AF.reads.registry.why) && st('rhj_assets').data.assets.length === FR.assets.assets.length, brief([rf.note, AF.reads.registry]));
     // the site's own chain reads waiting: the chain part stands aside (asks the node nothing, keeps what it read), the rest still reads
     const chainBefore = JSON.stringify(st('rwa_chain')), batchesBefore = rnode.batches.length;
-    const mdY = MD.createMarketData({ db: dbR, now: () => rclock, outboundTake: rtake, rpcBatch: rwaRpc, rpcBusy: () => 'the site\'s own chain reads are queued', urls: URLS, bgWaitMs: 1000, askWaitMs: 1000 });
+    const ySleeps = [];
+    const mdY = MD.createMarketData({ db: dbR, now: () => rclock, outboundTake: rtake, rpcBatch: rwaRpc, rpcBusy: () => 'the site\'s own chain reads are queued', urls: URLS, bgWaitMs: 1000, askWaitMs: 1000, sleep: async (ms) => { ySleeps.push(ms); } });
     rclock += 30 * 60e3; const ry = await mdY.runJob('rwa');
+    check('RWA: a chain batch that yields waits for the site\'s own reads and asks again — 20 s at a time, at most 3 minutes a run — before the part stands aside',
+      ySleeps.length === 9 && ySleeps.every((ms) => ms === 20000), JSON.stringify(ySleeps));
     check('RWA: while the site\'s own chain reads wait, the job\'s chain part stands aside — no node read, the chain state it holds kept as it was (its record says why, and the answers\' reads.chain too) — and the run still reads Robinhood\'s quotes, and says why',
       ry.ok && /chain stood aside: yielded: the site's own chain reads are queued/.test(ry.note) && /^read: [^;]*quotes/.test(ry.note) && rnode.batches.length === batchesBefore && JSON.stringify(Object.assign({}, st('rwa_chain'), { failAt: undefined, failWhy: undefined })) === JSON.stringify(Object.assign(JSON.parse(chainBefore), { failAt: undefined, failWhy: undefined }))
       && /^stood aside: yielded/.test(st('rwa_chain').failWhy) && mdR.rwa({}).body.reads.chain.ok === false && /could not be read at .* \(stood aside: yielded/.test(mdR.rwa({}).body.reads.chain.why), ry.note);
+    // …and when the site's own reads clear while it waits, the chain part reads after all
+    let zChecks = 0; const zSleeps = [], zBefore = rnode.batches.length;
+    const mdZ = MD.createMarketData({ db: dbR, now: () => rclock, outboundTake: rtake, rpcBatch: rwaRpc, rpcBusy: () => (++zChecks <= 2 ? 'the site\'s own chain reads are queued' : false), urls: URLS, bgWaitMs: 1000, askWaitMs: 1000, sleep: async (ms) => { zSleeps.push(ms); } });
+    rclock += 30 * 60e3; const rz = await mdZ.runJob('rwa');
+    check('  ...and once the site\'s own reads clear, the waiting batch reads: the chain part does not stand aside, and the node is asked',
+      zSleeps.length === 2 && rnode.batches.length > zBefore && !/chain stood aside/.test(rz.note), rz.note + ' ' + JSON.stringify(zSleeps));
     const memoN = () => [...mdR._test.memo.keys()].filter((k) => k.startsWith('rwa|base')).length;
     mdR._test.memo.clear(); mdR.rwa({}); mdR.rwa({ view: 'tokens', sort: 'tvl' }); mdR.rwaToken({ address: TSLA }); mdR.rwaRowFor(TSLA);
     check('RWA: the rows are built once per change of the data (memoised, at most 15 s) — the views, one token\'s facts and the token view\'s key all read the same build', memoN() === 1);
