@@ -122,7 +122,7 @@
         table({ days: ver.days, today: ver.today, caption: 'Verified members by the day their wallet last passed the check', col: 'Of today’s verified members, passed by this day' })
       : '<p class="ss-empty">No member’s wallet has passed the check yet, so there is no line to draw.</p>') +
       (ver.undated > 0 ? '<p class="ss-undated">' + whole(ver.undated) + ' verified ' + word(ver.undated, 'member has', 'members have') + ' no recorded day and ' + word(ver.undated, 'is', 'are') + ' not in the line.</p>' : '');
-    var w2 = 'Members whose wallet passed the on-chain holder check, the check that lets an account post — on the line, each counted from the day their wallet last passed the on-chain holder check.';
+    var w2 = 'Members whose wallet passed the on-chain holder check (the check that lets an account post). On the line, each is counted from the day their wallet last passed it.';
 
     // 3. Views: every page opened by a person since counting began; the chart, the views each day
     var c3 = vws.days && vws.days.length

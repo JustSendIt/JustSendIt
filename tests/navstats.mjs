@@ -84,8 +84,8 @@ check('the pop-up opens in FullView as a centred sheet with its heading, from GE
     && /root\.classList\.toggle\('is-sheet', o\.size === 'sheet'\);/.test(APP) && /\.cf\.is-sheet \.cf-dialog \{ max-width: 1200px; height: auto; max-height: 100%; \}/.test(CSS));
 check('  ...CSP-safe and library-free: no inline handler, no <script>, no style attribute, no outside address; the charts are SVG it draws itself',
   !/\son[a-z]+\s*=\s*\\?["']/i.test(ssCode) && !/<script/i.test(ssCode) && !/style="/.test(ssCode) && !/https?:\/\//.test(ssCode) && /<svg class="ss-svg" viewBox="0 0 ' \+ W \+ ' ' \+ H \+ '" preserveAspectRatio="none" role="img"/.test(SS));
-check('  ...honest copy: when counting began, from the data; the verified line "each counted from the day their wallet last passed the on-chain holder check", and never the count on past days; the foot line and the Wall link',
-  /'Since ' \+ began\(vis\.since\)/.test(SS) && /'Pages opened by people since ' \+ began\(now\.viewsSince\)/.test(SS) && /each counted from the day their wallet last passed the on-chain holder check/.test(SS)
+check('  ...honest copy: when counting began, from the data; the verified line "each is counted from the day their wallet last passed it", and never the count on past days; the foot line and the Wall link',
+  /'Since ' \+ began\(vis\.since\)/.test(SS) && /'Pages opened by people since ' \+ began\(now\.viewsSince\)/.test(SS) && /Members whose wallet passed the on-chain holder check \(the check that lets an account post\)\. On the line, each is counted from the day their wallet last passed it\./.test(SS)
     && /it is not a record of the count on past days/.test(SS) && /Counted by this site from its own records — no tracker, no third party\./.test(SS) && /<a class="ss-wall" href="\/wall">See who’s posting on the Wall →<\/a>/.test(SS)
     && !/\b\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/.test(ssCode));   // no date written in: every date comes from the answer
 check('  ...a day of the verified line, and its table\'s column, say what it is ("5 of today\'s verified members had last passed the check by then"), never "5 verified members" on a past day',
@@ -551,7 +551,7 @@ else if (!CHROME) {
           JSON.stringify({ y: [c1.y, c2.y, c3.y], x: c1.x, w: s.cards.map((c) => [c.svgW, c.cardW]) }));
         check('  ...what each counts, in a sentence: when counting began (from the data), that the last 90 days are shown, and that the verified line is each member from the day their wallet last passed — not the count on past days',
           /^Right now counts the people with the site open in the last minute or so; the chart counts the different people who opened a page each day\.$/.test(c1.what) && c1.meta.includes('Since ' + longDay(SEED.first) + ', when the site began counting') && /the last 90 days shown/.test(c1.meta)
-            && /each counted from the day their wallet last passed the on-chain holder check\.$/.test(c2.what) && /it is not a record of the count on past days/.test(c2.meta) && /1 verified member has no recorded day and is not in the line\./.test(c2.meta)
+            && /On the line, each is counted from the day their wallet last passed it\.$/.test(c2.what) && /it is not a record of the count on past days/.test(c2.meta) && /1 verified member has no recorded day and is not in the line\./.test(c2.meta)
             && c3.what.startsWith('Pages opened by people since ' + longDay(SEED.first) + ', when the site began counting') && /summary|Show the numbers/.test(c1.summary) && c1.sumTip,
           JSON.stringify([c1.what, c1.meta, c2.what, c2.meta, c3.what]).slice(0, 500));
         check('  ...the foot: the way to the Wall, and how the numbers were counted', s.wall === '/wall' && /^Counted by this site from its own records — no tracker, no third party\./.test(s.note));
