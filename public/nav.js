@@ -130,13 +130,20 @@
     function stillFits() { return nav.classList.contains('is-compact') ? !overflowing() : rowFits(); }
     function fit() {
       var wasCompact = nav.classList.contains('is-compact');
-      var y0 = window.pageYOffset, h0 = nav.getBoundingClientRect().height;   // where the page was, and the bar's height (see the end)
+      // scroll anchoring off and back on: on <html> and on <body> both — Chrome went on following the row's tries with it off
+      // on <html> alone (/market's Chain button moved 42px under a double-click at 1280px)
+      var html = document.documentElement, body = document.body || html, anchor0 = [html.style.overflowAnchor, body.style.overflowAnchor];
+      var anchoring = function (on) { html.style.overflowAnchor = on ? anchor0[0] : 'none'; body.style.overflowAnchor = on ? anchor0[1] : 'none'; };
+      void nav.offsetHeight;   // the bar laid out as whatever called this left it, which the page follows as it always would…
+      var y0 = window.pageYOffset, before = nav.className;
+      anchoring(false);   // …but the ways the row is tried are not changes for the page to follow (see the end)
       nav.classList.add('is-measuring');   // no transitions while the classes flip, or the closed menu flashes
       nav.classList.remove('is-compact');
       TIERS.forEach(function (t) { nav.classList.remove(t); });
       /* The links are the bar's main job, so on a wide screen the row is tried three times before it collapses: as it
          is, then without the new numbers beside the live count (.is-snug: the verified members and the views), then
-         without the live count and the Send Power figures too (.is-tight). Below 900px it never fits. */
+         without the live count and the Send Power figures too (.is-tight — where the pill stays as a 📊 button alone, the
+         row's only way in to the numbers pop-up, and is measured with the row). Below 900px it never fits. */
       var compact = true;
       if (window.innerWidth >= 900) {
         if (rowFits()) compact = false;
@@ -149,14 +156,22 @@
       if (compact) nav.classList.add('is-compact'); else close();
       // still too wide (a long name, a big level, a phone): step down one tier at a time until the row fits
       if (compact) for (var i = 0; i < TIERS.length && overflowing(); i++) nav.classList.add(TIERS[i]);
+      /* Measuring lays the row out as many as four ways in one go, and the browser's scroll anchoring followed each passing
+         height: on a page scrolled down, a re-fit (a resize, the cluster changing size) left it 42px higher for every way
+         tried — /market's Chain drop-down moved out from under a double-click. So anchoring is off while the row is tried
+         (above), and the page is never scrolled from here: a scroll of ours cancelled the browser's own glide to a #section
+         on a fresh load (/about#og-rules stopped near the top). Once the bar's form is chosen it goes back, for a moment,
+         to the form the page last saw (still not followed), anchoring comes on again, and the one real change is made:
+         the page follows that, the browser's own way — keeping what is on screen in place while scrolled down, and a glide
+         under way going where it was going. At the very top there is nothing to keep in view. */
+      if (y0 > 0) {
+        var after = nav.className;
+        nav.className = before + ' is-measuring'; void nav.offsetHeight;
+        anchoring(true);
+        nav.className = after; void nav.offsetHeight;
+      } else anchoring(true);
       void menu.offsetHeight;   // settle the final state with transitions still off…
       nav.classList.remove('is-measuring');   // …so switching them back on animates nothing
-      /* Measuring lays the row out as many as four ways in one go, and the browser's scroll anchoring follows each passing
-         height: on a page scrolled down, a re-fit (a resize, the cluster changing size) left it 42px higher for every way
-         tried — /market's Chain drop-down moved out from under a double-click. The page goes back where it was, moved only
-         by what the bar's height really changed (at the very top there is nothing to keep in view). */
-      var h1 = nav.getBoundingClientRect().height, want = y0 > 0 ? Math.max(0, y0 + h1 - h0) : 0;
-      if (Math.abs(window.pageYOffset - want) >= 1) { try { window.scrollTo({ top: want, left: window.pageXOffset, behavior: 'instant' }); } catch (e) { window.scrollTo(window.pageXOffset, want); } }
       if (compact !== wasCompact) syncNavHeight();
       if (isOpen()) fitMenu();   // the bar changed under an open menu: its room and its columns with it
     }
@@ -207,9 +222,14 @@
        and the lifetime page views:   ● 3 Sending it · ✓ 6 verified · 2.8K views
        All three come from /api/presence (the server reads them from its own records; see siteTotals in server.js). The new
        two (.nav-live-more) are the first thing a short bar lets go of (.is-snug, in fit() above); the count goes with
-       .is-tight, as before. A press opens the numbers pop-up — each one over time (owner: "When users click on this section
-       pull up a popup that shows a graph over time of all three of these stats") — from public/sitestats.js, fetched on the
-       first press so this file stays light. The pop-up links to the Wall, where the pill used to go. */
+       .is-tight, as before — in the open row of links the pill stays then as a 📊 button alone (.nav-live-ico), since the
+       row has no menu to carry 📊 Site numbers (a 1920px screen signed in, 1620–1780 signed out, had no way in at all).
+       Until the first answer the numbers are "·", in the room the real ones take (styles.css), so the bar is measured at
+       about its real width and the new numbers do not show and then vanish; the first answer is measured again as a
+       whole, so a bar that has room for them after all shows them. A press opens the numbers pop-up — each one over time
+       (owner: "When users click on this section pull up a popup that shows a graph over time of all three of these stats")
+       — from public/sitestats.js, fetched on the first press so this file stays light. The pop-up links to the Wall, where
+       the pill used to go. */
     var notif = document.getElementById('nav-notif');
     var host = notif || document.getElementById('nav-auth');
     if (host && host.parentNode && !document.getElementById('nav-live')) {
@@ -219,7 +239,7 @@
       live.setAttribute('aria-haspopup', 'dialog');
       live.setAttribute('data-tip', STATS_TIP);
       live.setAttribute('aria-label', 'People Sending it right now, verified members and page views: the numbers are on their way');
-      live.innerHTML = '<span class="nav-live-dot" aria-hidden="true"></span><b class="nav-live-n">·</b><span class="nav-live-lbl">Sending&nbsp;it</span>' +
+      live.innerHTML = '<span class="nav-live-ico" aria-hidden="true">📊</span><span class="nav-live-dot" aria-hidden="true"></span><b class="nav-live-n">·</b><span class="nav-live-lbl">Sending&nbsp;it</span>' +
         '<span class="nav-live-more"><span class="nav-live-sep" aria-hidden="true">·</span>' +
           '<span class="nav-live-part"><span class="nav-live-tick" aria-hidden="true">✓</span><b class="nav-live-vn">·</b><span class="nav-live-word">verified</span></span>' +
           '<span class="nav-live-sep" aria-hidden="true">·</span>' +
@@ -250,7 +270,9 @@
         live.setAttribute('aria-label', j.active + ' ' + (j.active === 1 ? 'person' : 'people') + ' Sending it right now, ' +
           (known(j.verified) ? whole(j.verified) + ' verified member' + (j.verified === 1 ? '' : 's') : 'verified members not known just now') + ', ' +
           (known(j.views) ? whole(j.views) + ' page view' + (j.views === 1 ? '' : 's') + (j.viewsSince ? ' since ' + longDay(j.viewsSince) : '') : 'page views not known just now'));
+        var first = !live.classList.contains('is-live');
         live.classList.add('is-live');
+        if (first) fitSoon();   // the real numbers in place of the "·": measured again from the widest way, not only if the bar no longer holds
         try { document.dispatchEvent(new CustomEvent('jsi:presence', { detail: j })); } catch (e) {}   // an open numbers pop-up keeps its "right now" with the bar
       }
       function pollPresence() {

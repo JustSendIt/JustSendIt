@@ -277,7 +277,12 @@ a { color: var(--gold); }
 .nav-logo img { flex: 0 0 auto; }
 .profile-link .pl-name { display: inline-block; white-space: nowrap; vertical-align: bottom; }   /* shown whole or not at all: nav.js hides it (.is-tighter) when the bar has no room */
 .nav.is-snug .nav-live-more { display: none; }
-.nav.is-tight .nav-live, .nav.is-tight .nav-xp-sep, .nav.is-tight .nav-xp-pts, .nav.is-tight .nav-xp-boost { display: none; }
+.nav.is-tight .nav-xp-sep, .nav.is-tight .nav-xp-pts, .nav.is-tight .nav-xp-boost, .nav.is-compact.is-tight .nav-live { display: none; }
+/* …but the open row of links has no ≡ menu, so no 📊 Site numbers in it: there .is-tight leaves the pill as a 📊 button alone,
+   the row's way in to the numbers pop-up (nav.js measures the row with it; the pill's name still reads all three numbers) */
+.nav.is-tight .nav-live > :not(.nav-live-ico) { display: none; }
+.nav.is-tight .nav-live .nav-live-ico { display: inline; }
+.nav.is-tight .nav-live { justify-content: center; min-width: var(--nav-ctl); padding: 0 0.3rem; }
 .nav.is-tighter .nav-logo span, .nav.is-tighter .profile-link .pl-name { display: none; }
 .nav.is-tighter .profile-link .pl-ava { margin-right: 0; }   /* with the name hidden, the gap it kept sat on one side and pushed the avatar 3px off the pill's middle */
 .nav.is-tighter { gap: 0.45rem; }   /* the 3px this saves keeps a one-digit level pill on a 360px phone now that the logo and the pill are a full --nav-ctl */
@@ -1760,6 +1765,7 @@ details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
 .nav-live { display: inline-flex; align-items: center; gap: 0.35rem; min-height: var(--nav-ctl); font-size: var(--nav-fs-s); text-decoration: none; color: var(--text); background: color-mix(in srgb, var(--green) 10%, transparent); border: 1.5px solid color-mix(in srgb, var(--green) 40%, transparent); border-radius: 999px; padding: 0 0.7rem; margin: 0 0.4rem 0 0.15rem; vertical-align: middle; font-weight: 800; font-size: max(var(--text-floor), 0.82rem); white-space: nowrap; }
 button.nav-live { font-family: inherit; line-height: 1.5; cursor: pointer; }   /* a <button> since it opens the numbers pop-up (nav.js): the look the link had */
 .nav-live:hover, .nav-live:focus-visible { border-color: var(--green-bright); background: color-mix(in srgb, var(--green) 18%, transparent); }
+.nav-live-ico { display: none; line-height: 1; }   /* the pill as a 📊 button alone (.is-tight, in the open row only) */
 .nav-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green-bright); box-shadow: 0 0 8px var(--green-bright); animation: navLivePulse 1.6s ease-in-out infinite; flex: 0 0 auto; }
 @keyframes navLivePulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.65); } }
 .nav-live-n { color: var(--green-bright); font-variant-numeric: tabular-nums; }
@@ -1768,6 +1774,12 @@ button.nav-live { font-family: inherit; line-height: 1.5; cursor: pointer; }   /
 .nav-live-more { display: inline-flex; align-items: center; gap: 0.35rem; }
 .nav-live-part { display: inline-flex; align-items: center; gap: 0.25rem; }
 .nav-live-vn, .nav-live-wn { color: var(--green-bright); font-variant-numeric: tabular-nums; }
+/* until the first answer each "·" stands in about the room its number will take (nav.js): a count or a verified total of
+   one digit (1ch), and views like "2.8K" (3.4ch: the point is wide in tabular figures). So the bar is measured near its real
+   width, and a bar the real numbers do not fit is .is-snug from the start, instead of showing "· ✓ · verified · · views" for
+   a moment and then letting them go */
+.nav-live:not(.is-live) .nav-live-n, .nav-live:not(.is-live) .nav-live-vn, .nav-live:not(.is-live) .nav-live-wn { display: inline-block; min-width: 1ch; text-align: center; }
+.nav-live:not(.is-live) .nav-live-wn { min-width: 3.4ch; }
 .nav-live-sep, .nav-live-tick { color: var(--text-mute); font-weight: 700; font-size: var(--nav-fs-s); }
 .nav-live-word { color: var(--text-dim); font-weight: 700; font-size: var(--nav-fs-s); }
 @media (max-width: 700px) { .nav-live-lbl, .nav-live-more { display: none; } .nav-live { padding: 0 0.5rem; } } /* 561–700px landscape phones: the label pushed ≡ off-screen (and the numbers beside it go with it) */
@@ -6329,7 +6341,7 @@ html.motion-off .ob-spot { transition: none; }
    saying what it counts, its chart — an SVG stretched to the card's width, with its labels in HTML beside it so they keep
    the text floor — and the day-by-day table. The site's own tokens: the green family on the dark ground. Nothing moves. */
 .ss { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
-.ss-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 0.9rem; align-items: start; }
+.ss-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 0.9rem; align-items: start; }   /* two side by side only where each chart still gets ~300px */
 .ss-card { min-width: 0; display: flex; flex-direction: column; gap: 0.45rem; padding: 0.9rem 1rem 0.6rem; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 14px; }
 .ss-text, .ss-graph { min-width: 0; display: flex; flex-direction: column; gap: 0.45rem; }
 @media (min-width: 900px) {
@@ -6347,6 +6359,7 @@ html.motion-off .ob-spot { transition: none; }
 .ss-svg { grid-column: 2; grid-row: 1; display: block; width: 100%; height: clamp(96px, 7.5rem, 170px); overflow: visible; }
 .ss-x { grid-column: 2; grid-row: 2; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 0.6rem; margin-top: 0.3rem; color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: max(var(--text-floor), 0.8rem); line-height: 1.3; }
 .ss-x > :last-child { margin-left: auto; text-align: right; }
+.ss-nb { white-space: nowrap; }   /* a date, or "today so far", is never broken inside: a label too long for its row wraps between them */
 .ss-base { stroke: var(--ink-5); stroke-width: 1; }   /* the faint baseline, 0 */
 .ss-top { stroke: var(--ink-4); stroke-width: 1; stroke-dasharray: 3 3; }   /* the top of the scale, the highest day */
 .ss-bar { fill: var(--green); }

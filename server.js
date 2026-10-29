@@ -14012,9 +14012,11 @@ function adminActivity() {
    - VERIFIED MEMBERS: accounts (not the site's own, not deleted) whose wallet passed the on-chain holder check, the check
      that lets an account post — holder_state 'ok'.
    - VIEWS: SUM(views) FROM visits_daily — pages opened by people (bots apart), since MIN(day), the day counting began.
-   The nav reads the two totals with /api/presence (kept a minute); the pop-up reads /api/site-stats, the same totals with a
-   chart for each (kept five minutes, and made again the moment the verified count moves, so the step line always ends on
-   the number above it). Aggregates only: no id, name or per-person row ever leaves here.
+   The nav reads the two totals with /api/presence (kept a minute); the pop-up reads /api/site-stats, the same totals — read
+   at that moment, from the same minute's memo, so the pill and the pop-up it opens never disagree — with a chart for each
+   (kept five minutes, and made again the moment the verified count moves, so the step line always ends on the number
+   above it). A chart made afresh hands the counts it has just read to the minute's memo too: the two memos cannot differ,
+   or every ask would make the charts again. Aggregates only: no id, name or per-person row ever leaves here.
 
    The verified chart is NOT a record of the count on past days — the site keeps no such record. It places each of today's
    verified members on the day their wallet LAST passed the check (holder_verified_at), cumulative, so a member who
@@ -14032,6 +14034,8 @@ function siteTotals() {
   siteTotalsMemo = { at: Date.now(), v };
   return v;
 }
+// the counts a chart made afresh has just read: the minute's memo takes them, so the pill, the pop-up and the next ask agree
+function siteTotalsSet(v) { siteTotalsMemo = { at: Date.now(), v }; }
 function siteSeries() {
   const today = utcDay(), tot = siteTotals();
   const m = siteSeriesMemo;
@@ -14068,10 +14072,10 @@ function siteSeries() {
     }
   }
   const verifiedTotal = per.reduce((a, r) => a + r.n, 0) + undated;
+  siteTotalsSet({ verified: verifiedTotal, views: viewsTotal, viewsSince: first });   // what was just read, for the next minute
   siteSeriesMemo = {
     at: Date.now(), today, verifiedTotal,
     body: {
-      verified: verifiedTotal, views: viewsTotal, viewsSince: first,
       visitors: { since: first, days: visitors, today },
       viewsSeries: { since: first, days: views, today },
       verifiedSeries: { basis: 'last-pass', since: per.length ? per[0].day : null, days: vdays, undated, today },
@@ -14079,9 +14083,10 @@ function siteSeries() {
   };
   return siteSeriesMemo;
 }
+// the numbers now are the pill's (siteTotals, this minute's); the charts are the series' (up to five minutes old)
 function siteStats() {
-  const s = siteSeries(), b = s.body;
-  return { at: s.at, maxDays: SITE_SERIES_DAYS, now: { active: presenceCount(), activeWindowSec: Math.round(PRESENCE_WINDOW / 1000), verified: b.verified, views: b.views, viewsSince: b.viewsSince },
+  const s = siteSeries(), b = s.body, t = siteTotals();
+  return { at: s.at, maxDays: SITE_SERIES_DAYS, now: { active: presenceCount(), activeWindowSec: Math.round(PRESENCE_WINDOW / 1000), verified: t.verified, views: t.views, viewsSince: t.viewsSince },
     visitors: b.visitors, views: b.viewsSeries, verified: b.verifiedSeries };
 }
 /* The admin's codes, with what became of each: unused (or freed again — redeemed but never turned into an account within

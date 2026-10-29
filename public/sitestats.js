@@ -30,7 +30,9 @@
      at the highest value — labelled on the y side, 0 at the faint baseline — and the first and last days under it, all from
      that one scale. The labels are HTML beside the SVG, so they keep the text floor at any width. kind 'bars': a bar a day;
      'steps': the running total as a step line over a light fill. Every day is a column with its own <title> ("28 Oct: 214
-     views"), so a pointer anywhere over it reads it, however short its bar; the bar itself carries the same title. */
+     views"), so a pointer anywhere over it reads it, however short its bar; the bar itself carries the same title. o.title(v)
+     words a day's number where "N views" would say something untrue: a day of the step line is not the count on that day.
+     A date, and "today so far", never break inside: the x labels wrap only between them. */
   function chart(o) {
     var days = o.days, n = days.length, W = n * 10, H = 100;
     var vals = days.map(function (d) { return d[1]; }).filter(known);
@@ -40,7 +42,7 @@
     for (var i = 0; i < n; i++) {
       var d = days[i][0], v = days[i][1], x = i * 10, isToday = d === o.today;
       var when = day(d) + (isToday ? ' (today so far)' : '');
-      var t = '<title>' + esc(known(v) ? when + ': ' + whole(v) + ' ' + word(v, o.one, o.many) : when + ': no record — the site counted nothing that day') + '</title>';
+      var t = '<title>' + esc(known(v) ? when + ': ' + (o.title ? o.title(v) : whole(v) + ' ' + word(v, o.one, o.many)) : when + ': no record — the site counted nothing that day') + '</title>';
       if (o.kind === 'steps') {
         var yy = y(known(v) ? v : 0);
         line += (i ? 'V' + yy : 'M0 ' + yy) + 'H' + (x + 10);
@@ -59,7 +61,8 @@
         '<line class="ss-top" x1="0" y1="0" x2="' + W + '" y2="0" vector-effect="non-scaling-stroke"/>' + area + marks.join('') +
         '<line class="ss-base" x1="0" y1="' + H + '" x2="' + W + '" y2="' + H + '" vector-effect="non-scaling-stroke"/>' + hits.join('') +
       '</svg>' +
-      '<div class="ss-x" aria-hidden="true">' + (n > 1 ? '<span>' + esc(day(first)) + '</span>' : '') + '<span>' + esc(day(last)) + (last === o.today ? ' · today so far' : '') + '</span></div>' +
+      '<div class="ss-x" aria-hidden="true">' + (n > 1 ? '<span><span class="ss-nb">' + esc(day(first)) + '</span></span>' : '') +
+        '<span><span class="ss-nb">' + esc(day(last)) + '</span>' + (last === o.today ? ' · <span class="ss-nb">today so far</span>' : '') + '</span></div>' +
     '</figure>';
   }
   // every day's number, newest first: the chart's exact reading
@@ -81,7 +84,10 @@
   }
   // the days shown are the last maxDays at most: said when the chart starts later than the series does
   var isCut = function (s) { return !!(s.days && s.days.length && s.since && s.days[0][0] > s.since); };
-  function meta(bits) { bits = bits.filter(Boolean); return bits.length ? '<p class="ss-meta">' + bits.join(' · ') + '.</p>' : ''; }
+  function meta(bits) {
+    var t = bits.filter(Boolean).join(' · ');
+    return t ? '<p class="ss-meta">' + t.charAt(0).toUpperCase() + t.slice(1) + '.</p>' : '';   // a sentence, whichever part leads it
+  }
 
   // a card: what it is and the number now (.ss-text), then its chart and its table (.ss-graph) — beside each other on a wide screen
   function card(id, o) {
@@ -103,7 +109,7 @@
     // 1. Sending it: people on the site right now; the chart, the different people who opened a page each day
     var c1 = vis.days && vis.days.length
       ? chart({ days: vis.days, today: vis.today, kind: 'bars', one: 'person', many: 'people', label: summary('People on the site each day', vis.days, vis.today, 'people') }) +
-        meta(['Since ' + began(vis.since), 'once per device, bots left out', isCut(vis) && lastN]) +
+        meta(['Since ' + began(vis.since), 'once per network and browser a day (a phone that changes network counts twice), bots left out', isCut(vis) && lastN]) +
         table({ days: vis.days, today: vis.today, caption: 'People on the site each day', col: 'People' })
       : none;
     var w1 = 'Right now counts the people with the site open in ' + win + '; the chart counts the different people who opened a page each day.';
@@ -111,9 +117,9 @@
     // 2. Verified members: today's members, each on the day their wallet last passed — never the count on past days
     var lastV = ver.days && ver.days.length ? ver.days[ver.days.length - 1] : null;
     var c2 = (lastV
-      ? chart({ days: ver.days, today: ver.today, kind: 'steps', one: 'verified member', many: 'verified members', label: 'Verified members, each counted from the day their wallet last passed the check, ' + day(ver.days[0][0]) + ' to ' + day(lastV[0], true) + ': ' + whole(lastV[1]) + ' by today. Every day’s number is in the table below.' }) +
+      ? chart({ days: ver.days, today: ver.today, kind: 'steps', title: function (v) { return whole(v) + ' of today’s verified members had last passed the check by then'; }, label: 'Verified members, each counted from the day their wallet last passed the check, ' + day(ver.days[0][0]) + ' to ' + day(lastV[0], true) + ': ' + whole(lastV[1]) + ' by today. Every day’s number is in the table below.' }) +
         meta(['So the line shows today’s members by that day — it is not a record of the count on past days', isCut(ver) && lastN]) +
-        table({ days: ver.days, today: ver.today, caption: 'Verified members by the day their wallet last passed the check', col: 'Verified members' })
+        table({ days: ver.days, today: ver.today, caption: 'Verified members by the day their wallet last passed the check', col: 'Of today’s verified members, passed by this day' })
       : '<p class="ss-empty">No member’s wallet has passed the check yet, so there is no line to draw.</p>') +
       (ver.undated > 0 ? '<p class="ss-undated">' + whole(ver.undated) + ' verified ' + word(ver.undated, 'member has', 'members have') + ' no recorded day and ' + word(ver.undated, 'is', 'are') + ' not in the line.</p>' : '');
     var w2 = 'Members whose wallet passed the on-chain holder check, the check that lets an account post — on the line, each counted from the day their wallet last passed the on-chain holder check.';
@@ -131,14 +137,18 @@
     box.removeAttribute('aria-busy');
     box.innerHTML = '<div class="ss-cards">' +
         card('live', { title: 'Sending it', dot: true, num: known(now.active) ? whole(now.active) : '—', numClass: 'ss-live-num', unit: known(now.active) ? 'right now' : 'not known just now', what: w1, body: c1 }) +
-        card('verified', { title: 'Verified members', num: known(now.verified) ? whole(now.verified) : '—', unit: known(now.verified) ? 'now' : 'not known just now', what: w2, body: c2 }) +
-        card('views', { title: 'Views', num: known(now.views) ? whole(now.views) : '—', unit: known(now.views) ? (now.viewsSince ? 'since ' + day(now.viewsSince, true) : 'in all') : 'not counted yet', what: w3, body: c3 }) +
+        card('verified', { title: 'Verified members', num: known(now.verified) ? whole(now.verified) : '—', numClass: 'ss-ver-num', unit: known(now.verified) ? 'now' : 'not known just now', what: w2, body: c2 }) +
+        card('views', { title: 'Views', num: known(now.views) ? whole(now.views) : '—', numClass: 'ss-views-num', unit: known(now.views) ? (now.viewsSince ? 'since ' + day(now.viewsSince, true) : 'in all') : 'not counted yet', what: w3, body: c3 }) +
       '</div>' +
       '<div class="ss-foot"><a class="ss-wall" href="/wall">See who’s posting on the Wall →</a>' +
         '<p class="ss-note">Counted by this site from its own records — no tracker, no third party. Days are UTC days; the charts are read every few minutes, and “right now” is live.</p></div>';
   }
 
-  function load(box, alive) {
+  /* again: the reader pressed Try again. The button goes with the old message, so focus moves first to the dialog itself (as
+     FullView does on opening) — never to the page under it — and onto the new Try again if that fails too. */
+  function load(box, alive, again) {
+    var dlg = again && box.closest && box.closest('[role="dialog"]');
+    if (dlg && box.contains(document.activeElement)) { try { dlg.focus({ preventScroll: true }); } catch (e) {} }
     box.setAttribute('aria-busy', 'true');
     box.innerHTML = '<p class="ss-wait" role="status">Reading the numbers…</p>';
     fetch('/api/site-stats', { credentials: 'same-origin' })
@@ -154,7 +164,10 @@
         box.innerHTML = '<p class="ss-err" role="alert">⚠️ ' + esc(e && e.message && /^(Too many|The numbers)/.test(e.message) ? e.message : 'The numbers could not be read just now.') + '</p>' +
           '<p><button class="btn btn-ghost btn-sm ss-retry" type="button" data-tip="Asks the server for the numbers again">Try again</button></p>';
         var b = box.querySelector('.ss-retry');
-        if (b) b.addEventListener('click', function () { load(box, alive); });
+        if (b) {
+          b.addEventListener('click', function () { load(box, alive, true); });
+          if (again && dlg && document.activeElement === dlg) { try { b.focus({ preventScroll: true }); } catch (e) {} }
+        }
       });
   }
 
@@ -167,10 +180,13 @@
       stage.appendChild(box);
       var shown = true;
       load(box, function () { return shown && box.isConnected; });
-      // while it is open, "right now" follows the bar's own poll (nav.js), so the two never disagree for long
+      // while it is open, the numbers now follow the bar's own poll (nav.js), so the pill and the pop-up never disagree for long
       var onPresence = function (e) {
-        var j = e.detail || {}, el = box.querySelector('.ss-live-num');
-        if (el && known(j.active)) el.textContent = whole(j.active);
+        var j = e.detail || {};
+        [['.ss-live-num', j.active], ['.ss-ver-num', j.verified], ['.ss-views-num', j.views]].forEach(function (p) {
+          var el = box.querySelector(p[0]);
+          if (el && known(p[1])) el.textContent = whole(p[1]);
+        });
       };
       document.addEventListener('jsi:presence', onPresence);
       return function () { shown = false; document.removeEventListener('jsi:presence', onPresence); };

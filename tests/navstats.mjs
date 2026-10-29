@@ -3,18 +3,22 @@
    users click on this section pull up a popup that shows a graph over time of all three of these stats in a simple to understand
    graphic that quickly shows the data to the users."
 
-   1. The files: the pill (a described <button> that says it opens a dialog), the new first tier .is-snug, the lazily-loaded
-      sitestats.js (in check.mjs's list and versioned by /api/config), the pop-up's code (FullView, hand-drawn SVG, no inline
-      handlers), the short number format run as written, the privacy page and the README.
+   1. The files: the pill (a described <button> that says it opens a dialog), the new first tier .is-snug, the pill as a 📊
+      alone in the open row at .is-tight, the lazily-loaded sitestats.js (in check.mjs's list and versioned by /api/config),
+      the pop-up's code (FullView, hand-drawn SVG, no inline handlers, honest words for the verified line and the people
+      count), the short number format run as written, the privacy page, the README — and what Sendy answers from it.
    2. A server of this suite's own on a throwaway database. Empty first: a view count the site never made is null, never 0. Then
       seeded before its first answer and started again: visits_daily rows for 101 days with one day missing, members in every
       holder_state, a deleted and a system account that must not count, one verified with no recorded day — /api/presence's new
-      keys (the rate-limited answer too) and /api/site-stats's shape and every number, its limit, and that it carries no names.
-   3. The same server in a muted headless Chrome: the bar at 320–1440 px, signed out and in, never wider than the screen, the
-      new numbers shown where there is room and .is-snug (only when it is needed) where not; the pill's name and words; the
-      pop-up at 320, 390 and 1280 px — opened by Enter on the pill, or 📊 Site numbers in the menu where the pill is not in the
-      bar — the three charts drawn from the answer, no sideways scroll, nothing under the text floor, controls 44px, focus in
-      it and kept there by Tab, Esc closes it and focus goes back, and no script error. Without a browser (a CI runner with no
+      keys (the rate-limited answer too) and /api/site-stats's shape and every number, its limit, and that it carries no names;
+      then a member passing the check while the pill's memo is a minute old: the pill and the pop-up agree, the charts made once.
+   3. The same server in a muted headless Chrome: the bar at 320–2048 px, signed out and in, never wider than the screen, the
+      new numbers shown where there is room and .is-snug (only when it is needed) where not, always one way in to the pop-up;
+      the pill's name and words; a re-fit that leaves a scrolled page in place, and a fresh /about#og-rules that lands; the
+      pop-up at 320, 390, 641 and 1280 px and on the 📊 alone — opened by Enter on the pill, or 📊 Site numbers in the menu
+      where the pill is not in the bar — the three charts drawn from the answer and worded honestly, no sideways scroll, no
+      label broken inside, nothing under the text floor, controls 44px, focus in it and kept there by Tab (and after Try
+      again), Esc closes it and focus goes back, and no script error. Without a browser (a CI runner with no
       Chrome) the third part is skipped and the run says so; on a machine that has one, a browser that will not start fails.
    Everything it makes is in its own temporary directories, deleted at the end. */
 import fs from 'node:fs';
@@ -63,9 +67,17 @@ check('where the bar has no room for the pill, the pop-down menu carries the sam
 check('the bar lets the new numbers go first: .is-snug heads the tiers, and on a wide screen the row is tried without them before it loses the live count',
   /var TIERS = \['is-snug', 'is-tight', 'is-tighter', 'is-tightest', 'is-bare'\];/.test(NAV) && /nav\.classList\.add\('is-snug'\);\n          if \(rowFits\(\)\) compact = false;/.test(NAV)
     && /\.nav\.is-snug \.nav-live-more \{ display: none; \}/.test(CSS) && /@media \(max-width: 700px\) \{ \.nav-live-lbl, \.nav-live-more \{ display: none; \}/.test(CSS));
-check('  ...and measuring never moves the page: scroll anchoring follows each way the row is laid out, so fit() puts the page back, moved only by what the bar\'s height really changed',
-  /var y0 = window\.pageYOffset, h0 = nav\.getBoundingClientRect\(\)\.height;/.test(NAV) && /var h1 = nav\.getBoundingClientRect\(\)\.height, want = y0 > 0 \? Math\.max\(0, y0 \+ h1 - h0\) : 0;/.test(NAV)
-    && /window\.scrollTo\(\{ top: want, left: window\.pageXOffset, behavior: 'instant' \}\)/.test(NAV));
+const fitFn = NAV.slice(NAV.indexOf('    function fit() {'), NAV.indexOf('    function fitSoon()'));
+check('  ...and measuring never moves the page: scroll anchoring is off while the row is tried, and fit() never scrolls — the one real change is made with anchoring back on, for the browser to follow (a scroll of ours cancelled its glide to a #section)',
+  /var anchoring = function \(on\) \{ html\.style\.overflowAnchor = on \? anchor0\[0\] : 'none'; body\.style\.overflowAnchor = on \? anchor0\[1\] : 'none'; \};/.test(fitFn) && /anchoring\(false\);/.test(fitFn)
+    && /nav\.className = before \+ ' is-measuring'; void nav\.offsetHeight;\n        anchoring\(true\);\n        nav\.className = after; void nav\.offsetHeight;/.test(fitFn) && /\} else anchoring\(true\);/.test(fitFn) && !/scroll(To|By)\s*\(/.test(decomment(fitFn)));
+check('in the open row of links .is-tight leaves the pill as a 📊 button alone — the row\'s way in to the numbers, since only the pop-down carries 📊 Site numbers; in the pop-down form .is-tight hides it as before',
+  /live\.innerHTML = '<span class="nav-live-ico" aria-hidden="true">📊<\/span><span class="nav-live-dot"/.test(pill) && /\.nav-live-ico \{ display: none;/.test(CSS)
+    && /\.nav\.is-compact\.is-tight \.nav-live \{ display: none; \}/.test(CSS) && /\.nav\.is-tight \.nav-live > :not\(\.nav-live-ico\) \{ display: none; \}/.test(CSS) && /\.nav\.is-tight \.nav-live \.nav-live-ico \{ display: inline; \}/.test(CSS)
+    && !/\.nav\.is-tight \.nav-live,/.test(CSS));
+check('until the first answer each "·" stands in the room its number will take (so the new numbers never show and then vanish), and the first answer is measured again as a whole',
+  /\.nav-live:not\(\.is-live\) \.nav-live-n, \.nav-live:not\(\.is-live\) \.nav-live-vn, \.nav-live:not\(\.is-live\) \.nav-live-wn \{ display: inline-block; min-width: 1ch; text-align: center; \}/.test(CSS)
+    && /\.nav-live:not\(\.is-live\) \.nav-live-wn \{ min-width: 3\.4ch; \}/.test(CSS) && /var first = !live\.classList\.contains\('is-live'\);\n        live\.classList\.add\('is-live'\);\n        if \(first\) fitSoon\(\);/.test(pill));
 const ssCode = decomment(SS);
 check('the pop-up opens in FullView as a centred sheet with its heading, from GET /api/site-stats; FullView knows the sheet',
   /FullView\.open\(\{ title: 'Just Send It, in numbers', size: 'sheet', closeLabel: 'Close the numbers', opener: o\.opener,/.test(SS) && /fetch\('\/api\/site-stats', \{ credentials: 'same-origin' \}\)/.test(SS)
@@ -76,16 +88,58 @@ check('  ...honest copy: when counting began, from the data; the verified line "
   /'Since ' \+ began\(vis\.since\)/.test(SS) && /'Pages opened by people since ' \+ began\(now\.viewsSince\)/.test(SS) && /each counted from the day their wallet last passed the on-chain holder check/.test(SS)
     && /it is not a record of the count on past days/.test(SS) && /Counted by this site from its own records — no tracker, no third party\./.test(SS) && /<a class="ss-wall" href="\/wall">See who’s posting on the Wall →<\/a>/.test(SS)
     && !/\b\d{1,2} (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\b/.test(ssCode));   // no date written in: every date comes from the answer
+check('  ...a day of the verified line, and its table\'s column, say what it is ("5 of today\'s verified members had last passed the check by then"), never "5 verified members" on a past day',
+  /kind: 'steps', title: function \(v\) \{ return whole\(v\) \+ ' of today’s verified members had last passed the check by then'; \}/.test(SS) && /col: 'Of today’s verified members, passed by this day'/.test(SS)
+    && !/kind: 'steps', one:/.test(SS) && !/col: 'Verified members'/.test(SS));
+check('  ...the people count says what it counts: once per network and browser a day (countVisit fingerprints the address and the browser string), never "once per device"',
+  /'once per network and browser a day \(a phone that changes network counts twice\), bots left out'/.test(SS) && !/once per device/.test(SS)
+    && /'v:' \+ fp\(\(clientIp\(req\) \|\| ''\) \+ '\\n' \+ ua\)/.test(SRV));
+check('  ...every note under a chart is a sentence: its first letter a capital, whichever part leads it ("The last 90 days shown.")',
+  /return t \? '<p class="ss-meta">' \+ t\.charAt\(0\)\.toUpperCase\(\) \+ t\.slice\(1\) \+ '\.<\/p>' : '';/.test(SS));
+check('  ...after Try again, focus stays in the dialog (the dialog itself, then the new Try again if that fails too), never on the page under it',
+  /if \(dlg && box\.contains\(document\.activeElement\)\) \{ try \{ dlg\.focus\(\{ preventScroll: true \}\); \} catch \(e\) \{\} \}/.test(SS) && /b\.addEventListener\('click', function \(\) \{ load\(box, alive, true\); \}\);/.test(SS));
+check('  ...while it is open, all three numbers now follow the bar\'s own poll, so the pill and the pop-up agree',
+  /\[\['\.ss-live-num', j\.active\], \['\.ss-ver-num', j\.verified\], \['\.ss-views-num', j\.views\]\]/.test(SS) && /numClass: 'ss-ver-num'/.test(SS) && /numClass: 'ss-views-num'/.test(SS));
 check('the server: three numbers from the database (verified = not system, not deleted, holder_state \'ok\'; views = SUM(views) of visits_daily since MIN(day)), kept a minute, the charts five, the live count never',
   /const SITE_TOTALS_MS = 60e3, SITE_SERIES_MS = 5 \* 60e3, SITE_SERIES_DAYS = 90;/.test(SRV) && /const SITE_VERIFIED_WHERE = "system = 0 AND deleted_at IS NULL AND holder_state = 'ok'";/.test(SRV)
-    && /SELECT COALESCE\(SUM\(views\), 0\) n, MIN\(day\) since FROM visits_daily/.test(SRV) && /now: \{ active: presenceCount\(\),/.test(SRV)
+    && /SELECT COALESCE\(SUM\(views\), 0\) n, MIN\(day\) since FROM visits_daily/.test(SRV) && /now: \{ active: presenceCount\(\), activeWindowSec: Math\.round\(PRESENCE_WINDOW \/ 1000\), verified: t\.verified, views: t\.views, viewsSince: t\.viewsSince \}/.test(SRV)
+    && /siteTotalsSet\(\{ verified: verifiedTotal, views: viewsTotal, viewsSince: first \}\);/.test(SRV)
     && /if \(!rateLimit\('pres:' \+ clientIp\(req\), 240, 6e4\)\) return send\(res, 200, \{ active: presenceCount\(\), \.\.\.siteTotals\(\) \}\);/.test(SRV)
     && /if \(!rateLimit\('sstats:' \+ clientIp\(req\), 120, 6e4\)\) return send\(res, 429, \{ error: 'slow down' \}, \{ 'Retry-After': '60' \}\);/.test(SRV));
-check('the privacy page says the daily totals and the verified count are shown to everyone in the pop-up, totals only — and its version moved',
-  /Its daily totals — how many people opened a page, and how many pages were opened — and the number of verified members are also shown to everyone in the numbers pop-up behind the menu bar's &ldquo;Sending it&rdquo; count: totals only, never who\./.test(PRIV)
-    && /everyone sees each day's totals of people and page views, and the number of verified members, in the menu bar's numbers pop-up — totals only, never who/.test(PRIV) && /Version 2026-10-29 · \$Send/.test(PRIV) && !/shown only to the operator/.test(PRIV));
-check('the README describes the pill, the pop-up, the three definitions and /api/site-stats',
-  /\| \*\*● The site's numbers, in the nav\*\* \|/.test(README) && /`holder_state = 'ok'`/.test(README) && /GET \/api\/site-stats/.test(README) && /not a record of the count on past days/.test(README) && /📊 Site numbers/.test(README));
+check('the privacy page says what the pop-up shows everyone: the daily totals, the verified count AND the day-by-day line of when today\'s verified members last passed (one day\'s step can be one member\'s) — in the short version and in its rows',
+  /Its daily totals — how many people opened a page, and how many pages were opened — are also shown to everyone in the numbers pop-up behind the menu bar's &ldquo;Sending it&rdquo; count, and so are the number of verified members and a day-by-day line of how many of them had last passed the holder check by each day: counts only, never who \(though while there are few members, one day's step in that line can be a single member's\)\./.test(PRIV)
+    && /The number of members who pass the holder check now is public in the menu bar's numbers pop-up, with a line of how many of them had last passed it by each day/.test(PRIV) && /A member who loses the pass, or deletes the account, leaves the count and the line\./.test(PRIV)
+    && /everyone sees each day's totals of people and page views in the menu bar's numbers pop-up — totals only, never who/.test(PRIV) && /Version 2026-10-29 · \$Send/.test(PRIV) && !/shown only to the operator/.test(PRIV));
+const readmeRow = (README.split('\n').find((l) => l.startsWith('| **● The site\'s numbers, in the nav** |')) || '');
+check('the README describes the pill, the pop-up, the three definitions and /api/site-stats — the definitions first, the pill as a pattern (no example figures to drift from the site\'s, no "2.8K" for a sentence splitter to break)',
+  /^\| \*\*● The site's numbers, in the nav\*\* \| The three numbers beside the 🔔 in the menu bar mean: \*\*Sending it\*\*, the people with a page of the site open in the last minute or so; \*\*verified members\*\*, the accounts whose wallet passed the on‑chain holder check/.test(readmeRow)
+    && readmeRow.includes('`● N Sending it · ✓ N verified · N views`') && !/\d\.\d/.test(readmeRow.replace(/`[^`]*`/g, '')) && !/\b\d+ (Sending it|verified\b)/.test(readmeRow)
+    && /`holder_state = 'ok'`/.test(readmeRow) && /GET \/api\/site-stats/.test(readmeRow) && /not a record of the count on past days/.test(readmeRow) && /📊 Site numbers/.test(readmeRow));
+// …and what Sendy (lib/sendybrain.js, which serves README §1–4 to everyone) answers from it, run over this tree's own files
+let sendyNav = null;
+try {
+  const { createRequire } = await import('node:module');
+  const req = createRequire(import.meta.url);
+  const SB = req(path.join(ROOT, 'lib', 'sendybrain.js')), MD = req(path.join(ROOT, 'lib', 'marketdata.js'));
+  const sdb = new DatabaseSync(':memory:');
+  sdb.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, points INTEGER DEFAULT 0, system INTEGER DEFAULT 0, deleted_at INTEGER, created_at INTEGER);
+    CREATE TABLE posts (id INTEGER PRIMARY KEY, user_id INTEGER, text TEXT, board TEXT, community_id INTEGER, call_id INTEGER, private INTEGER DEFAULT 0, squad_id INTEGER, created_at INTEGER);
+    CREATE TABLE comments (id INTEGER PRIMARY KEY, post_id INTEGER, user_id INTEGER, text TEXT, created_at INTEGER);
+    CREATE TABLE calls (id INTEGER PRIMARY KEY, user_id INTEGER, token_addr TEXT, symbol TEXT, name TEXT, post_id INTEGER, squad_id INTEGER, wallet TEXT, created_at INTEGER);
+    CREATE TABLE communities (id INTEGER PRIMARY KEY, symbol TEXT, name TEXT, token_addr TEXT, status TEXT, official INTEGER, demo INTEGER, member_count INTEGER, qual_count INTEGER, c_price REAL, c_mc REAL, c_liq REAL, c_holders INTEGER, c_at INTEGER, created_at INTEGER, went_live_at INTEGER);
+    CREATE TABLE squads (id INTEGER PRIMARY KEY, name TEXT);
+    CREATE TABLE token_cache (token_addr TEXT, pair_json TEXT, symbol TEXT, name TEXT, found INTEGER, reads INTEGER, updated_at INTEGER);
+    CREATE TABLE sendy_qa (id INTEGER PRIMARY KEY, q TEXT, a TEXT, page TEXT, at INTEGER, up INTEGER DEFAULT 0, down INTEGER DEFAULT 0);`);
+  MD.migrate(sdb);
+  const brain = SB.createSendyBrain({ db: sdb, root: ROOT, siteMap: '' });
+  brain.migrate(); await brain.tick();
+  sendyNav = [];
+  for (const q of ['what do the numbers in the nav mean?', 'what does verified mean in the nav?']) sendyNav.push((await brain.answerBrain(q, '/', [])).answer || '');
+  try { sdb.close(); } catch {}
+} catch (e) { notes.push('could not run Sendy\'s brain: ' + e.message); }
+check('  ...so Sendy, asked "what do the numbers in the nav mean?" (or what "verified" means there), quotes the three definitions — not example figures, and no "2. 8K"',
+  sendyNav && sendyNav.length === 2 && sendyNav.every((a) => /Sending it ?, the people with a page of the site open/.test(a) && /verified members ?, the accounts whose wallet passed the on‑chain holder check/.test(a) && /views ?, the pages opened by people/.test(a)
+    && !/\d\. \d/.test(a) && !/\b\d+ Sending it|✓ \d/.test(a)), JSON.stringify(sendyNav).slice(0, 400));
 
 /* ═══ 2. a server of our own ═══ */
 const freePort = () => new Promise((ok) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const p = s.address().port; s.close(() => ok(p)); }); });
@@ -203,10 +257,27 @@ try {
   const codes = [];
   for (let i = 0; i < 121; i++) codes.push((await api('/api/site-stats', { ip: two })).status);
   const r429 = await api('/api/site-stats', { ip: two });
+  // the other address is one ip() never picks (it picks .1–.250), so it can never be the limited one
   check('  ...limited per address: 120 a minute, then 429 with a Retry-After (another address is not affected)',
-    codes.slice(0, 120).every((c) => c === 200) && codes[120] === 429 && r429.status === 429 && r429.h('retry-after') === '60' && (await api('/api/site-stats')).status === 200, codes.slice(118).join());
+    codes.slice(0, 120).every((c) => c === 200) && codes[120] === 429 && r429.status === 429 && r429.h('retry-after') === '60' && (await api('/api/site-stats', { ip: '198.51.100.253' })).status === 200, codes.slice(118).join());
   const cfg = await api('/api/config');
   check('/api/config versions sitestats.js, so a deploy reaches the pop-up the moment it lands', cfg.j && cfg.j.assets && typeof cfg.j.assets['sitestats.js'] === 'string' && cfg.j.assets['sitestats.js'].length > 3, JSON.stringify(cfg.j && cfg.j.assets));
+
+  /* — the pill and the pop-up agree, and the charts are not made again on every ask: a member passes the check after the
+     pill's minute-long memo has read 6; the pop-up's first ask makes the charts with 7 and hands 7 to that memo — so the
+     next ask is the same answer (same `at`) and the pill says 7 too. (It used to compare its fresh 7 with the memo's 6 and
+     make the charts again on every ask, while the pill kept saying 6.) Then back as it was, on a fresh start. — */
+  await halt();
+  check('  (started again, for a fresh memo)', await boot(), slog.slice(-300));
+  const p6 = await api('/api/presence');
+  db.prepare("UPDATE users SET holder_state = 'ok' WHERE username = 'ns_pending'").run();
+  const s1 = await api('/api/site-stats'), s2 = await api('/api/site-stats'), p7 = await api('/api/presence');
+  check('a member who passes the check while the pill\'s memo says 6: the pop-up says 7, asked twice it is the same answer (the charts made once), and the pill says 7 with it',
+    p6.j && p6.j.verified === 6 && s1.j && s1.j.now.verified === 7 && s2.j && s2.j.now.verified === 7 && s1.j.at === s2.j.at && p7.j && p7.j.verified === 7 && s1.j.verified.days[s1.j.verified.days.length - 1][1] + s1.j.verified.undated === 7,
+    JSON.stringify({ p6: p6.j && p6.j.verified, s1: s1.j && [s1.j.now.verified, s1.j.at], s2: s2.j && [s2.j.now.verified, s2.j.at], p7: p7.j && p7.j.verified }));
+  db.prepare("UPDATE users SET holder_state = 'pending' WHERE username = 'ns_pending'").run();
+  await halt();
+  check('  (started again, as seeded)', await boot(), slog.slice(-300));
 } catch (e) {
   console.error('ERROR', e && e.stack);
   check('the server part ran to the end', false, e && e.message);
@@ -219,7 +290,8 @@ function findChrome() {
   return c.find((p) => p && fs.existsSync(p)) || null;
 }
 const CHROME = findChrome();
-let ws = null, session = null, seq = 0;
+let ws = null, session = null, seq = 0, fetchMode = 'pass';
+const held = [];
 const pend = new Map(), errors = [];
 const cdp = (method, params = {}, sid = session) => new Promise((ok, bad) => { const id = ++seq; pend.set(id, { ok, bad }); ws.send(JSON.stringify({ id, method, params, ...(sid ? { sessionId: sid } : {}) })); });
 async function ev(expr) {
@@ -248,6 +320,12 @@ async function startChrome() {
   ws.onmessage = (m) => {
     const d = JSON.parse(typeof m.data === 'string' ? m.data : m.data.toString());
     if (d.id && pend.has(d.id)) { const p = pend.get(d.id); pend.delete(d.id); d.error ? p.bad(new Error(d.method + ' ' + JSON.stringify(d.error))) : p.ok(d.result); }
+    else if (d.method === 'Fetch.requestPaused' && fetchMode === 'hold') held.push(d.params.requestId);   // the first-answer check: /api/presence kept waiting
+    else if (d.method === 'Fetch.requestPaused') {   // the Try again check: the numbers fail on purpose, then come
+      cdp(fetchMode === 'fail' ? 'Fetch.fulfillRequest' : 'Fetch.continueRequest', fetchMode === 'fail'
+        ? { requestId: d.params.requestId, responseCode: 500, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }], body: Buffer.from('{"error":"test"}').toString('base64') }
+        : { requestId: d.params.requestId }).catch(() => {});
+    }
     else if (d.method === 'Runtime.exceptionThrown') errors.push((d.params.exceptionDetails.exception && d.params.exceptionDetails.exception.description || d.params.exceptionDetails.text || '').split('\n')[0]);
     else if (d.method === 'Runtime.consoleAPICalled' && d.params.type === 'error') errors.push('console.error: ' + (d.params.args || []).map((a) => a.value || a.description || '').join(' ').slice(0, 160));
   };
@@ -278,11 +356,15 @@ const BAR = `(() => {
   const n = document.querySelector('nav.nav'), menu = document.getElementById('nav-menu'), l = document.getElementById('nav-live');
   const vis = (e) => !!e && e.getClientRects().length > 0, more = l && l.querySelector('.nav-live-more');
   const rowFits = () => { const a = menu.querySelectorAll('a'), f = a[0], z = a[a.length - 1]; const wrapped = f && z && (Math.abs(z.getBoundingClientRect().top - f.getBoundingClientRect().top) > 4 || menu.getBoundingClientRect().height > f.getBoundingClientRect().height * 1.5); return !wrapped && n.scrollWidth <= n.clientWidth; };
+  // the open row at .is-tight: the pill as a 📊 button alone (there .is-snug is beside the point: the new numbers are not shown either way)
+  const icon = n.classList.contains('is-tight') && !n.classList.contains('is-compact');
   let needed = null;   // was .is-snug needed? take it off for a moment and see whether the bar still holds
-  if (n.classList.contains('is-snug') && vis(l) && innerWidth > 700) { n.classList.remove('is-snug'); needed = n.classList.contains('is-compact') ? n.scrollWidth > n.clientWidth : !rowFits(); n.classList.add('is-snug'); }
+  if (n.classList.contains('is-snug') && !icon && vis(l) && innerWidth > 700) { n.classList.remove('is-snug'); needed = n.classList.contains('is-compact') ? n.scrollWidth > n.clientWidth : !rowFits(); n.classList.add('is-snug'); }
   const tiers = ['is-snug', 'is-tight', 'is-tighter', 'is-tightest', 'is-bare'].filter((t) => n.classList.contains(t));
+  const lr = l && vis(l) ? l.getBoundingClientRect() : null, ctl = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-ctl')) || 0;
   return { cls: [...n.classList].join(' '), tiers, fits: n.scrollWidth <= n.clientWidth && document.documentElement.scrollWidth <= innerWidth, sw: n.scrollWidth, cw: n.clientWidth, doc: document.documentElement.scrollWidth,
-    pill: vis(l), more: vis(more), needed, entry: vis(document.querySelector('.nav-stats-open')) || null, text: l ? l.innerText.replace(/\\s+/g, ' ').trim() : '', label: l ? l.getAttribute('aria-label') : '',
+    pill: vis(l), more: vis(more), needed, icon, ico: vis(l && l.querySelector('.nav-live-ico')), pw: lr ? Math.round(lr.width) : 0, ph: lr ? Math.round(lr.height) : 0, ctl,
+    entry: vis(document.querySelector('.nav-stats-open')) || null, text: l ? l.innerText.replace(/\\s+/g, ' ').trim() : '', label: l ? l.getAttribute('aria-label') : '',
     tag: l && l.tagName, type: l && l.getAttribute('type'), pop: l && l.getAttribute('aria-haspopup'), tip: l && l.getAttribute('data-tip'), title: l && l.getAttribute('title') };
 })()`;
 // the dialog as a reader meets it: its parts, its charts, the floor, the edges, the controls
@@ -306,12 +388,13 @@ const POP = `(() => {
       bars: svg ? svg.querySelectorAll('rect.ss-bar').length : 0, barsTitled: svg ? [...svg.querySelectorAll('rect.ss-bar')].every((b) => b.querySelector('title') && b.querySelector('title').textContent.length > 5) : false,
       hits: svg ? [...svg.querySelectorAll('rect.ss-hit')].map((h) => h.querySelector('title') ? h.querySelector('title').textContent : '') : [], line: !!(svg && svg.querySelector('path.ss-line')),
       todayBar: svg && svg.querySelector('rect.ss-bar.is-today') ? svg.querySelector('rect.ss-bar.is-today title').textContent : null, none: svg ? [...svg.querySelectorAll('rect.ss-bar.is-none title')].map((t) => t.textContent) : [],
-      y: [...c.querySelectorAll('.ss-y span')].map((s) => s.textContent), x: [...c.querySelectorAll('.ss-x span')].map((s) => s.textContent), summary: (c.querySelector('details > summary') || {}).textContent, sumTip: c.querySelector('details > summary') && c.querySelector('details > summary').getAttribute('data-tip') };
+      y: [...c.querySelectorAll('.ss-y span')].map((s) => s.textContent), x: [...c.querySelectorAll('.ss-x > span')].map((s) => s.textContent), xRows: (() => { const t = [...c.querySelectorAll('.ss-x > span')].map((s) => Math.round(s.getBoundingClientRect().top)); return new Set(t).size; })(),
+      broken: [...c.querySelectorAll('.ss-nb')].filter((e) => e.getClientRects().length > 1).map((e) => e.textContent), metas: [...c.querySelectorAll('.ss-meta')].map((m) => m.textContent), colHead: (c.querySelector('thead th:last-child') || {}).textContent, summary: (c.querySelector('details > summary') || {}).textContent, sumTip: c.querySelector('details > summary') && c.querySelector('details > summary').getAttribute('data-tip') };
   });
   const lb = d.getAttribute('aria-labelledby');
   return { open: !root.hidden, role: d.getAttribute('role'), modal: d.getAttribute('aria-modal'), title: lb && document.getElementById(lb) ? document.getElementById(lb).textContent : null, inside: root.contains(document.activeElement),
     xTip: (root.querySelector('.cf-x') || {}).getAttribute && root.querySelector('.cf-x').getAttribute('data-tip'), cards, wall: (root.querySelector('a.ss-wall') || {}).getAttribute && root.querySelector('a.ss-wall').getAttribute('href'),
-    note: (root.querySelector('.ss-note') || {}).textContent, doc: document.documentElement.scrollWidth, iw: innerWidth, stageSW: stage.scrollWidth, stageCW: stage.clientWidth, floor, small: small.slice(0, 6), out: out.slice(0, 6), tiny: tiny.slice(0, 6) };
+    note: (root.querySelector('.ss-note') || {}).textContent, doc: document.documentElement.scrollWidth, iw: innerWidth, stageSW: stage.scrollWidth, stageCW: stage.clientWidth, floor, cols: getComputedStyle(root.querySelector('.ss-cards')).gridTemplateColumns.split(' ').length, small: small.slice(0, 6), out: out.slice(0, 6), tiny: tiny.slice(0, 6) };
 })()`;
 
 if (!SEED) notes.push('skipping the browser checks: the seeded server did not come up');
@@ -331,13 +414,19 @@ else if (!CHROME) {
       const longDay = (d) => new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' });
       /* — the bar, every width, signed out and in — */
       const bars = [];
-      for (const who of ['out', 'in']) for (const w of [320, 360, 375, 390, 768, 1024, 1280, 1440]) {
+      // up to 1440, and the wide screens where the open row of links has room for no count (the review found no way in at all
+      // there: 1728 signed out — a MacBook Pro's — and 1920 signed in)
+      const WIDTHS = [320, 360, 375, 390, 768, 1024, 1280, 1440, 1600, 1728, 1760, 1920, 1960, 2048];
+      for (const who of ['out', 'in']) for (const w of WIDTHS) {
         const painted = await open(w, who);
         bars.push({ who, w, painted, ...(await ev(BAR)) });
       }
       const over = bars.filter((b) => !b.fits).map((b) => b.who + '@' + b.w + ' ' + b.sw + '/' + b.cw + ' doc ' + b.doc);
-      check('the bar never runs past the screen — 320, 360, 375, 390, 768, 1024, 1280 and 1440 px, signed out and signed in (16 loads, the numbers painted in each)', bars.length === 16 && bars.every((b) => b.painted) && !over.length, over.join(' | ') || bars.filter((b) => !b.painted).map((b) => b.who + '@' + b.w).join());
-      const shown = bars.filter((b) => b.more), snug = bars.filter((b) => b.pill && !b.more && b.w > 700);
+      check('the bar never runs past the screen — ' + WIDTHS.join(', ') + ' px, signed out and signed in (' + WIDTHS.length * 2 + ' loads, the numbers painted in each)', bars.length === WIDTHS.length * 2 && bars.every((b) => b.painted) && !over.length, over.join(' | ') || bars.filter((b) => !b.painted).map((b) => b.who + '@' + b.w).join());
+      const icons = bars.filter((b) => b.icon), badIcon = icons.filter((b) => !b.pill || !b.ico || b.text !== '📊' || b.more || b.entry || b.ph < b.ctl - 1 || b.pw < b.ctl - 1);
+      check('  ...where the open row of links has no room for the count (.is-tight), the pill stays as a 📊 button alone, as tall and as wide as the bar\'s other controls (--nav-ctl) — at ' + (icons.map((b) => b.who + '@' + b.w).join(', ') || 'none of these widths'),
+        icons.length >= 2 && icons.some((b) => b.who === 'out') && icons.some((b) => b.who === 'in') && !badIcon.length && bars.filter((b) => !b.icon && b.ico).length === 0, JSON.stringify(badIcon.concat(icons.length ? [] : bars.filter((b) => b.w >= 1600).map((b) => b.who + '@' + b.w + ' ' + b.cls))).slice(0, 400));
+      const shown = bars.filter((b) => b.more), snug = bars.filter((b) => b.pill && !b.icon && !b.more && b.w > 700);
       const badShown = shown.filter((b) => b.tiers.includes('is-snug') || !/· ✓ \d+ verified · [\d.]+[KMB]? views$/.test(b.text));
       const badSnug = snug.filter((b) => !b.tiers.includes('is-snug') || b.needed !== true);
       check('  ...the new numbers are shown where there is room ("· ✓ 6 verified · 2.8K views"), and where there is not the bar is .is-snug — only when it is needed (without it the bar would not hold)',
@@ -345,11 +434,47 @@ else if (!CHROME) {
       const order = bars.filter((b) => b.tiers.length && b.tiers[0] !== 'is-snug');
       check('  ....is-snug is always the first tier on: no later tier without it', !order.length, order.map((b) => b.who + '@' + b.w + ' ' + b.tiers.join(' ')).join(' | '));
       const noWay = bars.filter((b) => !b.pill && !b.entry);
-      check('  ...wherever the pill is not in the bar, the menu holds 📊 Site numbers; where it is, the menu does not', !noWay.length && bars.filter((b) => b.pill && b.entry).length === 0, noWay.map((b) => b.who + '@' + b.w).join());
+      check('  ...always exactly one way in: wherever the pill is not in the bar, the menu holds 📊 Site numbers; where it is (whole or as 📊), the menu does not', !noWay.length && bars.filter((b) => b.pill && b.entry).length === 0, noWay.map((b) => b.who + '@' + b.w + ' ' + b.cls).join());
       const p = bars.find((b) => b.who === 'out' && b.w === 1280);
       const wantLabel = new RegExp('^\\d+ (person|people) Sending it right now, 6 verified members, ' + SEED.viewsTotal.toLocaleString('en-US').replace(/,/g, ',') + ' page views since ' + longDay(SEED.first) + '$');
       check('the pill is a button (type="button", aria-haspopup="dialog") with a description and no title, named by all three numbers in words; its words say ' + '"✓ 6 verified · ' + short(SEED.viewsTotal) + ' views"',
         p && p.tag === 'BUTTON' && p.type === 'button' && p.pop === 'dialog' && p.tip && p.tip.length >= 8 && !p.title && wantLabel.test(p.label) && p.text.endsWith('✓ 6 verified · ' + short(SEED.viewsTotal) + ' views'), p && JSON.stringify({ label: p.label, text: p.text, tip: p.tip }));
+
+      /* — the first answer. Before it the numbers are "·", each in about the room its real number takes, so the new numbers
+         show before it only where they still show after it. (With bare "·" the bar was measured ~12px narrower than it would
+         be: in that band they showed for a moment and vanished when the answer came.) The narrowest width that shows them is
+         found by halving, signed in, first with /api/presence kept waiting, then with its answer in. — */
+      await cdp('Network.clearBrowserCookies');
+      await cdp('Network.setCookie', { name: 'jsi_age', value: '18', url: B });
+      await cdp('Network.setCookie', { name: 'sid', value: SEED.sid, url: B });
+      await cdp('Emulation.setDeviceMetricsOverride', { width: 1400, height: 860, deviceScaleFactor: 1, mobile: false });
+      await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
+      fetchMode = 'hold'; held.length = 0;
+      await cdp('Fetch.enable', { patterns: [{ urlPattern: '*/api/presence*' }] });
+      await cdp('Page.navigate', { url: B + '/wall' });
+      await until('document.readyState === "complete" && !!document.getElementById("nav-live") && window.AUTH && AUTH.user && document.querySelector(".profile-link")', 8000);
+      await sleep(600);
+      const moreAt = async (w) => {
+        await cdp('Emulation.setDeviceMetricsOverride', { width: w, height: 860, deviceScaleFactor: 1, mobile: false });
+        await ev('dispatchEvent(new Event("resize")), true'); await sleep(180);
+        return ev('(() => { const m = document.querySelector("#nav-live .nav-live-more"); return !!m && m.getClientRects().length > 0; })()');
+      };
+      const narrowest = async () => {
+        let lo = 701, hi = 1400;
+        if (await moreAt(lo) || !(await moreAt(hi))) return null;
+        while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (await moreAt(mid)) hi = mid; else lo = mid; }
+        return hi;
+      };
+      const beforeLive = await ev('!document.querySelector("#nav-live.is-live") && document.querySelector(".nav-live-vn").textContent === "·"');
+      const tBefore = await narrowest();
+      fetchMode = 'pass';
+      while (held.length) await cdp('Fetch.continueRequest', { requestId: held.shift() }).catch(() => {});
+      await cdp('Fetch.disable');
+      const answered = await until('document.querySelector("#nav-live.is-live") && /\\d/.test(document.querySelector(".nav-live-vn").textContent)', 8000);
+      await sleep(300);
+      const tAfter = await narrowest();
+      check('the new numbers never show and then vanish when the first answer comes: before it they show from ' + tBefore + 'px, after it from ' + tAfter + 'px (signed in) — never from a narrower width before than after',
+        beforeLive && !!answered && tBefore !== null && tAfter !== null && tBefore >= tAfter - 1, JSON.stringify({ beforeLive, answered: !!answered, tBefore, tAfter }));
 
       /* — a re-fit (a resize) on a long page scrolled down: the bar is measured again and the page stays where it was — */
       const kept = [];
@@ -366,18 +491,42 @@ else if (!CHROME) {
       }
       check('a re-fit of the bar on a long page scrolled down (a resize at 1024 and 1280 px) leaves the page where it was — it used to move up 42px for each way the row was tried',
         kept.every((k) => k.y0 >= 1000 && k.refits > 0 && k.y1 === k.y0), JSON.stringify(kept));
+      /* — a fresh load of a link to a #section (the site links to /about#og-rules five times): the browser glides there, and the
+         bar's fitting (fonts, the first answer) must not stop it — a scroll of fit()'s own once left it near the top — */
+      const landed = [];
+      for (const [w, who, url] of [[1024, 'out', '/about#og-rules'], [1280, 'out', '/about#og-rules'], [1600, 'out', '/about#og-rules'], [1280, 'in', '/about#og-rules']]) {
+        await cdp('Page.navigate', { url: 'about:blank' }); await sleep(100);
+        await cdp('Network.clearBrowserCookies');
+        await cdp('Network.setCookie', { name: 'jsi_age', value: '18', url: B });
+        if (who === 'in') await cdp('Network.setCookie', { name: 'sid', value: SEED.sid, url: B });
+        await cdp('Emulation.setDeviceMetricsOverride', { width: w, height: 860, deviceScaleFactor: 1, mobile: false });
+        await cdp('Emulation.setTouchEmulationEnabled', { enabled: false });
+        await cdp('Page.navigate', { url: B + url });
+        await until('document.readyState === "complete"');
+        let y = -1, still = 0;
+        for (let i = 0; i < 100 && still < 8; i++) { await sleep(100); const v = await ev('scrollY'); if (v === y) still++; else { still = 0; y = v; } }   // until the glide and the fitting are over
+        const r = await ev('(() => { const el = document.getElementById("og-rules"); return { y: Math.round(scrollY), top: el ? Math.round(el.getBoundingClientRect().top) : null, live: !!document.querySelector("#nav-live.is-live"), cls: document.querySelector("nav.nav").className }; })()');
+        landed.push({ w, who, ...r });
+      }
+      check('a fresh load of /about#og-rules (1024, 1280 and 1600 px; signed out and in) ends with that section at the top of the screen, under the bar — not stopped short by the bar\'s fitting',
+        landed.every((l) => l.top !== null && l.top >= 0 && l.top <= 220 && l.y > 1000), JSON.stringify(landed));
 
       /* — the pop-up: Enter on the pill at 1280, the menu's 📊 Site numbers at 390 (signed in) and 320 — */
       const visDays = SEED.rows.filter((r) => r[0] >= new Date(Date.parse(today + 'T00:00:00Z') - 89 * 864e5).toISOString().slice(0, 10));
       const maxPeople = Math.max(...visDays.map((r) => r[1])), maxViews = Math.max(...visDays.map((r) => r[2]));
-      for (const [w, who, how] of [[1280, 'out', 'pill'], [390, 'in', 'menu'], [320, 'out', 'menu']]) {
+      // …and at 641 (the tablet width the cards once went two to a row, too narrow for their charts), and where the open row
+      // shows the pill as 📊 alone (Enter on it)
+      const iconAt = bars.find((b) => b.icon && b.who === 'in') || bars.find((b) => b.icon);
+      const WALK = [[1280, 'out', 'pill'], [390, 'in', 'menu'], [320, 'out', 'menu'], [641, 'out', 'pill']].concat(iconAt ? [[iconAt.w, iconAt.who, 'pill']] : []);
+      for (const [w, who, how] of WALK) {
         errors.length = 0;
         await open(w, who);
+        const asIcon = how === 'pill' && (await ev('document.querySelector("nav.nav").classList.contains("is-tight") && !!(document.querySelector("#nav-live .nav-live-ico") || { getClientRects: () => [] }).getClientRects().length'));
         if (how === 'pill') { await ev('document.getElementById("nav-live").focus(), true'); await press('Enter'); }
         else { await ev('document.getElementById("nav-toggle").click(), true'); await until('document.getElementById("nav-menu").classList.contains("open")', 3000); await ev('document.querySelector(".nav-stats-open").click(), true'); }
         const ready = await until('document.querySelector("#full-view:not([hidden]) .ss-cards")', 8000);
         const s = ready ? await ev(POP) : null;
-        const tag = w + 'px' + (who === 'in' ? ', signed in' : '') + (how === 'pill' ? ' (Enter on the pill)' : ' (📊 Site numbers in the menu)');
+        const tag = w + 'px' + (who === 'in' ? ', signed in' : '') + (how === 'pill' ? (asIcon ? ' (Enter on the pill, a 📊 alone in the open row)' : ' (Enter on the pill)') : ' (📊 Site numbers in the menu)');
         check('at ' + tag + ': it opens as a modal dialog labelled "Just Send It, in numbers", with focus inside it and a described ✕',
           s && s.open && s.role === 'dialog' && s.modal === 'true' && s.title === 'Just Send It, in numbers' && s.inside && s.xTip && s.xTip.length > 10, s && JSON.stringify({ role: s.role, modal: s.modal, title: s.title, inside: s.inside }));
         if (!s) continue;
@@ -387,7 +536,16 @@ else if (!CHROME) {
         check('  ...the three charts drawn from the answer: 90 bars of people and of views (the missing day a marked stub, never a 0), the verified step line, every bar and every day titled; today says "today so far"',
           c1.bars === 90 && c3.bars === 90 && c1.barsTitled && c3.barsTitled && c2.line && c1.hits.length === 90 && c2.hits.length === 90 && c3.hits.length === 90 && [c1, c2, c3].every((c) => c.hits.every((t) => t.length > 5))
             && c1.none.length === 1 && /no record — the site counted nothing that day/.test(c1.none[0]) && /\(today so far\): \d+ (people|person)$/.test(c1.todayBar) && /\(today so far\): [\d,]+ views?$/.test(c3.todayBar)
-            && /\(today so far\): 5 verified members$/.test(c2.hits[89]), JSON.stringify({ b: [c1.bars, c3.bars], none: c1.none, today: [c1.todayBar, c3.todayBar, c2.hits[89]] }));
+            && /\(today so far\): 5 of today’s verified members had last passed the check by then$/.test(c2.hits[89]), JSON.stringify({ b: [c1.bars, c3.bars], none: c1.none, today: [c1.todayBar, c3.todayBar, c2.hits[89]] }));
+        check('  ...the verified line never calls a day\'s step that day\'s count: every day "N of today\'s verified members had last passed the check by then", and its table\'s column says the same',
+          c2.hits.length === 90 && c2.hits.every((t) => /^\d{1,2} [A-Z][a-z]{2,3}( \(today so far\))?: \d+ of today’s verified members had last passed the check by then$/.test(t)) && c2.colHead === 'Of today’s verified members, passed by this day',
+          JSON.stringify({ some: c2.hits.slice(-2), col: c2.colHead }));
+        check('  ...every note is a sentence with a capital (the Views card\'s is "The last 90 days shown."), and the people are counted once per network and browser a day',
+          [c1, c2, c3].every((c) => c.metas.every((m) => /^[A-Z]/.test(m))) && c3.metas.join() === 'The last 90 days shown.' && c1.metas.some((m) => m.includes('once per network and browser a day (a phone that changes network counts twice), bots left out')),
+          JSON.stringify([c1.metas, c3.metas]));
+        check('  ...a date, or "today so far", is never broken inside, and each chart has room: ' + (s.cols === 1 ? 'one card a row' : s.cols + ' cards a row') + ', the charts ' + s.cards.map((c) => c.svgW).join('/') + 'px wide',
+          [c1, c2, c3].every((c) => !c.broken.length && c.svgW >= Math.min(280, w - 120)) && (w >= 900 || s.cols === 1 || s.cards.every((c) => c.svgW >= 280)) && (w !== 641 || (s.cols === 1 && [c1, c2, c3].every((c) => c.xRows === 1))),
+          JSON.stringify({ cols: s.cols, w: s.cards.map((c) => [c.svgW, c.cardW]), broken: s.cards.map((c) => c.broken), rows: s.cards.map((c) => c.xRows) }));
         check('  ...each scale labelled from the same numbers: the highest day on the y side (0 at the baseline), the first and last days under it, the chart as wide as its card',
           c1.y.join() === maxPeople + ',0' && c3.y.join() === maxViews + ',0' && c2.y.join() === '5,0' && /today so far$/.test(c1.x[c1.x.length - 1]) && c1.x.length === 2 && [c1, c2, c3].every((c) => c.svgW > c.cardW * 0.45 && c.svgW <= c.cardW),
           JSON.stringify({ y: [c1.y, c2.y, c3.y], x: c1.x, w: s.cards.map((c) => [c.svgW, c.cardW]) }));
@@ -435,6 +593,31 @@ else if (!CHROME) {
       await ev('document.querySelector("#full-view .cf-x").click(), true');
       const byX = await until('document.getElementById("full-view").hidden', 3000);
       check('a press on the dimmed edge closes it, and so does ✕ Close (the second open reads the already-loaded code)', !!byEdge && !!byX && (await ev('document.querySelectorAll("script[src*=\\"sitestats.js\\"]").length')) === 1);
+
+      /* — Try again: the numbers do not come (a 500, held by the browser's own request interception), Enter on Try again; it
+         fails again, then works. Focus never drops to the page under the dialog (it used to land on <body>). — */
+      await open(1280, 'out');
+      fetchMode = 'fail';
+      await cdp('Fetch.enable', { patterns: [{ urlPattern: '*/api/site-stats*' }] });
+      await ev('document.getElementById("nav-live").focus(), true'); await press('Enter');
+      const errShown = await until('document.querySelector("#full-view:not([hidden]) .ss-retry")', 8000);
+      await ev('document.querySelector("#full-view .ss-retry").focus(), true');
+      const where = '({ inside: document.getElementById("full-view").contains(document.activeElement), on: document.activeElement ? document.activeElement.tagName + "." + document.activeElement.className : "" })';
+      await press('Enter');   // fails again
+      await sleep(150); await until('document.querySelector("#full-view .ss-retry") && !document.querySelector("#full-view .ss[aria-busy]")', 5000); await sleep(100);
+      const f1 = await ev(where);
+      fetchMode = 'pass';
+      await press('Enter');   // on the new Try again: this time the numbers come
+      await until('document.querySelector("#full-view .ss-cards")', 8000); await sleep(150);
+      const f2 = await ev(where);
+      await cdp('Fetch.disable');
+      check('after Try again (Enter), focus stays in the dialog: on the new Try again when it fails again, on the dialog itself once the numbers are drawn — never on the page under it',
+        !!errShown && f1.inside && /^BUTTON\..*ss-retry/.test(f1.on) && f2.inside && /cf-dialog/.test(f2.on), JSON.stringify({ errShown: !!errShown, f1, f2 }));
+      // the numbers now follow the bar's poll while it is open: all three, as the pill shows them
+      await ev('document.dispatchEvent(new CustomEvent("jsi:presence", { detail: { active: 2, verified: 7, views: 99999, viewsSince: "' + SEED.first + '" } })), true');
+      const follow = await ev('[".ss-live-num", ".ss-ver-num", ".ss-views-num"].map((s) => (document.querySelector("#full-view " + s) || {}).textContent)');
+      check('  ...and while it is open, the number now of all three cards follows the bar\'s own poll (the pill and the pop-up agree)', follow[0] === '2' && follow[1] === '7' && follow[2] === '99,999', JSON.stringify(follow));
+      await ev('FullView.close(), true');
     } catch (e) {
       console.error('ERROR', e && e.stack);
       check('the browser part ran to the end', false, e && e.message);
