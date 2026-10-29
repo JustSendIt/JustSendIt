@@ -14002,6 +14002,88 @@ function adminActivity() {
     activeKinds: ACTIVE_KINDS,
   };
 }
+/* ===== The site's numbers, in the nav and its pop-up =================================================================
+   Owner, 2026-10-29: "In the active sender tracker in the nav also add the number of total verified users total lifetime
+   site views." Then: "When users click on this section pull up a popup that shows a graph over time of all three of these
+   stats in a simple to understand graphic that quickly shows the data to the users."
+
+   Three numbers, every one read from the database, never made up:
+   - SENDING IT NOW: presenceCount() — people with a page of the site open in the last PRESENCE_WINDOW. Live, never kept.
+   - VERIFIED MEMBERS: accounts (not the site's own, not deleted) whose wallet passed the on-chain holder check, the check
+     that lets an account post — holder_state 'ok'.
+   - VIEWS: SUM(views) FROM visits_daily — pages opened by people (bots apart), since MIN(day), the day counting began.
+   The nav reads the two totals with /api/presence (kept a minute); the pop-up reads /api/site-stats, the same totals with a
+   chart for each (kept five minutes, and made again the moment the verified count moves, so the step line always ends on
+   the number above it). Aggregates only: no id, name or per-person row ever leaves here.
+
+   The verified chart is NOT a record of the count on past days — the site keeps no such record. It places each of today's
+   verified members on the day their wallet LAST passed the check (holder_verified_at), cumulative, so a member who
+   re-checked last week counts from last week; anyone who lost the pass since is in no day at all. The pop-up says so. */
+const SITE_TOTALS_MS = 60e3, SITE_SERIES_MS = 5 * 60e3, SITE_SERIES_DAYS = 90;
+const SITE_VERIFIED_WHERE = "system = 0 AND deleted_at IS NULL AND holder_state = 'ok'";
+let siteTotalsMemo = null, siteSeriesMemo = null;
+function siteTotals() {
+  if (siteTotalsMemo && Date.now() - siteTotalsMemo.at < SITE_TOTALS_MS) return siteTotalsMemo.v;
+  let v;
+  try {
+    const w = db.prepare('SELECT COALESCE(SUM(views), 0) n, MIN(day) since FROM visits_daily').get();
+    v = { verified: db.prepare('SELECT COUNT(*) n FROM users WHERE ' + SITE_VERIFIED_WHERE).get().n, views: w.since ? w.n : null, viewsSince: w.since || null };
+  } catch { v = siteTotalsMemo ? siteTotalsMemo.v : { verified: null, views: null, viewsSince: null }; }   // unknown is null, never 0
+  siteTotalsMemo = { at: Date.now(), v };
+  return v;
+}
+function siteSeries() {
+  const today = utcDay(), tot = siteTotals();
+  const m = siteSeriesMemo;
+  if (m && Date.now() - m.at < SITE_SERIES_MS && m.today === today && (tot.verified == null || tot.verified === m.verifiedTotal)) return m;
+  const dayMs = (d) => Date.parse(d + 'T00:00:00Z');
+  const t0 = dayMs(today), cutAt = t0 - (SITE_SERIES_DAYS - 1) * 864e5;
+  // visitors and views: one entry a day from the first counted day (or 90 days back) to today; a day with no row is null —
+  // the site served no page that day (it was down, most likely), so nothing was counted, which is not the same as nobody
+  const first = (db.prepare('SELECT MIN(day) d FROM visits_daily').get() || {}).d || null;
+  const visitors = [], views = [];
+  let viewsTotal = null;
+  if (first && dayMs(first) <= t0) {
+    const from = utcDay(Math.max(dayMs(first), cutAt));
+    const rows = new Map(db.prepare('SELECT day, visitors, views FROM visits_daily WHERE day >= ? AND day <= ?').all(from, today).map((r) => [r.day, r]));
+    for (let t = dayMs(from); t <= t0; t += 864e5) {
+      const d = utcDay(t), r = rows.get(d);
+      visitors.push([d, r ? r.visitors : null]); views.push([d, r ? r.views : null]);
+    }
+    viewsTotal = db.prepare('SELECT COALESCE(SUM(views), 0) n FROM visits_daily').get().n;
+  }
+  // verified members, each on the day their wallet last passed (a time after today, a clock that ran ahead, counts today)
+  const per = db.prepare(`SELECT MIN(strftime('%Y-%m-%d', holder_verified_at / 1000, 'unixepoch'), ?) day, COUNT(*) n FROM users
+                          WHERE ${SITE_VERIFIED_WHERE} AND holder_verified_at IS NOT NULL GROUP BY 1 ORDER BY 1`).all(today);
+  const undated = db.prepare('SELECT COUNT(*) n FROM users WHERE ' + SITE_VERIFIED_WHERE + ' AND holder_verified_at IS NULL').get().n;
+  const vdays = [];
+  if (per.length) {
+    const firstV = per[0].day, from = Math.max(dayMs(firstV), cutAt);
+    let cum = 0, i = 0;
+    for (; i < per.length && dayMs(per[i].day) < from; i++) cum += per[i].n;   // the days before the 90 shown are carried into the first
+    for (let t = from; t <= t0; t += 864e5) {
+      const d = utcDay(t);
+      while (i < per.length && per[i].day === d) cum += per[i++].n;
+      vdays.push([d, cum]);
+    }
+  }
+  const verifiedTotal = per.reduce((a, r) => a + r.n, 0) + undated;
+  siteSeriesMemo = {
+    at: Date.now(), today, verifiedTotal,
+    body: {
+      verified: verifiedTotal, views: viewsTotal, viewsSince: first,
+      visitors: { since: first, days: visitors, today },
+      viewsSeries: { since: first, days: views, today },
+      verifiedSeries: { basis: 'last-pass', since: per.length ? per[0].day : null, days: vdays, undated, today },
+    },
+  };
+  return siteSeriesMemo;
+}
+function siteStats() {
+  const s = siteSeries(), b = s.body;
+  return { at: s.at, maxDays: SITE_SERIES_DAYS, now: { active: presenceCount(), activeWindowSec: Math.round(PRESENCE_WINDOW / 1000), verified: b.verified, views: b.views, viewsSince: b.viewsSince },
+    visitors: b.visitors, views: b.viewsSeries, verified: b.verifiedSeries };
+}
 /* The admin's codes, with what became of each: unused (or freed again — redeemed but never turned into an account within
    INVITE_RECLAIM_MS, so it works again), in progress (redeemed, the sign-up not finished), or used — and by whom. */
 function adminCodes() {
@@ -16016,9 +16098,10 @@ const server = http.createServer(async (req, res) => {
       if (p === '/api/config' && req.method === 'GET') {
         return send(res, 200, {
           media: OPTIONAL_MEDIA,   // X04: the theme song and the feature video ship outside git; pages hide what is not here
-          /* the versions of the files auth.js injects at sign-up time: the HTML rewriter versions every file a page names,
-             but these three are added by script, so they went out bare — and Cloudflare kept a bare file for four hours */
-          assets: { 'gate.css': assetVer('gate.css'), 'invite.css': assetVer('invite.css'), 'invite.js': assetVer('invite.js'), 'burnproof.js': assetVer('burnproof.js') },
+          /* the versions of the files auth.js injects at sign-up time (and nav.js's numbers pop-up, sitestats.js, on its first
+             open): the HTML rewriter versions every file a page names, but these are added by script, so they went out bare —
+             and Cloudflare kept a bare file for four hours */
+          assets: { 'gate.css': assetVer('gate.css'), 'invite.css': assetVer('invite.css'), 'invite.js': assetVer('invite.js'), 'burnproof.js': assetVer('burnproof.js'), 'sitestats.js': assetVer('sitestats.js') },
           features: { voiceMemos: VOICE_MEMOS },
           auth: {
             wallet: true, email: true,
@@ -16033,12 +16116,19 @@ const server = http.createServer(async (req, res) => {
         });
       }
       // live "who's active" presence: heartbeat in, active count out (real number, never inflated)
+      // …with the two totals the nav shows beside it: verified members and lifetime views (siteTotals, kept a minute)
       if (p === '/api/presence' && req.method === 'GET') {
-        if (!rateLimit('pres:' + clientIp(req), 240, 6e4)) return send(res, 200, { active: presenceCount() }); // over-eager client → still hand back the count, just don't re-touch
+        if (!rateLimit('pres:' + clientIp(req), 240, 6e4)) return send(res, 200, { active: presenceCount(), ...siteTotals() }); // over-eager client → still hand back the numbers, just don't re-touch
         const pid = String(url.searchParams.get('pid') || '').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 40);
         const key = me ? ('u:' + me.id) : presenceAnonKey(clientIp(req), pid); // one slot per signed-in user (dedupes tabs), else per browser — capped per IP
         presenceTouch(key);
-        return send(res, 200, { active: presenceCount() });
+        return send(res, 200, { active: presenceCount(), ...siteTotals() });
+      }
+      /* The nav's numbers pop-up (public/sitestats.js): the three numbers now and a chart of each over time — aggregates only.
+         Public and read-only; per address like /api/presence, and kept five minutes but for the live count (siteSeries). */
+      if (p === '/api/site-stats' && req.method === 'GET') {
+        if (!rateLimit('sstats:' + clientIp(req), 120, 6e4)) return send(res, 429, { error: 'slow down' }, { 'Retry-After': '60' });
+        return send(res, 200, siteStats());
       }
       // The OG campaign clock. Public and unauthenticated — the homepage banner used to hard-code the
       // deadline epochs in its HTML beside the server constants, which is exactly the kind of duplicated

@@ -138,9 +138,9 @@ for (const f of htmlFiles) {
 }
 
 /* ---- 4. lazily-loaded assets exist too ----
-   auth.js fetches these by string at runtime, so no HTML file names them and check 3 cannot see them. */
-for (const ref of ['invite.js', 'invite.css', 'gate.css']) {
-  if (!existsSync(path.join(PUBLIC, ref))) note('public/' + ref, 'is loaded on demand by auth.js but does not exist');
+   auth.js and nav.js fetch these by string at runtime, so no HTML file names them and check 3 cannot see them. */
+for (const [ref, by] of [['invite.js', 'auth.js'], ['invite.css', 'auth.js'], ['gate.css', 'auth.js'], ['burnproof.js', 'auth.js'], ['sitestats.js', 'nav.js']]) {
+  if (!existsSync(path.join(PUBLIC, ref))) note('public/' + ref, 'is loaded on demand by ' + by + ' but does not exist');
 }
 
 /* ---- 5. .dockerignore takes no trailing comments ----

@@ -269,12 +269,14 @@ a { color: var(--gold); }
    resize, sign-in) would briefly fade the closed menu in and out */
 .nav.is-measuring .nav-menu, .nav.is-measuring .nav-menu * { transition: none !important; }
 /* nothing in the row is ever squashed — a pill, the bell or the logo mark at the wrong width is a broken graphic. When
-   the row cannot fit, nav.js steps down through measured tiers instead: .is-tight drops the live count and the
-   Send Power figures; .is-tighter the wordmark and the @name (the avatar stays); .is-tightest the level pill; .is-bare,
-   the last, the OG badge in the name pill (an OG member's bar was still 29px past a 320px phone without it). */
+   the row cannot fit, nav.js steps down through measured tiers instead: .is-snug drops the verified members and the
+   views beside the live count; .is-tight the live count itself and the Send Power figures; .is-tighter the wordmark and
+   the @name (the avatar stays); .is-tightest the level pill; .is-bare, the last, the OG badge in the name pill (an OG
+   member's bar was still 29px past a 320px phone without it). */
 .nav > *:not(.nav-menu), #nav-auth.nav-persist > *, .nav-profile > * { flex-shrink: 0; }
 .nav-logo img { flex: 0 0 auto; }
 .profile-link .pl-name { display: inline-block; white-space: nowrap; vertical-align: bottom; }   /* shown whole or not at all: nav.js hides it (.is-tighter) when the bar has no room */
+.nav.is-snug .nav-live-more { display: none; }
 .nav.is-tight .nav-live, .nav.is-tight .nav-xp-sep, .nav.is-tight .nav-xp-pts, .nav.is-tight .nav-xp-boost { display: none; }
 .nav.is-tighter .nav-logo span, .nav.is-tighter .profile-link .pl-name { display: none; }
 .nav.is-tighter .profile-link .pl-ava { margin-right: 0; }   /* with the name hidden, the gap it kept sat on one side and pushed the avatar 3px off the pill's middle */
@@ -418,6 +420,16 @@ a { color: var(--gold); }
    search comes first (it is first in each page's markup, so the tab order agrees) */
 .nav.is-compact .nav-menu a { font-size: calc(var(--nav-fs) * 1.06); padding: 0.6rem 1rem; min-height: 44px; border-radius: 12px; white-space: normal; justify-content: flex-end; text-align: right; }
 .nav.is-compact #nav-search-slot { width: 100%; margin: 0 0 0.35rem; }
+/* 📊 Site numbers (nav.js): the pop-down's way in to the numbers pop-up, as its last item, only while the bar has no room for
+   the pill that opens it — on a phone (the pill is never shown under 561px) and once .is-tight has taken it out. Where the pill
+   shows, the menu is exactly as it was. Drawn like a link of the pop-down. */
+.nav-stats-open { display: none; }
+.nav.is-compact.is-tight .nav-menu > .nav-stats-open { display: flex; }
+@media (max-width: 560px) { .nav.is-compact .nav-menu > .nav-stats-open { display: flex; } }
+.nav.is-compact .nav-menu > .nav-stats-open { align-items: center; justify-content: flex-end; min-height: 44px; padding: 0.6rem 1rem; border: 0; border-radius: 12px; background: none;
+  color: var(--text-mute); font: inherit; font-weight: 600; font-size: calc(var(--nav-fs) * 1.06); letter-spacing: 0.01em; line-height: 1.3; text-align: right; white-space: normal; cursor: pointer; }
+.nav.is-compact .nav-menu > .nav-stats-open:hover { color: var(--green-bright); background: color-mix(in srgb, var(--green) 10%, transparent); }
+.nav.is-compact .nav-menu.is-cols > .nav-stats-open { justify-content: center; text-align: center; padding-inline: 0.5rem; }
 /* in the wide bar the search keeps its place at the end of the row of links */
 .nav:not(.is-compact) #nav-search-slot { order: 1; }
 .nav.is-compact #nav-search-slot.nav-search input, .nav.is-compact .nav-menu .nav-search input:focus { width: 100% !important; }
@@ -1746,12 +1758,19 @@ details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
 }
 /* live "who's active — people Sending it right now" counter next to the 🔔 */
 .nav-live { display: inline-flex; align-items: center; gap: 0.35rem; min-height: var(--nav-ctl); font-size: var(--nav-fs-s); text-decoration: none; color: var(--text); background: color-mix(in srgb, var(--green) 10%, transparent); border: 1.5px solid color-mix(in srgb, var(--green) 40%, transparent); border-radius: 999px; padding: 0 0.7rem; margin: 0 0.4rem 0 0.15rem; vertical-align: middle; font-weight: 800; font-size: max(var(--text-floor), 0.82rem); white-space: nowrap; }
+button.nav-live { font-family: inherit; line-height: 1.5; cursor: pointer; }   /* a <button> since it opens the numbers pop-up (nav.js): the look the link had */
 .nav-live:hover, .nav-live:focus-visible { border-color: var(--green-bright); background: color-mix(in srgb, var(--green) 18%, transparent); }
 .nav-live-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--green-bright); box-shadow: 0 0 8px var(--green-bright); animation: navLivePulse 1.6s ease-in-out infinite; flex: 0 0 auto; }
 @keyframes navLivePulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.45; transform: scale(0.65); } }
 .nav-live-n { color: var(--green-bright); font-variant-numeric: tabular-nums; }
 .nav-live-lbl { color: var(--text-dim); font-weight: 700; font-size: var(--nav-fs-s); }
-@media (max-width: 700px) { .nav-live-lbl { display: none; } .nav-live { padding: 0 0.5rem; } } /* 561–700px landscape phones: the label pushed ≡ off-screen */
+/* · ✓ 6 verified · 2.8K views — the numbers in the count's own style, the words in the label's */
+.nav-live-more { display: inline-flex; align-items: center; gap: 0.35rem; }
+.nav-live-part { display: inline-flex; align-items: center; gap: 0.25rem; }
+.nav-live-vn, .nav-live-wn { color: var(--green-bright); font-variant-numeric: tabular-nums; }
+.nav-live-sep, .nav-live-tick { color: var(--text-mute); font-weight: 700; font-size: var(--nav-fs-s); }
+.nav-live-word { color: var(--text-dim); font-weight: 700; font-size: var(--nav-fs-s); }
+@media (max-width: 700px) { .nav-live-lbl, .nav-live-more { display: none; } .nav-live { padding: 0 0.5rem; } } /* 561–700px landscape phones: the label pushed ≡ off-screen (and the numbers beside it go with it) */
 @media (prefers-reduced-motion: reduce) { .nav-live-dot { animation: none; } }
 /* read-only connected-wallet balances pill in the nav */
 .nav-bal { display: inline-flex; align-items: center; gap: 0.55rem; text-decoration: none; background: var(--ink-3); border: 1.5px solid var(--ink-4); border-radius: 999px; min-height: var(--nav-ctl); padding: 0 0.7rem; margin-right: 0; vertical-align: middle; font-size: var(--nav-fs-s); font-weight: 800; color: var(--text-dim); }
@@ -6088,6 +6107,12 @@ html.motion-off .cf .cf-dialog { animation: none; }
 }
 @media (max-width: 640px) { .cf.is-panel .cf-dialog { height: 100%; } }
 
+/* ===== The pop-up as a centred sheet (size 'sheet': the nav's numbers, sitestats.js) =====
+   Sized to its content and centred, up to 1200px wide; the whole screen on a phone. */
+.cf.is-sheet { align-items: center; }
+.cf.is-sheet .cf-dialog { max-width: 1200px; height: auto; max-height: 100%; }
+@media (max-width: 640px) { .cf.is-sheet .cf-dialog { height: 100%; } }
+
 /* ===== A wall's profile picture and banner, full screen (upage.js — owner, 2026-10-15: "Allow a user to pull up a full screen
    size view of a profile picture and banner by clicking on it") =====
    A see-through button over each: the picture keeps its look, the button takes the press and the keyboard. The banner's sits
@@ -6297,3 +6322,53 @@ html.motion-off .ob-spot { transition: none; }
 .ob-spacer { display: block; height: 100vh; pointer-events: none; }
 @media (max-width: 767px), (max-height: 499px) { .ob-card.ob-resume { bottom: var(--fab-clear, 5.5rem) !important; border-radius: 18px; border-bottom: 2px solid var(--green); } }   /* the small offer leaves the ✏️ SEND IT strip free */
 @media (max-width: 767px), (max-height: 499px) { .ob-card.ob-top { top: 0 !important; bottom: auto !important; border-radius: 0 0 18px 18px; border-bottom: 2px solid var(--green); border-top: 0; padding-top: calc(0.9rem + env(safe-area-inset-top, 0px)); } }
+
+/* ===== The site's numbers (public/sitestats.js, in the FullView sheet; owner, 2026-10-29) =====
+   One card above the other on a phone, side by side on a tablet, and from 900px one a row with its chart beside what it
+   says, wide enough to read day by day. Each: the title, the number now, one sentence
+   saying what it counts, its chart — an SVG stretched to the card's width, with its labels in HTML beside it so they keep
+   the text floor — and the day-by-day table. The site's own tokens: the green family on the dark ground. Nothing moves. */
+.ss { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }
+.ss-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); gap: 0.9rem; align-items: start; }
+.ss-card { min-width: 0; display: flex; flex-direction: column; gap: 0.45rem; padding: 0.9rem 1rem 0.6rem; background: var(--ink-2); border: 1.5px solid var(--ink-4); border-radius: 14px; }
+.ss-text, .ss-graph { min-width: 0; display: flex; flex-direction: column; gap: 0.45rem; }
+@media (min-width: 900px) {
+  .ss-cards { grid-template-columns: minmax(0, 1fr); }
+  .ss-card { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); gap: 0 1.6rem; align-items: start; padding-block: 0.8rem; }
+}
+.ss-name { margin: 0; display: flex; align-items: center; gap: 0.45rem; color: var(--text); font-weight: 800; font-size: max(var(--text-floor), 1.05rem); line-height: 1.3; }
+.ss-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--green-bright); box-shadow: 0 0 8px var(--green-bright); }
+.ss-big { margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.5rem; line-height: 1.1; }
+.ss-num { font-family: 'Luckiest Guy', 'Rubik', cursive; font-weight: 400; letter-spacing: 0.02em; color: var(--green-bright); font-variant-numeric: tabular-nums; font-size: max(var(--text-floor), 2.6rem); overflow-wrap: anywhere; }
+.ss-unit { color: var(--text-dim); font-weight: 700; font-size: max(var(--text-floor), 0.9rem); }
+.ss-what { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.9rem); line-height: 1.5; }
+.ss-chart { margin: 0.35rem 0 0; display: grid; grid-template-columns: auto minmax(0, 1fr); column-gap: 0.45rem; min-width: 0; }
+.ss-y { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; justify-content: space-between; text-align: right; color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: max(var(--text-floor), 0.8rem); line-height: 1; }
+.ss-svg { grid-column: 2; grid-row: 1; display: block; width: 100%; height: clamp(96px, 7.5rem, 170px); overflow: visible; }
+.ss-x { grid-column: 2; grid-row: 2; display: flex; flex-wrap: wrap; justify-content: space-between; gap: 0 0.6rem; margin-top: 0.3rem; color: var(--text-dim); font-variant-numeric: tabular-nums; font-size: max(var(--text-floor), 0.8rem); line-height: 1.3; }
+.ss-x > :last-child { margin-left: auto; text-align: right; }
+.ss-base { stroke: var(--ink-5); stroke-width: 1; }   /* the faint baseline, 0 */
+.ss-top { stroke: var(--ink-4); stroke-width: 1; stroke-dasharray: 3 3; }   /* the top of the scale, the highest day */
+.ss-bar { fill: var(--green); }
+.ss-bar.is-today { fill: color-mix(in srgb, var(--green) 40%, transparent); stroke: var(--green-bright); stroke-width: 0.6; }   /* today, so far: lighter, outlined */
+.ss-bar.is-none { fill: var(--ink-5); }   /* a day with no record: a stub on the baseline, never a 0 */
+.ss-area { fill: var(--g-veil); }
+.ss-line { fill: none; stroke: var(--green-bright); stroke-width: 2; stroke-linejoin: round; }
+.ss-hit { fill: transparent; }
+.ss-hit:hover { fill: color-mix(in srgb, var(--green) 14%, transparent); }
+.ss-meta, .ss-undated { margin: 0; color: var(--text-mute); font-size: max(var(--text-floor), 0.8rem); }
+.ss-empty { margin: 0.35rem 0 0; padding: 0.8rem; border: 1px dashed var(--ink-5); border-radius: 10px; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); }
+.ss-table > summary { display: list-item; box-sizing: border-box; min-height: 44px; padding-block: 0.65rem; color: var(--text); font-weight: 700; font-size: max(var(--text-floor), 0.88rem); line-height: 1.3; cursor: pointer; }   /* the browser's own ▸, so it reads as one that opens */
+.ss-tbl { max-height: 16rem; overflow-y: auto; overscroll-behavior: contain; border-top: 1px solid var(--ink-4); margin-bottom: 0.3rem; }
+.ss-tbl table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: max(var(--text-floor), 0.85rem); }
+.ss-tbl th, .ss-tbl td { padding: 0.3rem 0.4rem; border-bottom: 1px solid var(--ink-4); text-align: left; font-weight: 500; }
+.ss-tbl thead th { position: sticky; top: 0; background: var(--ink-2); color: var(--text-dim); font-weight: 700; }
+.ss-tbl td, .ss-tbl thead th:last-child { text-align: right; }
+.ss-foot { display: flex; flex-direction: column; align-items: flex-start; gap: 0.2rem; }
+.ss-wall { display: inline-flex; align-items: center; min-height: 44px; color: var(--green-bright); font-weight: 800; font-size: max(var(--text-floor), 1rem); }
+.ss-note { margin: 0; color: var(--text-mute); font-size: max(var(--text-floor), 0.82rem); }
+.ss-wait, .ss-err { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 1rem); }
+@media (forced-colors: active) {
+  .ss-bar, .ss-area { fill: CanvasText; } .ss-bar.is-today, .ss-bar.is-none { fill: GrayText; }
+  .ss-line, .ss-base, .ss-top { stroke: CanvasText; } .ss-hit:hover { fill: Highlight; }
+}

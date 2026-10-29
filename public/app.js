@@ -757,7 +757,8 @@
      on a phone closes it instead of leaving the page. Focus goes back to what opened it.
    - swap() changes what it shows without closing (your picture's full view → your Wall Style editor): one history step, one
      place focus returns to.
-   - size 'panel' is a smaller sheet (the editor): at the side on a wide screen, so the wall shows its changes beside it.
+   - size 'panel' is a smaller sheet (the editor): at the side on a wide screen, so the wall shows its changes beside it;
+     size 'sheet' a centred one sized to its content (the nav's numbers, sitestats.js).
    A plain fixed layer above the page's own pop-ups (z 460: over the token dashboard, under the toasts, the tips, the wallet
    picker and the age question), not <dialog>.showModal() — the top layer would hide the toasts and the tips under it. */
 (function () {
@@ -782,11 +783,12 @@
       if (!e.defaultPrevented) { e.preventDefault(); close('key'); }
     });
   }
-  /* o = { title, size: 'full' | 'panel', turnHint (a wide thing: "turn your phone sideways"), closeLabel,
+  /* o = { title, size: 'full' | 'panel' | 'sheet', turnHint (a wide thing: "turn your phone sideways"), closeLabel,
            fill(stage) → cleanup(how) | undefined, where cleanup may return the element focus should go back to } */
   function fill(o) {
     titleEl.textContent = o.title || '';
     root.classList.toggle('is-panel', o.size === 'panel');
+    root.classList.toggle('is-sheet', o.size === 'sheet');
     root.classList.toggle('has-turn', !!o.turnHint);
     xBtn.setAttribute('aria-label', o.closeLabel || 'Close full screen');
     stage.textContent = '';
