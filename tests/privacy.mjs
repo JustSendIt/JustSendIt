@@ -137,7 +137,7 @@ try {
     const aSessionHash = createHash('sha256').update(a.sid).digest('hex');
     const secrets = { email, wallet: wallet.slice(2), tracked: tracked.slice(2), label: 'pv-secret-stash', signupIp: sigIdx, emailIdx, walletIdx, trackedIdx, session: a.sid, sessionHash: aSessionHash };
     const routes = ['/api/users/__pv_alice__', '/api/users/' + a.id, '/u/__pv_alice__', '/api/posts', '/api/posts?sort=new', '/api/calls', '/api/calls/live', '/api/leaderboard',
-      '/api/calls/leaderboard', '/api/search?q=__pv', '/api/search?q=' + wallet, '/api/search?q=' + wallet.slice(0, 12), '/api/search?q=' + tracked, '/api/presence', '/api/gate/state', '/api/communities', '/api/pins?user=__pv_alice__', '/api/competition', '/api/beta',
+      '/api/calls/leaderboard', '/api/search?q=__pv', '/api/search?q=' + wallet, '/api/search?q=' + wallet.slice(0, 12), '/api/search?q=' + tracked, '/api/presence', '/api/site-stats', '/api/gate/state', '/api/communities', '/api/pins?user=__pv_alice__', '/api/competition', '/api/beta',
       '/api/me', '/api/wallets', '/api/notifications', '/api/auth/sessions', '/api/alerts', '/api/tracker/cache', '/api/gamify/me', '/api/mutes', '/api/admin/reports', '/api/admin/outbound'];
     const leaks = [];
     for (const [who, sid] of [['anonymous', null], ['another member', b.sid]]) {
@@ -175,7 +175,7 @@ try {
     // the one script from another company is Cloudflare's Web Analytics beacon (the two hosts Cloudflare's own CSP guidance names), and the privacy page says so
     check('  ...the only script host beside this site is Cloudflare\'s analytics beacon, its report endpoint the only other connect host, and no inline script', /script-src 'self' https:\/\/static\.cloudflareinsights\.com(;|$)/.test(csp) && /connect-src 'self' https:\/\/rpc\.mainnet\.chain\.robinhood\.com https:\/\/cloudflareinsights\.com(;|$)/.test(csp) && !/unsafe-inline'[^;]*;?[^;]*script|script-src[^;]*(nonce|unsafe-inline)/.test(csp), csp);
     const privHtml = readFileSync(path.join(PUB, 'privacy.html'), 'utf8');
-    check('  ...and the privacy page tells visitors about the beacon in Cloudflare\'s own words, and no longer claims there are no analytics scripts', /Cloudflare Web Analytics/.test(privHtml) && /does not use any client-side state, such as cookies or localStorage/.test(privHtml) && /Version 2026-10-28/.test(privHtml) && !/no analytics scripts/.test(privHtml));
+    check('  ...and the privacy page tells visitors about the beacon in Cloudflare\'s own words, and no longer claims there are no analytics scripts', /Cloudflare Web Analytics/.test(privHtml) && /does not use any client-side state, such as cookies or localStorage/.test(privHtml) && /Version 2026-10-29/.test(privHtml) && !/no analytics scripts/.test(privHtml));
     const pages = readdirSync(PUB).filter((f) => f.endsWith('.html'));
     const google = pages.filter((f) => /fonts\.(googleapis|gstatic)\.com/.test(readFileSync(path.join(PUB, f), 'utf8').replace(/<p>[\s\S]*?<\/p>/g, '')));
     check('no page loads Google Fonts', google.length === 0, google.join(','));

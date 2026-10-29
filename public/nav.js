@@ -52,8 +52,8 @@
       return Math.max(120, Math.floor(h - nav.getBoundingClientRect().bottom));
     }
     function borderY() { var cs = getComputedStyle(menu); return (parseFloat(cs.borderTopWidth) || 0) + (parseFloat(cs.borderBottomWidth) || 0); }
-    function widestLink() {   // the widest link's words, plus the half-rem each side a link has in a column, plus a hair
-      var w = 0, links = menu.querySelectorAll(':scope > a'), r = document.createRange();
+    function widestLink() {   // the widest link's words (the 📊 Site numbers button's too), plus the half-rem each side a link has in a column, plus a hair
+      var w = 0, links = menu.querySelectorAll(':scope > a, :scope > .nav-stats-open'), r = document.createRange();
       for (var i = 0; i < links.length; i++) { r.selectNodeContents(links[i]); w = Math.max(w, r.getBoundingClientRect().width); }
       return Math.ceil(w + parseFloat(getComputedStyle(document.documentElement).fontSize) + 4);
     }
@@ -115,9 +115,10 @@
        sign-in (bell, level, live count, balances, name), so it is measured again whenever it does. The pages ship
        the bar compact, so nothing flashes; only a bar that fits opens up. */
     var fitTimer = null;
-    /* .is-bare is the last resort: the OG badge leaves the name pill (it stays on the member's wall and profile) — with
+    /* .is-snug is the first to go: the verified members and the views beside the live count (the count itself stays).
+       .is-bare is the last resort: the OG badge leaves the name pill (it stays on the member's wall and profile) — with
        it, an OG member's bar was 349px wide on a 320px phone with every other tier already on */
-    var TIERS = ['is-tight', 'is-tighter', 'is-tightest', 'is-bare'];
+    var TIERS = ['is-snug', 'is-tight', 'is-tighter', 'is-tightest', 'is-bare'];
     function overflowing() { return nav.scrollWidth > nav.clientWidth; }   // no pixel of slack: one pixel over is a one-pixel sideways scroll (the signed-in bar sat at 361 on a 360px phone)
     function rowFits() {   // every link on one line (the search box counts too) and nothing past the edge
       var links = menu.querySelectorAll('a');
@@ -129,19 +130,46 @@
     function stillFits() { return nav.classList.contains('is-compact') ? !overflowing() : rowFits(); }
     function fit() {
       var wasCompact = nav.classList.contains('is-compact');
+      // scroll anchoring off and back on: on <html> and on <body> both — Chrome went on following the row's tries with it off
+      // on <html> alone (/market's Chain button moved 42px under a double-click at 1280px)
+      var html = document.documentElement, body = document.body || html, anchor0 = [html.style.overflowAnchor, body.style.overflowAnchor];
+      var anchoring = function (on) { html.style.overflowAnchor = on ? anchor0[0] : 'none'; body.style.overflowAnchor = on ? anchor0[1] : 'none'; };
+      void nav.offsetHeight;   // the bar laid out as whatever called this left it, which the page follows as it always would…
+      var y0 = window.pageYOffset, before = nav.className;
+      anchoring(false);   // …but the ways the row is tried are not changes for the page to follow (see the end)
       nav.classList.add('is-measuring');   // no transitions while the classes flip, or the closed menu flashes
       nav.classList.remove('is-compact');
       TIERS.forEach(function (t) { nav.classList.remove(t); });
-      /* The links are the bar's main job, so on a wide screen the row is tried twice before it collapses: as it is,
-         then without the live count and the Send Power figures (.is-tight). Below 900px it never fits. */
+      /* The links are the bar's main job, so on a wide screen the row is tried three times before it collapses: as it
+         is, then without the new numbers beside the live count (.is-snug: the verified members and the views), then
+         without the live count and the Send Power figures too (.is-tight — where the pill stays as a 📊 button alone, the
+         row's only way in to the numbers pop-up, and is measured with the row). Below 900px it never fits. */
       var compact = true;
       if (window.innerWidth >= 900) {
         if (rowFits()) compact = false;
-        else { nav.classList.add('is-tight'); if (rowFits()) compact = false; else nav.classList.remove('is-tight'); }
+        else {
+          nav.classList.add('is-snug');
+          if (rowFits()) compact = false;
+          else { nav.classList.add('is-tight'); if (rowFits()) compact = false; else nav.classList.remove('is-snug', 'is-tight'); }
+        }
       }
       if (compact) nav.classList.add('is-compact'); else close();
       // still too wide (a long name, a big level, a phone): step down one tier at a time until the row fits
       if (compact) for (var i = 0; i < TIERS.length && overflowing(); i++) nav.classList.add(TIERS[i]);
+      /* Measuring lays the row out as many as four ways in one go, and the browser's scroll anchoring followed each passing
+         height: on a page scrolled down, a re-fit (a resize, the cluster changing size) left it 42px higher for every way
+         tried — /market's Chain drop-down moved out from under a double-click. So anchoring is off while the row is tried
+         (above), and the page is never scrolled from here: a scroll of ours cancelled the browser's own glide to a #section
+         on a fresh load (/about#og-rules stopped near the top). Once the bar's form is chosen it goes back, for a moment,
+         to the form the page last saw (still not followed), anchoring comes on again, and the one real change is made:
+         the page follows that, the browser's own way — keeping what is on screen in place while scrolled down, and a glide
+         under way going where it was going. At the very top there is nothing to keep in view. */
+      if (y0 > 0) {
+        var after = nav.className;
+        nav.className = before + ' is-measuring'; void nav.offsetHeight;
+        anchoring(true);
+        nav.className = after; void nav.offsetHeight;
+      } else anchoring(true);
       void menu.offsetHeight;   // settle the final state with transitions still off…
       nav.classList.remove('is-measuring');   // …so switching them back on animates nothing
       if (compact !== wasCompact) syncNavHeight();
@@ -189,35 +217,105 @@
       else footer.insertBefore(tax, footer.firstChild);
     }
 
-    // Live "who's active" counter to the RIGHT of the 🔔 — how many people are Sending it right now.
+    /* The live "who's active" counter to the RIGHT of the 🔔 — how many people are Sending it right now — with, beside it
+       (owner, 2026-10-29: "also add the number of total verified users total lifetime site views"), the verified members
+       and the lifetime page views:   ● 3 Sending it · ✓ 6 verified · 2.8K views
+       All three come from /api/presence (the server reads them from its own records; see siteTotals in server.js). The new
+       two (.nav-live-more) are the first thing a short bar lets go of (.is-snug, in fit() above); the count goes with
+       .is-tight, as before — in the open row of links the pill stays then as a 📊 button alone (.nav-live-ico), since the
+       row has no menu to carry 📊 Site numbers (a 1920px screen signed in, 1620–1780 signed out, had no way in at all).
+       Until the first answer the numbers are "·", in the room the real ones take (styles.css), so the bar is measured at
+       about its real width and the new numbers do not show and then vanish; the first answer is measured again as a
+       whole, so a bar that has room for them after all shows them. A press opens the numbers pop-up — each one over time
+       (owner: "When users click on this section pull up a popup that shows a graph over time of all three of these stats")
+       — from public/sitestats.js, fetched on the first press so this file stays light. The pop-up links to the Wall, where
+       the pill used to go. */
     var notif = document.getElementById('nav-notif');
     var host = notif || document.getElementById('nav-auth');
     if (host && host.parentNode && !document.getElementById('nav-live')) {
-      var live = document.createElement('a');
-      live.id = 'nav-live'; live.className = 'nav-live'; live.href = '/wall';
-      live.title = 'People Sending it right now — active on the platform. Join in →';
-      live.setAttribute('aria-label', 'People active right now');
-      live.innerHTML = '<span class="nav-live-dot" aria-hidden="true"></span><b class="nav-live-n">·</b><span class="nav-live-lbl">Sending&nbsp;it</span>';
+      var STATS_TIP = 'Opens the site\'s numbers over time: people on the site, verified members and page views';
+      var live = document.createElement('button');
+      live.type = 'button'; live.id = 'nav-live'; live.className = 'nav-live';
+      live.setAttribute('aria-haspopup', 'dialog');
+      live.setAttribute('data-tip', STATS_TIP);
+      live.setAttribute('aria-label', 'People Sending it right now, verified members and page views: the numbers are on their way');
+      live.innerHTML = '<span class="nav-live-ico" aria-hidden="true">📊</span><span class="nav-live-dot" aria-hidden="true"></span><b class="nav-live-n">·</b><span class="nav-live-lbl">Sending&nbsp;it</span>' +
+        '<span class="nav-live-more"><span class="nav-live-sep" aria-hidden="true">·</span>' +
+          '<span class="nav-live-part"><span class="nav-live-tick" aria-hidden="true">✓</span><b class="nav-live-vn">·</b><span class="nav-live-word">verified</span></span>' +
+          '<span class="nav-live-sep" aria-hidden="true">·</span>' +
+          '<span class="nav-live-part"><b class="nav-live-wn">·</b><span class="nav-live-word">views</span></span></span>';
       if (notif) notif.parentNode.insertBefore(live, notif.nextSibling); // just after (to the right of) the bell
       else host.parentNode.insertBefore(live, host);
       var pid = '';
       try { pid = localStorage.getItem('jsi_pid') || ''; if (!pid) { pid = Date.now().toString(36) + Math.random().toString(36).slice(2, 10); localStorage.setItem('jsi_pid', pid); } } catch (e) {}
-      var nEl = live.querySelector('.nav-live-n');
-      function paintPresence(n) {
-        if (typeof n !== 'number') return;
-        nEl.textContent = n.toLocaleString('en-US');
-        live.setAttribute('aria-label', n + ' ' + (n === 1 ? 'person' : 'people') + ' Sending it right now');
+      var nEl = live.querySelector('.nav-live-n'), vEl = live.querySelector('.nav-live-vn'), wEl = live.querySelector('.nav-live-wn');
+      var known = function (n) { return typeof n === 'number' && isFinite(n) && n >= 0; };
+      var whole = function (n) { return n.toLocaleString('en-US'); };
+      /* 1,234 → 1.2K, 12,345 → 12K, 1,234,567 → 1.2M; under 1,000 whole. Cut, never rounded up: the bar never shows more than was
+         counted (2,899 is 2.8K). Integer division, so no float lands a hair under a round number. */
+      function shortNum(n) {
+        if (n < 1000) return String(n);
+        var u = n < 1e6 ? [1e3, 'K'] : n < 1e9 ? [1e6, 'M'] : [1e9, 'B'];
+        var x = n < 10 * u[0] ? Math.floor(n / (u[0] / 10)) / 10 : Math.floor(n / u[0]);
+        return x + u[1];
+      }
+      // 'YYYY-MM-DD' → '13 Oct 2026' (a UTC day, which is what the server counts in)
+      function longDay(d) { try { return new Date(d + 'T00:00:00Z').toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); } catch (e) { return d; } }
+      function paintPresence(j) {
+        if (!j || !known(j.active)) return;
+        nEl.textContent = whole(j.active);
+        if (known(j.verified)) vEl.textContent = shortNum(j.verified);
+        if (known(j.views)) wEl.textContent = shortNum(j.views);
+        // the name reads all three in words (a number the server could not read says so, never a 0)
+        live.setAttribute('aria-label', j.active + ' ' + (j.active === 1 ? 'person' : 'people') + ' Sending it right now, ' +
+          (known(j.verified) ? whole(j.verified) + ' verified member' + (j.verified === 1 ? '' : 's') : 'verified members not known just now') + ', ' +
+          (known(j.views) ? whole(j.views) + ' page view' + (j.views === 1 ? '' : 's') + (j.viewsSince ? ' since ' + longDay(j.viewsSince) : '') : 'page views not known just now'));
+        var first = !live.classList.contains('is-live');
         live.classList.add('is-live');
+        if (first) fitSoon();   // the real numbers in place of the "·": measured again from the widest way, not only if the bar no longer holds
+        try { document.dispatchEvent(new CustomEvent('jsi:presence', { detail: j })); } catch (e) {}   // an open numbers pop-up keeps its "right now" with the bar
       }
       function pollPresence() {
         fetch('/api/presence' + (pid ? '?pid=' + encodeURIComponent(pid) : ''), { credentials: 'same-origin' })
           .then(function (r) { return r.ok ? r.json() : null; })
-          .then(function (j) { if (j) paintPresence(j.active); })
+          .then(function (j) { if (j) paintPresence(j); })
           .catch(function () {});
       }
       pollPresence();
       setInterval(function () { if (!document.hidden) pollPresence(); }, 30000);
       document.addEventListener('visibilitychange', function () { if (!document.hidden) pollPresence(); });
+
+      // the pop-up's code, fetched once on the first press (versioned like the files auth.js adds: /api/config's assets)
+      var statsLoad = null;
+      function loadStats() {
+        if (window.SiteStats) return Promise.resolve(window.SiteStats);
+        if (statsLoad) return statsLoad;
+        statsLoad = new Promise(function (resolve, reject) {
+          var av = (window.AUTH && AUTH.config && AUTH.config.assets) || {};
+          var sc = document.createElement('script');
+          sc.src = '/sitestats.js' + (av['sitestats.js'] ? '?v=' + encodeURIComponent(av['sitestats.js']) : '');
+          sc.onload = function () { if (window.SiteStats) resolve(window.SiteStats); else { statsLoad = null; reject(new Error('missing')); } };
+          sc.onerror = function () { statsLoad = null; reject(new Error('could not load')); };
+          document.head.appendChild(sc);
+        });
+        return statsLoad;
+      }
+      function openStats(opener) {
+        loadStats().then(function (S) { S.open({ opener: opener }); })
+          .catch(function () { if (window.sendToast) sendToast('⚠️ The numbers could not load — reload the page and try again.'); });
+      }
+      live.addEventListener('click', function () { openStats(live); });   // Enter and Space press a <button> too
+
+      /* Where the bar has no room for the pill (below 561px it is never shown; .is-tight and the tiers after it hide it), the
+         pop-down menu carries the same way in, as its last item — only while the pill is not in the bar (styles.css), so the
+         menu is as it was everywhere the pill shows. It closes the menu; focus comes back to ≡ when the pop-up closes. */
+      var entry = document.createElement('button');
+      entry.type = 'button'; entry.className = 'nav-stats-open';
+      entry.setAttribute('aria-haspopup', 'dialog');
+      entry.setAttribute('data-tip', STATS_TIP);
+      entry.innerHTML = '<span aria-hidden="true">📊</span>&nbsp;Site&nbsp;numbers';
+      entry.addEventListener('click', function () { close(); openStats(toggle); });
+      menu.insertBefore(entry, more);
     }
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

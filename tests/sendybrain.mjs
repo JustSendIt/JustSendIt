@@ -758,6 +758,11 @@ try {
      (tests/fixtures/sendy-conversations.json: review six's 650 cases, then the 172 its own review confirmed, then review seven's, slice by slice). ═══ */
   {
     const CONV = JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'sendy-conversations.json'), 'utf8'));
+    /* the cases were written on 2026-10-28, when the seeded members' joining day (30 days before the run: user() above) was
+       2026-09-28 — and that day was written into two answers as a date, so from the next day on they failed on main as well.
+       It is the day 30 days before this run now. */
+    const JOINED = new Date(T - 30 * 864e5).toISOString().slice(0, 10);
+    for (const c of CONV) c.expect = c.expect.split('2026-09-28').join(JOINED);
     let n = 0;
     for (const c of CONV) {
       if (n++ % 100 === 0) await anew();

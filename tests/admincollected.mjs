@@ -101,7 +101,7 @@ check('the fixtures are the contract\'s shapes: a list of datasets with id, titl
       && /Source: growthepie, https:\/\/www\.growthepie\.com, under <a href="https:\/\/creativecommons\.org\/licenses\/by\/4\.0\/"[^>]*>CC BY 4\.0<\/a>/.test(DATA) && /Not affiliated with Robinhood Markets, Inc\./.test(DATA));
   check('the privacy policy (§8) names every new host the server reads for market data, says the browser never contacts them, names the picture hosts it proxies, and moved to 2026-10-26',
     ['DefiLlama', 'L2BEAT', 'growthepie', 'CoinGecko', 'GeckoTerminal', 'Dexscreener', 'Robinhood Chain RPC', 'public Ethereum node', 'cdn.dexscreener.com', 'dd.dexscreener.com', 'coin-images.coingecko.com', 'assets.geckoterminal.com', 'icons.llama.fi'].every((h) => PRIV.slice(PRIV.indexOf('id="p8"'), PRIV.indexOf('id="p9"')).includes(h))
-      && /Your browser never contacts any of them/.test(PRIV) && /never who looked at or scanned what/.test(PRIV) && /Version 2026-10-28 · \$Send \/ JustSendIt/.test(PRIV));
+      && /Your browser never contacts any of them/.test(PRIV) && /never who looked at or scanned what/.test(PRIV) && /Version 2026-10-29 · \$Send \/ JustSendIt/.test(PRIV));
   check('the README has the Market Data row in its core features and the market resources in the Send API section',
     /^\| \*\*📊 Market Data\*\* \| `\/market`/m.test(README) && /- \*\*And the market data the site collects\*\*[^\n]*`chain-history`[^\n]*`collectors`/.test(README));
   /* the RWAs tab (owner, 2026-10-28): the Data API page, the privacy policy, the README and llms.txt say what counts as an RWA, on
