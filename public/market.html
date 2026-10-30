@@ -88,16 +88,18 @@
       <p class="sr-only" id="mkt-search-sr" aria-live="polite"></p>
     </form>
 
-    <!-- the whole crypto market, last 24 h (owner, 2026-10-30): one bubble per coin of CoinGecko's 100 largest, its area the coin's
-         market cap and its colour the coin's 24 h change; market.js packs and draws it from /api/market/heatmap. The button folds it
-         away (this browser remembers), so the chains and tokens are one press from the top -->
+    <!-- the whole crypto market, last 24 h (owner, 2026-10-30): one bubble per coin of CoinGecko's 100 largest, bigger for a bigger
+         market cap on a compressed scale but never smaller than its ticker needs (so every ticker shows, and the caption says how
+         many bubbles are held at that size), and coloured by the coin's 24 h change, brighter for a bigger move;
+         market.js packs and draws it from /api/market/heatmap. The button folds it away (this browser remembers), so the chains and
+         tokens are one press from the top -->
     <section class="mkt-map" id="mkt-map" aria-labelledby="mkt-map-h">
       <div class="mkt-map-head">
         <h2 class="mkt-map-h" id="mkt-map-h">🫧 The whole crypto market, last 24 h</h2>
         <button class="btn btn-sm btn-ghost mkt-map-tog" id="mkt-map-tog" type="button" aria-expanded="true" aria-controls="mkt-map-body" data-tip="Folds the bubble map away so the chains and tokens come first; this browser remembers your choice">Hide the map</button>
       </div>
       <div class="mkt-map-body" id="mkt-map-body">
-        <p class="mkt-map-lede">The 100 largest coins on every chain, by market cap: one bubble each, as big as the coin’s market cap and coloured by its price move over the last 24 hours. Point at a bubble for its figures, press it for a card; the list under the map has every coin.</p>
+        <p class="mkt-map-lede">The 100 largest coins on every chain, by market cap: one bubble each, bigger for a bigger market cap on a compressed scale but never smaller than its ticker needs — so below the three largest, a coin with a long ticker can be drawn bigger than larger coins, most of all on a phone — and coloured by its price move over the last 24 hours, brighter for a bigger move. Point at a bubble for its figures, press it for a card; the list under the map has every coin.</p>
         <div class="mkt-map-ctl">
           <div class="mkt-group" role="group" aria-labelledby="mkt-map-n-l">
             <p class="mkt-group-l" id="mkt-map-n-l">Coins</p>
