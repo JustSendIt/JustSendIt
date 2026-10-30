@@ -98,7 +98,8 @@ try {
     '/api/calls/live?ids=1,2', '/api/communities', '/api/communities?status=live&sort=active', '/api/communities/weekly', '/api/communities/1',
     '/api/communities/1/members', '/api/communities/1/posts?wall=public', '/api/communities/1/proposals', '/api/competitions', '/api/scan/recent',
     '/api/market/chains', '/api/market/chain?key=robinhood', '/api/market/tokens?chain=robinhood',   // Market Data's first view, at its default addresses
-    '/api/market/tokens?chain=all'];   // ...and the Top tokens tab's every-chain list (owner, 2026-10-27)
+    '/api/market/tokens?chain=all',   // ...and the Top tokens tab's every-chain list (owner, 2026-10-27)
+    '/api/market/heatmap'];   // ...and the bubble map of the whole crypto market, read as the page opens (owner, 2026-10-30)
   const shut = pageCalls.filter((u) => !robotsAllows(R, u));
   check('every public read a signed-out page makes while it renders is crawlable', shut.length === 0, shut.join(' '));
   const privateOrCostly = ['/api/me', '/api/presence?pid=x', '/api/gate/state', '/api/notifications', '/api/watchlist/ids', '/api/admin/reports',
@@ -109,7 +110,8 @@ try {
     // Market Data's caller-chosen reads: a search, another chain, a sort or a window, a token, a scan, the logo proxy, the collectors
     '/api/market/search?q=x', '/api/market/chain?key=base', '/api/market/chains?sort=volume', '/api/market/chains?window=custom&from=2026-10-01&to=2026-10-02', '/api/market/tokens?chain=robinhood&sort=mcap',
     '/api/market/tokens?chain=all&sort=mcap', '/api/market/tokens?chain=all&window=custom&from=2026-10-01&to=2026-10-02',
-    '/api/market/tokens?chain=base', '/api/market/token?chain=robinhood&address=0x1', '/api/market/scan?chain=robinhood&address=0x1', '/api/market/logo?u=x', '/api/market/status', '/api/market/new-pools?chain=robinhood'];
+    '/api/market/tokens?chain=base', '/api/market/token?chain=robinhood&address=0x1', '/api/market/scan?chain=robinhood&address=0x1', '/api/market/logo?u=x', '/api/market/status', '/api/market/new-pools?chain=robinhood',
+    '/api/market/heatmap?stables=0', '/api/market/heatmap?limit=50'];
   const open = privateOrCostly.filter((u) => robotsAllows(R, u));
   check('  ...while personal, write-only and caller-chosen chain reads stay disallowed', open.length === 0, open.join(' '));
   check('  ...and the ticket card and the pages themselves are not blocked', robotsAllows(R, '/t/12.png') && robotsAllows(R, '/t/12') && robotsAllows(R, '/') && robotsAllows(R, '/u/someone') && robotsAllows(R, '/community?id=1'));

@@ -18705,7 +18705,9 @@ const server = http.createServer(async (req, res) => {
         // the RWA tab: the list (any view) inherits the 120 a minute; one token's facts are 30 a minute, like a token read
         else if (p === '/api/market/rwa') r = MKT.rwa(mq);
         else if (p === '/api/market/rwa/token') { if (!rateLimit('mktrwa:' + clientIp(req), 30, 6e4)) return bad(res, 'too many RWA reads — slow down', 429); r = MKT.rwaToken(mq); }
-        if (!r) return bad(res, 'unknown market endpoint — one of: chains, chain, tokens, token, scan, search, new-pools, status, logo, rwa, rwa/token', 404);
+        // the bubble map of the whole crypto market (2026-10-30): read from what the heatmap job keeps, so it inherits the 120 a minute
+        else if (p === '/api/market/heatmap') r = MKT.heatmap(mq);
+        if (!r) return bad(res, 'unknown market endpoint — one of: chains, chain, tokens, token, scan, search, new-pools, status, logo, rwa, rwa/token, heatmap', 404);
         return send(res, r.status, r.body);
       }
       /* ----- which other sites chart these pools: the chart switch shows only the buttons that will draw a chart ----- */

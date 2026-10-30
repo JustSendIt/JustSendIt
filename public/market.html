@@ -69,7 +69,7 @@
 
 <header class="np-hero mkt-hero">
   <h1 class="section-title display green" style="margin-bottom:0.35rem;">Market Data 📊</h1>
-  <p class="section-sub" style="margin-bottom:0.5rem;">Robinhood Chain first, then every chain the public sources cover: TVL, DEX volume, fees, stablecoins, activity, the most-traded tokens and Robinhood Chain’s real-world-asset tokens — each figure with its source and the time it was read.</p>
+  <p class="section-sub" style="margin-bottom:0.5rem;">The whole crypto market at a glance, then Robinhood Chain first and every chain the public sources cover: TVL, DEX volume, fees, stablecoins, activity, the most-traded tokens and Robinhood Chain’s real-world-asset tokens — each figure with its source and the time it was read.</p>
   <p class="np-hero-warn">⚠️ Figures can be late, wrong or missing — a missing one is shown as missing, never as zero. Not advice, never a tip to buy. <b>Do your own research.</b></p>
 </header>
 
@@ -87,6 +87,45 @@
       <div class="mkt-results" id="mkt-results" hidden></div>
       <p class="sr-only" id="mkt-search-sr" aria-live="polite"></p>
     </form>
+
+    <!-- the whole crypto market, last 24 h (owner, 2026-10-30): one bubble per coin of CoinGecko's 100 largest, its area the coin's
+         market cap and its colour the coin's 24 h change; market.js packs and draws it from /api/market/heatmap. The button folds it
+         away (this browser remembers), so the chains and tokens are one press from the top -->
+    <section class="mkt-map" id="mkt-map" aria-labelledby="mkt-map-h">
+      <div class="mkt-map-head">
+        <h2 class="mkt-map-h" id="mkt-map-h">🫧 The whole crypto market, last 24 h</h2>
+        <button class="btn btn-sm btn-ghost mkt-map-tog" id="mkt-map-tog" type="button" aria-expanded="true" aria-controls="mkt-map-body" data-tip="Folds the bubble map away so the chains and tokens come first; this browser remembers your choice">Hide the map</button>
+      </div>
+      <div class="mkt-map-body" id="mkt-map-body">
+        <p class="mkt-map-lede">The 100 largest coins on every chain, by market cap: one bubble each, as big as the coin’s market cap and coloured by its price move over the last 24 hours. Point at a bubble for its figures, press it for a card; the list under the map has every coin.</p>
+        <div class="mkt-map-ctl">
+          <div class="mkt-group" role="group" aria-labelledby="mkt-map-n-l">
+            <p class="mkt-group-l" id="mkt-map-n-l">Coins</p>
+            <div class="mkt-chips">
+              <button class="np-chip" type="button" aria-pressed="false" data-map-top="50" data-tip="Draws only the 50 largest coins, so each bubble gets more room"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Top 50</button>
+              <button class="np-chip" type="button" aria-pressed="true" data-map-top="100" data-tip="Draws every one of the 100 largest coins"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Top 100</button>
+            </div>
+          </div>
+          <div class="mkt-group" role="group" aria-labelledby="mkt-map-s-l">
+            <p class="mkt-group-l" id="mkt-map-s-l">Stablecoins</p>
+            <div class="mkt-chips">
+              <button class="np-chip" id="mkt-map-stables" type="button" aria-pressed="false" data-tip="Leaves out the coins CoinGecko files as stablecoins, so the coins that move get the room"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>Hide stablecoins</button>
+            </div>
+          </div>
+        </div>
+        <p class="mkt-map-cap" id="mkt-map-cap" aria-live="polite"></p>
+        <div class="mkt-map-stage">
+          <div class="mkt-map-key">
+            <p class="mkt-group-l" id="mkt-map-key-l">24 h change</p>
+            <ul class="mkt-map-legend" id="mkt-map-legend" aria-labelledby="mkt-map-key-l"></ul>
+          </div>
+          <div class="mkt-map-fig" id="mkt-map-fig"><p class="tm-loading mkt-loading"><span class="np-live-dot" aria-hidden="true"></span> Reading the whole market…</p></div>
+        </div>
+        <div class="mkt-map-card" id="mkt-map-card" hidden></div>
+        <details class="mkt-tbl mkt-map-list" id="mkt-map-list"><summary>Show as a list</summary><div class="mkt-map-table" id="mkt-map-table"></div></details>
+        <div class="mkt-foot mkt-map-foot" id="mkt-map-foot"></div>
+      </div>
+    </section>
 
     <div class="mkt-layout">
       <!-- the side column: the top lists (chains, tokens) and Robinhood Chain's real-world-asset tokens -->
