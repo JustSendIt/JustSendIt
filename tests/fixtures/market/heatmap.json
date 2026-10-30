@@ -29,14 +29,14 @@
    "dominance": {
     "v": 59.59723833981975,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -5.27397,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 43357519576,
@@ -86,14 +86,14 @@
    "dominance": {
     "v": 10.396011055156343,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -6.32235,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 19987960791,
@@ -143,14 +143,14 @@
    "dominance": {
     "v": 6.9502847650039525,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.06086,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 78589945040,
@@ -200,14 +200,14 @@
    "dominance": {
     "v": 3.466846418188116,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -10.00699,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 2997209092,
@@ -252,14 +252,14 @@
    "dominance": {
     "v": 2.9598554871983747,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -8.44468,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 2900899427,
@@ -309,14 +309,14 @@
    "dominance": {
     "v": 2.743853663353583,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.04831,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 19907841633,
@@ -366,14 +366,14 @@
    "dominance": {
     "v": 2.113017344522619,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -9.09069,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 4778338303,
@@ -423,14 +423,14 @@
    "dominance": {
     "v": 1.3073447003349579,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 8.47961,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 1427490681,
@@ -480,14 +480,14 @@
    "dominance": {
     "v": 1.0266039477688416,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 0.02984,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 370295685,
@@ -532,14 +532,14 @@
    "dominance": {
     "v": 0.821295666053223,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 10.38171,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 3003470460,
@@ -591,14 +591,14 @@
    "dominance": {
     "v": 0.7862720912194249,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -8.30743,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 1303132521,
@@ -648,14 +648,14 @@
    "dominance": {
     "v": 0.44069249940822525,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -8.49525,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 757267777,
@@ -705,14 +705,14 @@
    "dominance": {
     "v": 0.4379676128815223,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 1.12178,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 175551349,
@@ -762,14 +762,14 @@
    "dominance": {
     "v": 0.37423636479721073,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.07645,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 338670583,
@@ -814,14 +814,14 @@
    "dominance": {
     "v": 0.33679712436754783,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -5.51135,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 210713794,
@@ -866,14 +866,14 @@
    "dominance": {
     "v": 0.33541737403247474,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 0.06668,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 241039,
@@ -918,14 +918,14 @@
    "dominance": {
     "v": 0.3058219908231334,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -12.5317,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 650565024,
@@ -977,14 +977,14 @@
    "dominance": {
     "v": 0.26664996364481897,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -10.75201,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 452725120,
@@ -1034,14 +1034,14 @@
    "dominance": {
     "v": 0.21628007891457213,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -7.72069,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 153195437,
@@ -1091,14 +1091,14 @@
    "dominance": {
     "v": 0.20593037409628134,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -8.19669,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 238915648,
@@ -1148,14 +1148,14 @@
    "dominance": {
     "v": 0.20079033569790125,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -15.7204,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 979331132,
@@ -1205,14 +1205,14 @@
    "dominance": {
     "v": 0.18154637073627758,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -2.8336,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 15905021,
@@ -1257,14 +1257,14 @@
    "dominance": {
     "v": 0.1762248464853127,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.00204,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 377959093,
@@ -1316,14 +1316,14 @@
    "dominance": {
     "v": 0.17461436754754633,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.1588,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 43953869,
@@ -1375,14 +1375,14 @@
    "dominance": {
     "v": 0.16003198044151104,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -10.54396,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 324382338,
@@ -1427,14 +1427,14 @@
    "dominance": {
     "v": 0.1524216793507051,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -12.98941,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 998274122,
@@ -1484,14 +1484,14 @@
    "dominance": {
     "v": 0.1494193368764514,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.17643,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 1465447135,
@@ -1536,14 +1536,14 @@
    "dominance": {
     "v": 0.1417871738946025,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -8.32476,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 25959278,
@@ -1588,14 +1588,14 @@
    "dominance": {
     "v": 0.13817294172082192,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -10.36755,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 289851197,
@@ -1645,14 +1645,14 @@
    "dominance": {
     "v": 0.13319697711800993,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -11.29705,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 568660158,
@@ -1704,14 +1704,14 @@
    "dominance": {
     "v": 0.12483564315585881,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.80307,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 246124249,
@@ -1763,14 +1763,14 @@
    "dominance": {
     "v": 0.12224403589504,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -9.89161,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 42008357,
@@ -1815,14 +1815,14 @@
    "dominance": {
     "v": 0.1209017640184682,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.00255,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 660821362,
@@ -1874,14 +1874,14 @@
    "dominance": {
     "v": 0.11524319755994863,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -10.44874,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 141707337,
@@ -1931,14 +1931,14 @@
    "dominance": {
     "v": 0.11517076503316452,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.07545,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 75932483,
@@ -1990,14 +1990,14 @@
    "dominance": {
     "v": 0.10237209779518522,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -9.44675,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 84685849,
@@ -2007,7 +2007,7 @@
    },
    "stable": false,
    "check": {
-    "status": "single",
+    "status": "agreed",
     "sources": [
      {
       "src": "coingecko",
@@ -2015,11 +2015,16 @@
       "price": 0.00000451,
       "supply": 589238257671695.1,
       "at": 1793320136000
+     },
+     {
+      "src": "coinlore",
+      "v": 2663303061.77,
+      "price": 0.000005,
+      "supply": 589245888455640,
+      "at": 1793320440000
      }
     ],
-    "notes": [
-     "CoinLore’s “Shiba Inu” is priced $0.000005 against CoinGecko’s $0.0000045 for $SHIB — a different coin, not used"
-    ]
+    "notes": []
    }
   },
   {
@@ -2042,14 +2047,14 @@
    "dominance": {
     "v": 0.10125329983496803,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.05158,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 379322710,
@@ -2101,14 +2106,14 @@
    "dominance": {
     "v": 0.10105455725347254,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -12.93954,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 188095745,
@@ -2160,14 +2165,14 @@
    "dominance": {
     "v": 0.09884674329931453,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -12.19326,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 81630309,
@@ -2219,14 +2224,14 @@
    "dominance": {
     "v": 0.09872396094332714,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -5.72179,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 6521588,
@@ -2271,14 +2276,14 @@
    "dominance": {
     "v": 0.0916920962818177,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.04041,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 3250313,
@@ -2323,14 +2328,14 @@
    "dominance": {
     "v": 0.0909754519656785,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 0.00942,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": null,
@@ -2375,14 +2380,14 @@
    "dominance": {
     "v": 0.08989077251033809,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -10.38814,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 9944498,
@@ -2427,14 +2432,14 @@
    "dominance": {
     "v": 0.08930398013848406,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -2.29829,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 2725370,
@@ -2479,14 +2484,14 @@
    "dominance": {
     "v": 0.08652076752237667,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -4.16424,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 32359176,
@@ -2536,14 +2541,14 @@
    "dominance": {
     "v": 0.0859809193300226,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -20.09284,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 795514012,
@@ -2595,14 +2600,14 @@
    "dominance": {
     "v": 0.08154911200195568,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 0,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": null,
@@ -2647,14 +2652,14 @@
    "dominance": {
     "v": 0.07256576054672412,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -12.12607,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 1444984848,
@@ -2664,7 +2669,7 @@
    },
    "stable": false,
    "check": {
-    "status": "single",
+    "status": "agreed",
     "sources": [
      {
       "src": "coingecko",
@@ -2672,11 +2677,16 @@
       "price": 0.00000447,
       "supply": 420690000000000,
       "at": 1793320136000
+     },
+     {
+      "src": "coinlore",
+      "v": 1884287404.55,
+      "price": 0.000004,
+      "supply": 420689899653540,
+      "at": 1793320440000
      }
     ],
-    "notes": [
-     "CoinLore’s “Pepe” is priced $0.000004 against CoinGecko’s $0.0000045 for $PEPE — a different coin, not used"
-    ]
+    "notes": []
    }
   },
   {
@@ -2699,14 +2709,14 @@
    "dominance": {
     "v": 0.07243537872073491,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.26544,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 6037983,
@@ -2756,14 +2766,14 @@
    "dominance": {
     "v": 0.07097450859082707,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 0.42055,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": null,
@@ -2808,14 +2818,14 @@
    "dominance": {
     "v": 0.06933371849919799,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -13.33557,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 391577911,
@@ -2865,14 +2875,14 @@
    "dominance": {
     "v": 0.06894121463298308,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.84415,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 204138593,
@@ -2924,14 +2934,14 @@
    "dominance": {
     "v": 0.06870635178842319,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -13.18766,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 205510994,
@@ -2983,14 +2993,14 @@
    "dominance": {
     "v": 0.067562768390732,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -16.01764,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 264605010,
@@ -3035,14 +3045,14 @@
    "dominance": {
     "v": 0.06419124544458721,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -5.9666,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 106126082,
@@ -3094,14 +3104,14 @@
    "dominance": {
     "v": 0.062007401416784874,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -2.77708,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 38027919,
@@ -3153,14 +3163,14 @@
    "dominance": {
     "v": 0.0618548623526913,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.05303,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 281617418,
@@ -3205,14 +3215,14 @@
    "dominance": {
     "v": 0.05878844144323061,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 5.65405,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 55152128,
@@ -3257,14 +3267,14 @@
    "dominance": {
     "v": 0.05874486813042711,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -9.03045,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 35272471,
@@ -3314,14 +3324,14 @@
    "dominance": {
     "v": 0.058502163260307695,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -1.02003,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 26536515,
@@ -3366,14 +3376,14 @@
    "dominance": {
     "v": 0.05811532270002521,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -12.85949,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 107167658,
@@ -3425,14 +3435,14 @@
    "dominance": {
     "v": 0.056410104106519365,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.03368,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 11830146,
@@ -3484,14 +3494,14 @@
    "dominance": {
     "v": 0.05612601247132821,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -7.72165,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 23704674,
@@ -3543,14 +3553,14 @@
    "dominance": {
     "v": 0.052319587525913966,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -16.94029,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 331929639,
@@ -3602,14 +3612,14 @@
    "dominance": {
     "v": 0.05077337242989219,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.1472,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 19196986,
@@ -3661,14 +3671,14 @@
    "dominance": {
     "v": 0.04969925682823993,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -12.83465,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 59334969,
@@ -3718,14 +3728,14 @@
    "dominance": {
     "v": 0.04940079013213737,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.00159,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 31308746,
@@ -3770,14 +3780,14 @@
    "dominance": {
     "v": 0.0491522562162148,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -2.77872,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 14435754,
@@ -3827,14 +3837,14 @@
    "dominance": {
     "v": 0.0430752454807935,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.9042,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 29777696,
@@ -3886,14 +3896,14 @@
    "dominance": {
     "v": 0.041968885183431365,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -9.83914,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 48323610,
@@ -3943,14 +3953,14 @@
    "dominance": {
     "v": 0.04166368920949154,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -8.07512,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 43506302,
@@ -4002,14 +4012,14 @@
    "dominance": {
     "v": 0.040009908320362,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -12.60972,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 199359097,
@@ -4061,14 +4071,14 @@
    "dominance": {
     "v": 0.037977879623313504,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -7.01321,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 4512341,
@@ -4120,14 +4130,14 @@
    "dominance": {
     "v": 0.03782861185859525,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -4.33604,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 5149761,
@@ -4172,14 +4182,14 @@
    "dominance": {
     "v": 0.03553298866640607,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -11.00862,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 14607299,
@@ -4229,14 +4239,14 @@
    "dominance": {
     "v": 0.03436979578945656,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -9.15508,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 63692614,
@@ -4281,14 +4291,14 @@
    "dominance": {
     "v": 0.03402670133871112,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 0.01289,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 231084,
@@ -4333,14 +4343,14 @@
    "dominance": {
     "v": 0.033130097688954904,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.77837,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 9352573,
@@ -4385,14 +4395,14 @@
    "dominance": {
     "v": 0.03167845612318094,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -13.07013,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 29466184,
@@ -4442,14 +4452,14 @@
    "dominance": {
     "v": 0.03075185498361705,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -14.72958,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 45821718,
@@ -4494,14 +4504,14 @@
    "dominance": {
     "v": 0.03011430676229473,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -12.24348,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 40521488,
@@ -4553,14 +4563,14 @@
    "dominance": {
     "v": 0.029710309194671023,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -3.36681,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 4185549,
@@ -4612,14 +4622,14 @@
    "dominance": {
     "v": 0.029355103586302177,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -13.97949,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 40889968,
@@ -4669,14 +4679,14 @@
    "dominance": {
     "v": 0.027071698831475918,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -13.28507,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 132024180,
@@ -4726,14 +4736,14 @@
    "dominance": {
     "v": 0.026873626651947143,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.11415,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 8123953,
@@ -4785,14 +4795,14 @@
    "dominance": {
     "v": 0.02598217451204039,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 0.00942,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": null,
@@ -4837,14 +4847,14 @@
    "dominance": {
     "v": 0.02545032054982236,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -14.17514,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 128807705,
@@ -4896,14 +4906,14 @@
    "dominance": {
     "v": 0.02515277884261687,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -11.11508,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 204759427,
@@ -4948,14 +4958,14 @@
    "dominance": {
     "v": 0.02474588799980419,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -12.29215,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 49174854,
@@ -5005,14 +5015,14 @@
    "dominance": {
     "v": 0.02421592813041336,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -3.7094,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 11365383,
@@ -5057,14 +5067,14 @@
    "dominance": {
     "v": 0.02284296190847215,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -14.08586,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 75194249,
@@ -5114,14 +5124,14 @@
    "dominance": {
     "v": 0.022772803696740826,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -12.51518,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 18808338,
@@ -5166,14 +5176,14 @@
    "dominance": {
     "v": 0.02272491914206915,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -13.90245,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 121808191,
@@ -5225,14 +5235,14 @@
    "dominance": {
     "v": 0.022387242433855266,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -15.03577,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 51387658,
@@ -5277,14 +5287,14 @@
    "dominance": {
     "v": 0.021917731227090318,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": 0.01271,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": null,
@@ -5329,14 +5339,14 @@
    "dominance": {
     "v": 0.021635919614141533,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -16.22886,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 12036996,
@@ -5381,14 +5391,14 @@
    "dominance": {
     "v": 0.021601880007304668,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -3.35911,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 12830626,
@@ -5438,14 +5448,14 @@
    "dominance": {
     "v": 0.02086875205507204,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -0.02281,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 67767,
@@ -5490,14 +5500,14 @@
    "dominance": {
     "v": 0.020023899233877887,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -16.16398,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 77307839,
@@ -5549,14 +5559,14 @@
    "dominance": {
     "v": 0.019981386725658933,
     "src": "coingecko",
-    "at": 1793320320000,
-    "label": "share of CoinGecko's total, $2.59T"
+    "at": 1793320136000,
+    "label": "share of CoinGecko's total, $2.59T, in percent"
    },
    "change24h": {
     "v": -4.09486,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h price change (CoinGecko)"
+    "label": "24 h price change, in percent (CoinGecko)"
    },
    "volume24h": {
     "v": 2505304,
@@ -5670,16 +5680,17 @@
   "coins": "The 100 largest coins by market cap on CoinGecko, on every chain, in CoinGecko's order; rank is CoinGecko's market-cap rank.",
   "bubble": "Bubble size: market cap — each bubble's area is the coin's market cap, so a coin twice the size has twice the area. A coin with no market cap is listed and not drawn.",
   "colour": "Colour: the 24 h price change, in the legend's nine steps; a coin CoinGecko gives no change for is outlined and hatched (\"no 24 h change given\"), never drawn as 0%.",
-  "change24h": "CoinGecko's price change over the last 24 hours, in US dollars.",
-  "dominance": "The coin's market cap as a share of CoinGecko's total market cap of every coin it lists (its /global read, every 30 minutes; the label says when). Worked out by this site from CoinGecko's two figures; none when the market cap is not CoinGecko's own, or the total is more than 2 hours older than the coins.",
+  "change24h": "CoinGecko's change in the coin's US-dollar price over the last 24 hours, in percent (−5.27 means down 5.27%); null with why when CoinGecko gives none, never 0.",
+  "dominance": "The coin's market cap as a share of CoinGecko's total market cap of every coin it lists, in percent (59.6 means 59.6%; its /global read, every 30 minutes, which the label names). Worked out by this site from CoinGecko's two figures, and as old as the older of them (its at); none when the market cap is not CoinGecko's own, or the total and the coins were read more than 2 hours apart.",
   "volume24h": "CoinGecko's trading volume over the last 24 hours, every market it tracks.",
   "stable": "true when CoinGecko files the coin in its stablecoins category (read every 6 hours); null until that list has been read.",
-  "check": "The market cap checked against CoinLore's 100 largest coins, by the chain market caps' rules (lib/chainmcap.js): its coin counts when its symbol, name and price (within 10%) are CoinGecko's on the same read; \"agreed\" within 10%, \"differs\" (the notes say why from the numbers), \"single\" (one source).",
+  "check": "The market cap checked against CoinLore's 100 largest coins, by the chain market caps' rules (lib/chainmcap.js): its coin counts when its symbol, name and price (within 10%) are CoinGecko's on the same read — for a coin under $0.0001, whose price CoinLore rounds to 6 decimal places, CoinLore's own market cap ÷ circulating supply is the price compared; \"agreed\" within 10%, \"differs\" (the notes say why from the numbers), \"single\" (one source; the notes say why).",
   "total": "CoinGecko's total market cap of every coin it lists — not only the 100 drawn."
  },
  "notes": [
   "Not advice, never a tip to buy. Do your own research.",
-  "The 100 largest coins by market cap on CoinGecko, on every chain, read every 10 minutes; CoinGecko's total market cap every 30 minutes; its stablecoins category every 6 hours. Every market cap is checked against CoinLore's 100 largest coins."
+  "The 100 largest coins by market cap on CoinGecko, on every chain, read every 10 minutes; CoinGecko's total market cap every 30 minutes; its stablecoins category every 6 hours.",
+  "Each market cap is looked up in CoinLore's 100 largest coins: 65 of these 100 were found there and compared (33 agree, 32 differ by more than 10%); 35 have one source — the chip on each coin says which."
  ],
  "sources": [
   {

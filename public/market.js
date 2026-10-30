@@ -115,7 +115,8 @@
     single: ['1 source', 'is-one', 'Only one source gave a market cap for this token, so nothing checks it'],
   };
   const chkOf = (f) => { const c = f && f.check; return c && CHK[c.status] ? c : null; };
-  const mcapChip = (f) => { const c = chkOf(f); return c ? '<span class="mkt-chk ' + CHK[c.status][1] + '" title="' + esc(CHK[c.status][2] + (c.status === 'differs' ? ' — the chain’s view says why' : '')) + '">' + esc(CHK[c.status][0]) + '</span>' : ''; };
+  // where: what a 'differs' title points to for the reason — the chain's view by default; '' where the reason is beside the chip
+  const mcapChip = (f, where) => { const c = chkOf(f); return c ? '<span class="mkt-chk ' + CHK[c.status][1] + '" title="' + esc(CHK[c.status][2] + (c.status === 'differs' ? (where == null ? ' — the chain’s view says why' : where) : '')) + '">' + esc(CHK[c.status][0]) + '</span>' : ''; };
   const whyOf = (f) => (f && f.why ? esc(f.why) : 'The source gave no figure for this');
 
   /* ---------- the chains this page knows by name before the list arrives ---------- */
@@ -2002,7 +2003,7 @@
   /* @lift:pack-end */
 
   const mapEl = { sec: $('mkt-map'), body: $('mkt-map-body'), tog: $('mkt-map-tog'), cap: $('mkt-map-cap'), fig: $('mkt-map-fig'), key: $('mkt-map-legend'), card: $('mkt-map-card'), table: $('mkt-map-table'), foot: $('mkt-map-foot'), stables: $('mkt-map-stables') };
-  const MAP = { ans: null, top: 100, stables: true, pick: null, seq: 0, at: 0, timer: 0, drawnW: 0, drawnH: 0, shown: false, soon: 0, ink: null };
+  const MAP = { ans: null, top: 100, stables: true, pick: null, seq: 0, at: 0, timer: 0, drawn: 0, shown: false, soon: 0, ink: null, fail: null };
   const MAP_KEY = 'jsi:market-map';   // the one thing this page keeps in the browser: whether the map is folded away ('hidden') or not
   const mapPref = { get: () => { try { return localStorage.getItem(MAP_KEY); } catch { return null; } }, set: (v) => { try { localStorage.setItem(MAP_KEY, v); } catch {} } };
   const MAP_TIP_ON = 'Folds the bubble map away so the chains and tokens come first; this browser remembers your choice';
@@ -2059,18 +2060,29 @@
       if (!j || !Array.isArray(j.rows) || !j.rows.length) {
         const e = new Error('empty'); e.status = 200; e.body = { message: (j && j.why) || 'The coins have not been read yet' }; throw e;
       }
-      MAP.ans = j; MAP.at = Date.now();
+      MAP.ans = j; MAP.at = Date.now(); MAP.fail = null;
       if (MAP.pick && !j.rows.some((r) => r.id === MAP.pick)) MAP.pick = null;
       paintMap();
     } catch (e) {
       if (my !== MAP.seq) return;
-      if (quiet && MAP.ans) { planMap(); return; }   // a refresh that failed keeps the map it had: its caption says how old that is
+      // a refresh that failed keeps the map it had, painted again so every age says how old it is now, and the caption says the read failed
+      if (quiet && MAP.ans) { MAP.fail = { at: Date.now(), why: mapFailWhy(e) }; paintMap(); planMap(); return; }
       const said = e && e.status === 200 ? String((e.body && e.body.message) || '') : errText(e, 'the whole market');
-      mapEl.fig.innerHTML = '<p class="mkt-err-t">⏳ ' + esc(e && e.status === 200 ? said.replace(/\.?$/, '.') + ' Nothing here is a reading of the market.' : said) + '</p><p class="mkt-acts">' + retryBtn('map') + '</p>';
+      // one block (the words, then Try again under them); the legend and the list have nothing to show without an answer
+      mapEl.fig.innerHTML = '<div class="mkt-map-err"><p class="mkt-err-t">⏳ ' + esc(e && e.status === 200 ? said.replace(/\.?$/, '.') + ' Nothing here is a reading of the market.' : said) + '</p><p class="mkt-acts">' + retryBtn('map') + '</p></div>';
+      if (mapEl.body) mapEl.body.classList.add('is-failed');
       if (mapEl.cap) mapEl.cap.textContent = '';
       if (mapEl.table) mapEl.table.innerHTML = '';
     } finally { if (my === MAP.seq) mapEl.fig.removeAttribute('aria-busy'); }
     planMap();
+  }
+  // why a refresh failed, in a few words for the caption (the map it had stays)
+  function mapFailWhy(e) {
+    const said = e && e.body && (e.body.message || e.body.error);
+    if (!e || e.status === 0) return 'this site could not be reached';
+    if (e.status === 429) return 'too many reads from this connection just now';
+    if (e.status === 200) return said ? String(said) : 'the coins have not been read yet';
+    return 'the site answered ' + e.status + (said ? ': ' + String(said) : '');
   }
   // read again every 10 minutes while the page is open and in view (a page in the background catches up when it is looked at)
   function planMap() {
@@ -2084,13 +2096,16 @@
   /* ---------- painting it: the legend, the caption, the map, the list, the sources ---------- */
   function paintMap() {
     const j = MAP.ans; if (!j) return;
+    const back = mapFocusKey();   // the list and the card are built again: the focus in them goes back where it was
+    if (mapEl.body) mapEl.body.classList.remove('is-failed');
     const rows = mapRows(), c = mapCounts(rows), byB = {};
     rows.filter(drawable).forEach((r) => { const b = mapBucket(val(r.change24h)); byB[b] = (byB[b] || 0) + 1; });
     if (mapEl.key) mapEl.key.innerHTML = MAP_LEGEND.map(([k, label]) => '<li><span class="mkt-map-sw mkt-b-' + k + '" aria-hidden="true"></span>' + esc(label) + ' <span class="mkt-map-n">(' + (byB[k] || 0) + ')</span></li>').join('');
     document.querySelectorAll('#mkt-map [data-map-top]').forEach((b) => b.setAttribute('aria-pressed', String(Number(b.dataset.mapTop) === MAP.top)));
     if (mapEl.stables) mapEl.stables.setAttribute('aria-pressed', String(!MAP.stables));
     const tot = fig(j.total), totV = val(tot), unknownStable = !MAP.stables && rows.some((r) => r.stable == null);
-    if (mapEl.cap) mapEl.cap.innerHTML = 'Total market cap ' + (totV != null ? '<b>' + esc(usd(totV)) + '</b> (' + srcLine(tot) + ')' : NA + ' (' + whyOf(tot) + ')') +
+    const stale = MAP.fail ? '<span class="mkt-map-stale mkt-err-t">⏳ A newer map could not be read at ' + esc(utc(MAP.fail.at).slice(11)) + ' (' + esc(MAP.fail.why) + '): these are CoinGecko’s figures from ' + agoEl(j.at) + ', and the page asks again every 10 minutes.</span> ' : '';
+    if (mapEl.cap) mapEl.cap.innerHTML = stale + 'Total market cap ' + (totV != null ? '<b>' + esc(usd(totV)) + '</b> (' + srcLine(tot) + ')' : NA + ' (' + whyOf(tot) + ')') +
       ' · ' + capCounts(c) + (MAP.stables ? '' : ' (stablecoins left out' + (unknownStable ? '; which coins are stablecoins is not known yet' : '') + ')') +
       ' · Bubble size: market cap. Colour: 24 h price change. Not advice, never a tip to buy.';
     drawMap(true);
@@ -2098,9 +2113,43 @@
     const reads = j.reads || {}, bad = ['coins', 'global', 'stables', 'coinlore'].map((k) => reads[k]).filter((x) => x && !x.ok && x.why);
     const srcs = Array.isArray(j.sources) ? j.sources : [];
     if (mapEl.foot) mapEl.foot.innerHTML = (bad.length ? '<span class="mkt-foot-n mkt-err-t">⏳ ' + bad.map((x) => esc(x.why)).join(' · ') + '</span>' : '') +
-      (Array.isArray(j.notes) ? j.notes.filter((n) => !/^Not advice/.test(n)).map((n) => '<span class="mkt-foot-n">' + esc(n) + '</span>').join('') : '') +
+      (Array.isArray(j.notes) ? j.notes.filter((n) => !/^Not advice/.test(n)).map((n) => '<span class="mkt-foot-n">' + esc(mapNote(n, rows)) + '</span>').join('') : '') +
       (srcs.length ? '<span class="mkt-foot-n">Sources: ' + srcs.map((x) => (/^https:\/\//.test(String(x.href || '')) ? '<a class="mkt-src-l" href="' + esc(x.href) + '" target="_blank" rel="noopener nofollow">' + esc(x.name) + '</a>' : esc(x.name))).join(' · ') + ' — read by this site’s server; your browser contacts none of them.</span>' : '');
     if (MAP.pick) openMapCard(MAP.pick, false); else if (mapEl.card) { mapEl.card.hidden = true; mapEl.card.innerHTML = ''; }
+    mapRefocus(back);
+  }
+  // the answer's note on the CoinLore check counts its 100 rows; the map may show fewer (Top 50, stablecoins left out), so it counts those
+  function mapNote(n, rows) {
+    if (!/^Each market cap is looked up in CoinLore/.test(n)) return n;
+    const k = { agreed: 0, differs: 0 }; rows.forEach((r) => { const st = r.check && r.check.status; if (st in k) k[st]++; });
+    const both = k.agreed + k.differs, one = rows.length - both;
+    return 'Each market cap is looked up in CoinLore’s 100 largest coins: ' + both + ' of these ' + rows.length + ' were found there and compared (' + k.agreed + ' agree, ' + k.differs + ' differ by more than 10%)' + (one ? '; ' + one + (one === 1 ? ' has' : ' have') + ' one source' : '') + ' — the chip on each coin says which.';
+  }
+  /* the focus in the list or the card before they are built again (a 10-minute refresh, a choice), and back to its match after */
+  const cssId = (id) => (window.CSS && CSS.escape ? CSS.escape(String(id)) : String(id).replace(/["\\]/g, '\\$&'));
+  function mapFocusKey() {
+    const a = document.activeElement;
+    if (!a || a === document.body) return null;
+    if (mapEl.table && mapEl.table.contains(a)) return a.dataset && a.dataset.mapCoin ? { coin: a.dataset.mapCoin } : { lost: true };
+    if (mapEl.card && mapEl.card.contains(a)) return { sel: a.id ? '#' + cssId(a.id) : a.dataset && a.dataset.mapClose ? '[data-map-close]' : a.classList.contains('mkt-map-ext') ? '.mkt-map-ext' : null };
+    return null;
+  }
+  function mapRefocus(k) {
+    if (!k || (document.activeElement && document.activeElement !== document.body)) return;   // still where it was, or moved on
+    const t = k.coin && mapEl.table ? mapEl.table.querySelector('[data-map-coin="' + cssId(k.coin) + '"]') : k.sel && mapEl.card && !mapEl.card.hidden ? mapEl.card.querySelector(k.sel) : null;
+    if (t) { t.focus({ preventScroll: true }); if (document.activeElement === t) return; }
+    mapBack(null);
+  }
+  /* where the focus goes when a coin's card closes: its row in the list when the list is open, else the list's own summary just
+     under the card (a bubble is not a tab stop) — never <body>. A button in a closed <details> still has an offsetParent in Chrome
+     but cannot take the focus, so the test is whether it can be seen. */
+  function mapBack(was) {
+    const list = $('mkt-map-list'), b = was && mapEl.table ? mapEl.table.querySelector('[data-map-coin="' + cssId(was) + '"]') : null;
+    const seen = (x) => !!x && (typeof x.checkVisibility === 'function' ? x.checkVisibility() : !!x.offsetParent);
+    if (b && list && list.open && seen(b)) { b.focus(); if (document.activeElement === b) return; }
+    const sum = list && list.querySelector('summary');
+    if (sum && seen(sum)) { sum.focus(); if (document.activeElement === sum) return; }
+    if (mapEl.tog) mapEl.tog.focus();
   }
 
   /* the text floor in pixels, and the canvas that measures a label before it is drawn */
@@ -2170,14 +2219,14 @@
   }
   function mapSummary(rows, c) {
     const big = rows.filter(drawable).slice(0, 2).map((r) => { const d = domText(val(r.dominance)), v = val(r.change24h);
-      return coinName(r) + (d ? ' is ' + d + ' of the market' : '') + ', ' + (v == null ? 'no 24 h change given' : v > 0 ? 'up ' + Math.abs(v).toFixed(1) + '%' : v < 0 ? 'down ' + Math.abs(v).toFixed(1) + '%' : 'unchanged') + ' in 24 h'; });
+      return coinName(r) + (d ? ' is ' + d + ' of the market' : '') + ', ' + (v == null ? 'no 24 h change given' : (v > 0 ? 'up ' + Math.abs(v).toFixed(1) + '%' : v < 0 ? 'down ' + Math.abs(v).toFixed(1) + '%' : 'unchanged') + ' in 24 h'); });
     return 'Bubble map of the ' + c.drawn + ' largest coins by market cap' + (MAP.stables ? '' : ', stablecoins left out') + ': ' + big.join('; ') + '; ' + countWords(c) + '. Every coin is in the list under the map.';
   }
   function drawMap(fresh) {
     if (!mapEl.fig || !MAP.ans || !MAP.shown) return;
     const rows = mapRows(), shown = rows.filter(drawable).sort((a, b) => val(b.mcap) - val(a.mcap)), c = mapCounts(rows);
     const size = mapSize(), floor = mapFloor(), half = size / 2;
-    MAP.drawnW = mapEl.fig.clientWidth; MAP.drawnH = window.innerHeight;
+    MAP.drawn = size;
     if (!shown.length) { mapEl.fig.innerHTML = '<p class="mkt-empty">No coin here has a market cap to draw.</p>'; return; }
     const top = val(shown[0].mcap), unit = (r) => Math.sqrt(val(r.mcap) / top) * 100;
     // packed twice: once to learn the scale, then with each bubble padded by about a pixel at that scale, so they never touch
@@ -2205,7 +2254,10 @@
     if (first) svg.classList.add('is-new');
     if (old) old.replaceWith(svg); else { mapEl.fig.innerHTML = ''; mapEl.fig.appendChild(svg); }
     if (first) setTimeout(() => { svg.classList.add('is-in'); svg.classList.remove('is-new'); }, 30);
-    if (!mapEl.fig.querySelector('.mkt-map-tip')) { const tip = document.createElement('div'); tip.className = 'mkt-map-tip'; tip.id = 'mkt-map-tip'; tip.hidden = true; tip.setAttribute('aria-hidden', 'true'); mapEl.fig.appendChild(tip); }
+    // the tooltip is kept between maps, but never its words: they were built from the figures this map replaced
+    const tip = mapEl.fig.querySelector('.mkt-map-tip');
+    if (tip) { tip.hidden = true; delete tip.dataset.coin; }
+    else { const t = document.createElement('div'); t.className = 'mkt-map-tip'; t.id = 'mkt-map-tip'; t.hidden = true; t.setAttribute('aria-hidden', 'true'); mapEl.fig.appendChild(t); }
   }
   // a bubble's figures in words: its <title>, and the tooltip's lines
   function tipWords(r) {
@@ -2213,14 +2265,16 @@
     return (r.symbol || '') + ' · ' + coinName(r) + ' — price ' + (mapPrice(val(r.price)) || 'not available') + ', market cap ' + (usd(val(r.mcap)) || 'not available') + (d ? ', ' + d + ' of the market' : '') +
       ', 24 h ' + (v == null ? 'no change given' : pct(v)) + ', volume ' + (usd(val(r.volume24h)) || 'not available');
   }
-  const mapChk = (r) => mcapChip({ check: r.check });
+  // the chip: in the tooltip and the list, a 'differs' points to the coin's card for the reason; in the card the reason is under it
+  const mapChk = (r, inCard) => mcapChip({ check: r.check }, inCard ? '' : ' — the coin’s card says why');
   function tipHTML(r) {
     const row = (label, f, fmt) => { const x = val(f); return '<dt>' + esc(label) + '</dt><dd>' + (x != null ? esc(fmt(x)) : 'Not available') + '</dd>'; };
     return '<b>' + esc(r.symbol || '') + '</b> ' + esc(coinName(r)) +
       '<dl>' + row('Price', r.price, mapPrice) + row('Market cap', r.mcap, usd) + row('Dominance', r.dominance, domText) + row('24 h change', r.change24h, (x) => pct(x)) + row('24 h volume', r.volume24h, usd) + '</dl>' +
       '<span class="mkt-s">' + srcLine(fig(r.mcap)) + '</span> ' + mapChk(r);
   }
-  // the tooltip: beside the pointer, inside the map's box
+  /* the tooltip: beside the pointer — or, where there is no room beside it (a phone), above or below it — never over it, inside
+     the map's box AND the part of the screen that can be seen: under the sticky nav, above the bottom of the window */
   function mapTip(g, e) {
     const tip = mapEl.fig && mapEl.fig.querySelector('.mkt-map-tip'); if (!tip) return;
     const prev = mapEl.fig.querySelector('.mkt-bub[data-tipped]');
@@ -2231,11 +2285,23 @@
     const ti = g.querySelector('title'); if (ti) { g.dataset.tipped = ti.textContent; ti.remove(); }
     if (tip.dataset.coin !== r.id) { tip.innerHTML = tipHTML(r); tip.dataset.coin = r.id; }
     tip.hidden = false;
-    const box = mapEl.fig.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight;
-    let x = e.clientX - box.left + 16, y = e.clientY - box.top + 16;
-    if (x + tw > box.width) x = Math.max(0, e.clientX - box.left - tw - 16);
-    if (y + th > box.height) y = Math.max(0, e.clientY - box.top - th - 16);
-    tip.style.left = Math.round(x) + 'px'; tip.style.top = Math.round(y) + 'px';
+    const box = mapEl.fig.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight, G = 16;
+    const nav = document.querySelector('nav.nav'), navB = nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 0;
+    // the room: the map's box where it is on the screen; when that is too short for the tooltip, the screen under the nav
+    const vh = window.innerHeight, L = Math.max(box.left, 0), R = Math.min(box.right, document.documentElement.clientWidth || window.innerWidth);
+    const T0 = Math.max(box.top, navB), B0 = Math.min(box.bottom, vh), roomy = B0 - T0 >= th, T = roomy ? T0 : navB, B = roomy ? B0 : vh;
+    const px = e.clientX, py = e.clientY, clamp = (v, lo, hi) => Math.max(lo, Math.min(v, hi));
+    const vert = (lo, hi) => (py + G + th <= hi ? py + G : py - G - th >= lo ? py - G - th : null);   // under the pointer, else over it
+    let x, y;
+    const side = px + G + tw <= R ? px + G : px - G - tw >= L ? px - G - tw : null;
+    if (side != null) {   // beside it: its top under the pointer's line if that fits, else its bottom over it, kept in the room
+      x = side; y = clamp(py + G + th <= B ? py + G : py - G - th, T, Math.max(T, B - th));
+    } else {              // no room beside it (a phone): under it or over it, in the box if it fits there, else on the screen
+      x = clamp(px - tw / 2, L, Math.max(L, R - tw));
+      y = vert(T0, B0); if (y == null) y = vert(navB, vh);
+      if (y == null) y = vh - (py + G) >= (py - G) - navB ? py + G : Math.max(navB, py - G - th);
+    }
+    tip.style.left = Math.round(x - box.left) + 'px'; tip.style.top = Math.round(y - box.top) + 'px';
   }
   /* ---------- a coin's card, under the map ---------- */
   function openMapCard(id, focus) {
@@ -2245,7 +2311,7 @@
     if (mapEl.table) mapEl.table.querySelectorAll('tr[data-coin]').forEach((tr) => tr.classList.toggle('is-on', tr.dataset.coin === id));
     const chk = r.check || {}, notes = Array.isArray(chk.notes) ? chk.notes : [], cgId = /^[a-z0-9-]{1,80}$/.test(String(r.id || '')) ? r.id : null;
     const rankF = Number.isInteger(r.rank) ? { v: r.rank, src: 'coingecko', at: val(r.mcap) != null ? fig(r.mcap).at : null, label: 'market-cap rank (CoinGecko)' } : { v: null, src: 'coingecko', why: 'CoinGecko gives no rank for this coin' };
-    mapEl.card.innerHTML = '<section class="mkt-card mkt-map-c" aria-labelledby="mkt-mapc-h"><div class="mkt-card-h"><h3 class="mkt-h3" id="mkt-mapc-h" tabindex="-1">' + esc(r.symbol || '') + ' <span class="mkt-sym">' + esc(coinName(r)) + '</span></h3>' + mapChk(r) + '</div>' +
+    mapEl.card.innerHTML = '<section class="mkt-card mkt-map-c" aria-labelledby="mkt-mapc-h"><div class="mkt-card-h"><h3 class="mkt-h3" id="mkt-mapc-h" tabindex="-1">' + esc(r.symbol || '') + ' <span class="mkt-sym">' + esc(coinName(r)) + '</span></h3>' + mapChk(r, true) + '</div>' +
       '<dl class="mkt-stats">' + stat('Price', r.price, mapPrice) + stat('Market cap', r.mcap, usd) + stat('Dominance', r.dominance, domText) + stat('24 h price change', r.change24h, (x) => pct(x)) + stat('24 h volume', r.volume24h, usd) +
       stat('Rank', rankF, (x) => '#' + x) + '</dl>' +
       (r.stable === true ? '<p class="mkt-note">CoinGecko files this coin as a stablecoin.</p>' : '') +
@@ -2280,14 +2346,15 @@
       if (t) { const n = Number(t.dataset.mapTop) === 50 ? 50 : 100; if (n !== MAP.top) { MAP.top = n; paintMap(); say('The map shows the ' + n + ' largest coins' + (MAP.stables ? '' : ', stablecoins left out') + '.'); } return; }
       if (e.target.closest('#mkt-map-stables')) { MAP.stables = !MAP.stables; paintMap(); say(MAP.stables ? 'Stablecoins are on the map again.' : 'Stablecoins are left out of the map.'); return; }
       const p = e.target.closest('[data-map-coin]'); if (p) { openMapCard(p.dataset.mapCoin, true); return; }
-      if (e.target.closest('[data-map-close]')) { const was = closeMapCard(); const b = was && mapEl.table && mapEl.table.querySelector('[data-map-coin="' + was + '"]'); if (b && b.offsetParent) b.focus(); else if (mapEl.tog) mapEl.tog.focus(); return; }
+      if (e.target.closest('[data-map-close]')) { mapBack(closeMapCard()); return; }
       const g = e.target.closest('.mkt-bub'); if (g) { mapTip(null); openMapCard(g.dataset.coin, true); }
     });
     mapEl.fig.addEventListener('pointermove', (e) => { if (e.pointerType === 'touch') return; mapTip(e.target.closest('.mkt-bub'), e); });
     mapEl.fig.addEventListener('pointerleave', () => mapTip(null));
-    mapEl.card.addEventListener('keydown', (e) => { if (e.key === 'Escape' && MAP.pick) { e.preventDefault(); const was = closeMapCard(); const b = was && mapEl.table && mapEl.table.querySelector('[data-map-coin="' + was + '"]'); if (b && b.offsetParent) b.focus(); } });
-    // redrawn when its box changes width or the screen's height moves its cap — after the change settles, never mid-drag
-    const reMap = () => { clearTimeout(MAP.soon); MAP.soon = setTimeout(() => { if (MAP.shown && MAP.ans && (Math.abs(mapEl.fig.clientWidth - MAP.drawnW) > 2 || Math.abs(window.innerHeight - MAP.drawnH) > 40)) { mapTip(null); drawMap(false); } }, 160); };
+    mapEl.card.addEventListener('keydown', (e) => { if (e.key === 'Escape' && MAP.pick) { e.preventDefault(); mapBack(closeMapCard()); } });
+    // redrawn when the size it would be drawn at changes (its box's width, or a height that moves its cap) — after the change settles,
+    // never mid-drag; a phone's address bar or keyboard coming and going changes the height alone, and the map's size not at all
+    const reMap = () => { clearTimeout(MAP.soon); MAP.soon = setTimeout(() => { if (MAP.shown && MAP.ans && mapEl.fig.querySelector('svg.mkt-map-svg') && mapSize() !== MAP.drawn) { mapTip(null); drawMap(false); } }, 160); };
     if (typeof ResizeObserver === 'function') new ResizeObserver(reMap).observe(mapEl.fig);
     window.addEventListener('resize', reMap);
     // the labels are measured in the site's font: once it has loaded, they are measured again

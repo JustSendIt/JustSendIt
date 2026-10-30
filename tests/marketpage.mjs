@@ -94,7 +94,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const WINDOWS = (() => { const db = new DatabaseSync(':memory:'); MD.migrate(db); return MD.createMarketData({ db, fetchJson: async () => ({ ok: false, status: 0, data: null, reason: 'no vendor in this test' }) }); })();
 const CHAIN_WINS = ['24h', '7d', '30d'], TOKEN_WINS = ['24h', '6h', '1h', '5m'];
 /* what the browser walk can make the fake do, as the real server does when a source cannot be read */
-const FAKE = { log: [], unavailable: new Set(), zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, pulse: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0, heatmapDown: false };
+const FAKE = { log: [], unavailable: new Set(), zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, pulse: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0, heatmapDown: false, heatmapPatch: null };
 // the logo proxy: DefiLlama's chain icons draw (any PNG will do for the walk) except Solana's, which fails as a missing picture does
 const LOGO_PNG = readFileSync(path.join(PUB, 'assets', 'logo-128.png')), LOGO_BROKEN = /rsz_solana/;
 const none = (why, src, at) => ({ v: null, src, at, why });
@@ -194,7 +194,7 @@ const rwaKept = (chain, addr) => (chain === 'robinhood' ? { rwa: fakeRwaRow(chai
    of 2026-10-30), cut as the route cuts it — the largest `limit` coins (20 to 100), the stablecoins among them left out with stables=0 */
 function fakeHeatmap(q) {
   if (FAKE.heatmapDown) return [503, { error: 'The market map could not be read just now' }];
-  const j = FIX('heatmap.json'), n = Number(q.get('limit')), limit = q.get('limit') != null && q.get('limit') !== '' && Number.isFinite(n) ? Math.min(100, Math.max(20, Math.round(n))) : 100;
+  const j = FAKE.heatmapPatch ? FAKE.heatmapPatch(FIX('heatmap.json')) : FIX('heatmap.json'), n = Number(q.get('limit')), limit = q.get('limit') != null && q.get('limit') !== '' && Number.isFinite(n) ? Math.min(100, Math.max(20, Math.round(n))) : 100;
   const stables = !(q.get('stables') === '0' || q.get('stables') === 'false');
   let rows = j.rows.slice(0, limit); if (!stables) rows = rows.filter((r) => r.stable !== true);
   const counts = { up: 0, down: 0, flat: 0, none: 0, drawn: 0 };
@@ -555,7 +555,7 @@ async function browserWalk() {
     // each part of the walk on its own: one that breaks is a failure of its own, the rest still run, and the fake is put back as it was
     const step = async (name, fn) => {
       try { await fn(); } catch (e) { check(name + ' (the walk broke here)', false, e && e.message); }
-      finally { Object.assign(FAKE, { pulse: null, zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0, heatmapDown: false }); FAKE.unavailable.clear(); }
+      finally { Object.assign(FAKE, { pulse: null, zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0, heatmapDown: false, heatmapPatch: null }); FAKE.unavailable.clear(); }
     };
     await step('every width: the chain view and a token view fit, on the text floor', async () => {
       const fits = [];
@@ -1502,7 +1502,7 @@ async function browserWalk() {
       const card = await ev('(() => { const c = document.getElementById("mkt-map-card"), a = c.querySelector("a.mkt-map-ext"); return { text: c.textContent, href: a ? a.getAttribute("href") : null, rel: a ? a.getAttribute("rel") : null, on: [...document.querySelectorAll("#mkt-map .mkt-bub.is-on")].map((g) => g.dataset.coin), focus: document.activeElement && document.activeElement.id, after: c.compareDocumentPosition(document.getElementById("mkt-map-fig")) & 2 }; })()');
       const cardL = await ev(LAYOUT);
       check('  ...a press on a bubble opens its card under the map: its figures with their sources and ages, the check chip and its notes, "View on CoinGecko ↗" (https://www.coingecko.com/en/coins/ethereum, rel="noopener"), not advice; the bubble ringed and the card\'s heading focused',
-        /^ETH Ethereum✓ 2 sources agree/.test(card.text) && /Price\$2,207CoinGecko · /.test(card.text) && /Dominance10\.4%share of CoinGecko's total, \$2\.59T · CoinGecko · /.test(card.text) && /24 h price change▼ −6\.32%CoinGecko · /.test(card.text) && /Rank#2/.test(card.text)
+        /^ETH Ethereum✓ 2 sources agree/.test(card.text) && /Price\$2,207CoinGecko · /.test(card.text) && /Dominance10\.4%share of CoinGecko's total, \$2\.59T, in percent · CoinGecko · /.test(card.text) && /24 h price change▼ −6\.32%CoinGecko · /.test(card.text) && /Rank#2/.test(card.text)
         && card.href === 'https://www.coingecko.com/en/coins/ethereum' && card.rel === 'noopener' && /View on CoinGecko ↗/.test(card.text) && /Not advice, never a tip to buy\./.test(card.text) && card.on.join() === 'ethereum' && card.focus === 'mkt-mapc-h' && card.after && cardL.sw <= cardL.iw && !cardL.out.length && !cardL.small.length,
         JSON.stringify({ card, cardL }).slice(0, 600));
       // the keyboard's way in: the list, a row's button, Enter, then Escape
@@ -1523,6 +1523,93 @@ async function browserWalk() {
       check('  ...and on a phone the list folds into labelled cards and the card fits: no sideways scroll, nothing under the floor', phone.sw <= phone.iw && !phone.out.length && !phone.small.length
         && (await ev('getComputedStyle(document.querySelector("#mkt-map-table thead")).position')) === 'absolute', JSON.stringify(phone));
     });
+    await step('the bubble map: a refresh and a refresh that fails, the focus through both, the tooltip on the screen, closing a card, its chip', async () => {
+      // the answer as if it had just been read (every `at` moved to a minute ago), so its ages are minutes
+      const fresh = (j) => { const d = Date.now() - 60e3 - j.at; const walk = (o) => { if (Array.isArray(o)) o.forEach(walk); else if (o && typeof o === 'object') for (const [k, v] of Object.entries(o)) { if (k === 'at' && typeof v === 'number') o[k] = v + d; else walk(v); } }; walk(j); return j; };
+      FAKE.heatmapPatch = fresh;
+      await go('/market', 1280); await mapReady(100);
+      const centre = (id) => ev('(() => { const c = document.querySelector("#mkt-map [data-coin=' + id + '] circle").getBoundingClientRect(); return [c.left + c.width / 2, c.top + c.height / 2]; })()');
+      const hover = async (p) => { await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: p[0], y: p[1], button: 'none' }); await sleep(150); };
+      const tipText = () => ev('(() => { const t = document.getElementById("mkt-map-tip"); return t && !t.hidden ? t.textContent : ""; })()');
+      const heatReads = () => FAKE.log.filter((x) => x.startsWith('/api/market/heatmap')).length;
+      // the page's clock moved on, and the tab looked at again: the path a tab takes back after 10 minutes (the 10-minute timer runs the same read)
+      const later = async (min) => { const n0 = heatReads(); await ev('(() => { const n = Date.now; Date.now = () => n() + ' + min + ' * 60e3; document.dispatchEvent(new Event("visibilitychange")); return true; })()');
+        for (let i = 0; i < 130 && heatReads() <= n0; i++) await sleep(60); await sleep(400); };
+      await ev('document.getElementById("mkt-map-fig").scrollIntoView({ block: "center", behavior: "instant" }), true'); await sleep(150);
+      await hover(await centre('bitcoin')); const tip1 = await tipText(); await hover([5, 5]);
+      // the next read: Bitcoin at $70,000, down 12.5%; Ethereum with no 24 h change
+      FAKE.heatmapPatch = (j) => { fresh(j); const b = j.rows.find((r) => r.id === 'bitcoin'), e = j.rows.find((r) => r.id === 'ethereum');
+        b.price.v = 70000; b.change24h.v = -12.5; b.mcap.v = 1.4e12; b.dominance.v = (1.4e12 / j.total.v) * 100; e.change24h = { v: null, src: 'coingecko', at: e.change24h.at, why: 'no change given — CoinGecko gives no 24 h change for this coin' }; return j; };
+      await later(11);
+      await until('[...document.querySelectorAll("#mkt-map [data-coin=bitcoin] text")].some((t) => t.textContent === "$70,000")');
+      await hover(await centre('bitcoin')); const tip2 = await tipText(); await hover([5, 5]);
+      const aria = await ev('document.querySelector("#mkt-map svg.mkt-map-svg").getAttribute("aria-label")');
+      check('  ...the tooltip is built from the map it shows: Bitcoin hovered, then a 10-minute refresh with new figures, then Bitcoin hovered again shows the new ones ($70,000, ▼ −12.5%, $1.4T), never the figures from before; the summary says "no 24 h change given" for a coin without one (never "given in 24 h")',
+        /Price\$76,894/.test(tip1) && /Price\$70,000/.test(tip2) && /24 h change▼ −12\.50?%/.test(tip2) && /Market cap\$1\.4T/.test(tip2) && !/76,894/.test(tip2)
+        && /Ethereum is [\d.]+% of the market, no 24 h change given; /.test(aria) && !/given in 24 h/.test(aria) && /Bitcoin is [\d.]+% of the market, down 12\.5% in 24 h; /.test(aria), JSON.stringify({ tip1: tip1.slice(0, 120), tip2: tip2.slice(0, 160), aria: aria.slice(0, 200) }));
+      // the focus through a refresh: on a row of the list, then on the open card's Close
+      await press('document.querySelector("#mkt-map-list > summary")'); await until('document.getElementById("mkt-map-list").open');
+      await ev('document.querySelector("#mkt-map-table [data-map-coin=ethereum]").focus(), true');
+      await later(11); const fRow = await ev('document.activeElement.dataset.mapCoin || document.activeElement.tagName');
+      await K.enter(); await until('/^ETH/.test(document.getElementById("mkt-map-card").textContent)');
+      await ev('document.querySelector("#mkt-map-card [data-map-close]").focus(), true');
+      await later(11); const fCard = await ev('(() => { const a = document.activeElement; return a.dataset.mapClose ? "close" : a.id || a.tagName; })()'), cardOpen = await ev('!document.getElementById("mkt-map-card").hidden');
+      check('  ...a 10-minute refresh builds the list and the card again without dropping the focus: on the ETH row it stays on the ETH row, on the open card\'s ✕ Close it stays on ✕ Close (never sent back to <body>)',
+        fRow === 'ethereum' && fCard === 'close' && cardOpen, JSON.stringify({ fRow, fCard, cardOpen }));
+      // a refresh that fails: the map it had stays, its ages are worked out again, and the caption says the read failed
+      const capAge = '([...document.querySelectorAll("#mkt-map-cap time")].pop() || {}).textContent || ""';   // the total's age (the last <time> in it)
+      await ev('document.getElementById("mkt-map-fig").scrollIntoView({ block: "center", behavior: "instant" }), true');
+      const cap0 = await textOf('#mkt-map-cap'), age0 = await ev(capAge);
+      FAKE.heatmapDown = true; await later(30); FAKE.heatmapDown = false;
+      const cap1 = await textOf('#mkt-map-cap'), age1 = await ev(capAge), n1 = await ev('document.querySelectorAll("#mkt-map .mkt-bub").length');
+      check('  ...a refresh that fails keeps the map it had (100 bubbles), works its ages out again ("' + age0 + '" → "' + age1 + '") and says so first in the caption: when the read failed, why, how old these figures are and that it asks again — never a frozen "1 min ago" with no sign of the failure',
+        n1 === 100 && !/could not be read/.test(cap0) && /^⏳ A newer map could not be read at \d\d:\d\d UTC \(the site answered 503: The market map could not be read just now\): these are CoinGecko’s figures from \d+\u00a0(min|h) ago, and the page asks again every 10 minutes\./.test(cap1)
+        && /^\d+\u00a0min ago$/.test(age0) && /^\d+\u00a0(min|h) ago$/.test(age1) && age0 !== age1, JSON.stringify({ cap0: cap0.slice(0, 80), cap1: cap1.slice(0, 260), age0, age1 }));
+      // the chip's title says where the reason is: the coin's card (tooltip, list), or nothing more in the card, whose notes are under it
+      await ev('document.getElementById("mkt-map-fig").scrollIntoView({ block: "center", behavior: "instant" }), true'); await sleep(150);
+      await hover(await centre('hyperliquid'));
+      const chipT = { tip: await ev('(document.querySelector("#mkt-map-tip .mkt-chk") || {}).title || ""'), row: await ev('(document.querySelector("#mkt-map-table tr[data-coin=hyperliquid] .mkt-chk") || {}).title || ""') };
+      await hover([5, 5]); await press('document.querySelector("#mkt-map-table [data-map-coin=hyperliquid]")'); await until('/^HYPE/.test(document.getElementById("mkt-map-card").textContent)');
+      chipT.card = await ev('(document.querySelector("#mkt-map-card .mkt-chk") || {}).title || ""');
+      check('  ...a "⚠ Sources differ" chip on a coin points to the coin\'s card for the reason (tooltip and list: "… — the coin’s card says why"), and in the card, whose notes say it, adds nothing — never "the chain’s view", which a coin does not have',
+        chipT.tip === 'CoinGecko and CoinLore give market caps more than 10% apart — the coin’s card says why' && chipT.row === chipT.tip && chipT.card === 'CoinGecko and CoinLore give market caps more than 10% apart' && !/chain’s view/.test(JSON.stringify(chipT)), JSON.stringify(chipT));
+      // closing a card opened from a bubble, with the list folded (the default): the focus goes to the list's summary, never <body>
+      await go('/market', 1280); await mapReady(100);
+      await press('document.querySelector("#mkt-map [data-coin=solana] circle")'); await until('/^SOL/.test(document.getElementById("mkt-map-card").textContent)');
+      const fOpen = await ev('document.activeElement.id');
+      await ev('document.querySelector("#mkt-map-card [data-map-close]").focus(), true'); await K.enter(); await sleep(150);
+      const fClose = await ev('(() => { const a = document.activeElement; return a.tagName === "SUMMARY" ? a.parentElement.id + ">summary" : a.id || a.tagName; })()');
+      await press('document.querySelector("#mkt-map [data-coin=solana] circle")'); await until('!document.getElementById("mkt-map-card").hidden'); await K.esc(); await sleep(150);
+      const fEsc = await ev('(() => { const a = document.activeElement; return a.tagName === "SUMMARY" ? a.parentElement.id + ">summary" : a.id || a.tagName; })()'), listShut = await ev('!document.getElementById("mkt-map-list").open');
+      check('  ...a card opened from a bubble with the list folded away: ✕ Close and Escape give the focus to "Show as a list" just under it (a row in a closed list cannot take it) — never <body>',
+        fOpen === 'mkt-mapc-h' && fClose === 'mkt-map-list>summary' && fEsc === 'mkt-map-list>summary' && listShut, JSON.stringify({ fOpen, fClose, fEsc, listShut }));
+      // the tooltip on the screen: low on the screen, high under the nav, and a phone with no room beside the pointer
+      const TIPBOX = '(() => { const t = document.getElementById("mkt-map-tip").getBoundingClientRect(), n = document.querySelector("nav.nav").getBoundingClientRect(); return { shown: !document.getElementById("mkt-map-tip").hidden, top: t.top, bottom: t.bottom, left: t.left, right: t.right, ih: innerHeight, iw: innerWidth, nav: n.bottom }; })()';
+      // a bubble whose centre is between lo and hi on the screen and the topmost thing there (nothing of the page's own over it)
+      const pick = (lo, hi) => ev('(() => { const b = [...document.querySelectorAll("#mkt-map .mkt-bub circle")].map((c) => { const r = c.getBoundingClientRect(); return { id: c.parentNode.dataset.coin, x: r.left + r.width / 2, y: r.top + r.height / 2, r: r.width / 2 }; }).filter((c) => { if (c.r < 8 || c.y < ' + lo + ' || c.y > ' + hi + ') return false; const e = document.elementFromPoint(c.x, c.y); return !!e && !!e.closest(".mkt-bub") && e.closest(".mkt-bub").dataset.coin === c.id; }); b.sort((p, q) => q.y - p.y); return b[0] || null; })()');
+      await ev('(() => { const f = document.getElementById("mkt-map-fig").getBoundingClientRect(); window.scrollBy({ top: f.top - innerHeight * 0.45, behavior: "instant" }); return true; })()'); await sleep(200);
+      const low = await pick(900 * 0.8, 900 - 12); await hover([low.x, low.y]); const tLow = await ev(TIPBOX); await hover([5, 5]);
+      await ev('(() => { const f = document.getElementById("mkt-map-fig").getBoundingClientRect(); window.scrollBy({ top: f.top + 330, behavior: "instant" }); return true; })()'); await sleep(200);
+      const navB = await ev('document.querySelector("nav.nav").getBoundingClientRect().bottom'), high = await pick(navB + 8, navB + 90); await hover([high.x, high.y]); const tHigh = await ev(TIPBOX); await hover([5, 5]);
+      await go('/market', 320, 568); await mapReady(100);
+      await ev('document.getElementById("mkt-map-fig").scrollIntoView({ block: "center", behavior: "instant" }), true'); await sleep(200);
+      const ph = await centre('bitcoin'); await hover(ph); const tPh = await ev(TIPBOX); await hover([2, 2]);
+      const inScreen = (t) => t.shown && t.bottom <= t.ih + 1 && t.top >= t.nav - 1 && t.left >= -1 && t.right <= t.iw + 1;
+      check('  ...the tooltip stays on the part of the screen that can be seen: hovering low on the screen (' + (low && low.id) + ') it opens above the pointer, not off the bottom; hovering just under the sticky nav (' + (high && high.id) + ') it stays below the nav; at 320 px, with no room beside the pointer, it sits above or below it, never over it',
+        !!low && !!high && inScreen(tLow) && inScreen(tHigh) && inScreen(tPh) && !(ph[0] >= tPh.left && ph[0] <= tPh.right && ph[1] >= tPh.top && ph[1] <= tPh.bottom), JSON.stringify({ low, tLow, high, tHigh, ph, tPh }));
+      // at 320 px, the card's "View on CoinGecko ↗" wraps onto a line of its own and is still a 44 px target
+      await press('document.querySelector("#mkt-map [data-coin=bitcoin] circle")'); await until('!document.getElementById("mkt-map-card").hidden');
+      const ext = await ev('(() => { const a = document.querySelector("#mkt-map-card .mkt-map-ext").getBoundingClientRect(), c = document.querySelector("#mkt-map-card [data-map-close]").getBoundingClientRect(); return { h: a.height, w: a.width, own: a.bottom <= c.top + 1 }; })()');
+      check('  ...at 320 px "View on CoinGecko ↗" is a 44 px target on its own line, like ✕ Close', ext.h >= 43.5, JSON.stringify(ext));
+      // only a change in the size it is drawn at redraws it: a phone's address bar folding away (the height alone) does not
+      await go('/market', 390, 844); await mapReady(100);
+      await ev('(window.__map = document.querySelector("#mkt-map svg.mkt-map-svg"), true)');
+      await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 780, deviceScaleFactor: 1, mobile: true }); await sleep(600);
+      const kept = await ev('document.querySelector("#mkt-map svg.mkt-map-svg") === window.__map');
+      await cdp('Emulation.setDeviceMetricsOverride', { width: 360, height: 780, deviceScaleFactor: 1, mobile: true }); await sleep(600);
+      const redrawn = await ev('(() => { const s = document.querySelector("#mkt-map svg.mkt-map-svg"); return s !== window.__map && s.querySelectorAll(".mkt-bub").length === 100; })()');
+      check('  ...a change in the window\'s height alone (390×844 → 390×780, a phone\'s address bar folding away) keeps the drawn map; a change in its width draws it again', kept && redrawn, JSON.stringify({ kept, redrawn }));
+    });
     await step('the bubble map: folded away and back, remembered; a read that fails; reduced motion', async () => {
       await go('/market', 1280); await mapReady(100);
       await press('document.getElementById("mkt-map-tog")'); await sleep(150);
@@ -1534,9 +1621,16 @@ async function browserWalk() {
       check('  ...its button folds it away (aria-expanded false, "Show the map", its description saying what a press does now) and this browser remembers it: the page opens with it folded and does not read it until it is opened again',
         off.body === true && off.exp === 'false' && /^Show the map/.test(off.text) && /Opens the bubble map/.test(off.tip) && off.kept === 'hidden' && back.body === true && back.exp === 'false' && back.asked === 0 && on.exp === 'true' && on.kept === 'shown' && on.asked === 1, JSON.stringify({ off, back, on }));
       FAKE.heatmapDown = true; await go('/market', 1280); await until('!!document.querySelector("#mkt-map-fig .mkt-err-t")');
-      const down = { t: await textOf('#mkt-map-fig'), retry: await ev('!!document.querySelector("#mkt-map-fig [data-retry=map]")'), svg: await ev('!!document.querySelector("#mkt-map svg")') };
+      const DOWNL = '(() => { const btn = document.querySelector("#mkt-map-fig [data-retry=map]"), rg = document.createRange(); rg.selectNodeContents(btn); const lines = new Set([...rg.getClientRects()].map((r) => Math.round(r.top))).size, b = btn.getBoundingClientRect(), p = document.querySelector("#mkt-map-fig .mkt-err-t").getBoundingClientRect(), sec = document.getElementById("mkt-map").getBoundingClientRect(); return { lines, bh: b.height, below: b.top >= p.bottom - 1, inSec: b.right <= sec.right - 4 && p.left >= sec.left + 4, key: getComputedStyle(document.querySelector(".mkt-map-key")).display, list: getComputedStyle(document.getElementById("mkt-map-list")).display }; })()';
+      const down = { t: await textOf('#mkt-map-fig'), retry: await ev('!!document.querySelector("#mkt-map-fig [data-retry=map]")'), svg: await ev('!!document.querySelector("#mkt-map svg")'), l: await ev(DOWNL) };
+      await go('/market', 390); await until('!!document.querySelector("#mkt-map-fig .mkt-err-t")'); down.l390 = await ev(DOWNL); down.lay390 = await ev(LAYOUT);
+      await go('/market', 1280); await until('!!document.querySelector("#mkt-map-fig .mkt-err-t")');
       FAKE.heatmapDown = false; await press('document.querySelector("#mkt-map-fig [data-retry=map]")'); await mapReady(100);
-      check('  ...a read that fails says so with its reason and a Try again (never an empty map, never "no coins"), and Try again reads it again', /could not be read just now/.test(down.t) && down.retry && !down.svg && (await ev('document.querySelectorAll("#mkt-map .mkt-bub").length')) === 100, JSON.stringify(down));
+      const backL = { key: await ev('getComputedStyle(document.querySelector(".mkt-map-key")).display'), list: await ev('getComputedStyle(document.getElementById("mkt-map-list")).display') };
+      const errOK = (l) => l.lines === 1 && l.bh >= 43.5 && l.below && l.inSec && l.key === 'none' && l.list === 'none';
+      check('  ...a read that fails says so with its reason and a Try again under the words (one line, inside the section, at 1280 and 390 px; no empty legend or list beside it — never an empty map, never "no coins"), and Try again reads it again, the legend and the list back',
+        /could not be read just now/.test(down.t) && down.retry && !down.svg && errOK(down.l) && errOK(down.l390) && down.lay390.sw <= down.lay390.iw && !down.lay390.out.length && backL.key !== 'none' && backL.list !== 'none'
+        && (await ev('document.querySelectorAll("#mkt-map .mkt-bub").length')) === 100, JSON.stringify(down));
       await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
       await go('/market', 1280); await mapReady(100);
       const rm = await ev('(() => { const s = document.querySelector("#mkt-map svg.mkt-map-svg"); return { cls: s.getAttribute("class"), op: getComputedStyle(s).opacity, tr: getComputedStyle(s).transitionDuration }; })()');

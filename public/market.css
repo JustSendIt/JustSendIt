@@ -342,7 +342,7 @@ section.mkt-map { padding: 0.9rem; }   /* styles.css pads every <section> like a
 .mkt-map-cap b { color: var(--text); }
 .mkt-map-stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.8rem; align-items: start; }
 /* a phone: the map runs to the card's own edges (a circle leaves its corners empty), so it is as wide as the screen allows */
-@container mktm (max-width: 520px) { .mkt-map-fig { margin-inline: -0.85rem; } }
+@container mktm (max-width: 520px) { .mkt-map-fig { margin-inline: -0.85rem; } .mkt-map-body.is-failed .mkt-map-fig { margin-inline: 0; } }
 .mkt-map-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; }
 .mkt-map-legend > li { display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0; font-size: max(var(--text-floor), 0.85rem); line-height: 1.3; font-variant-numeric: tabular-nums; }
 .mkt-map-n { color: var(--text-mute); }
@@ -352,7 +352,15 @@ section.mkt-map { padding: 0.9rem; }   /* styles.css pads every <section> like a
 .mkt-map-sw.mkt-b-dn2 { background: var(--hm-dn2); } .mkt-map-sw.mkt-b-dn5 { background: var(--hm-dn5); } .mkt-map-sw.mkt-b-dn10 { background: var(--hm-dn10); }
 .mkt-map-sw.mkt-b-none { background: repeating-linear-gradient(135deg, var(--ink-5) 0 2px, var(--hm-none) 2px 5px); border-style: dashed; border-color: var(--text-dim); }
 .mkt-map-fig { position: relative; min-width: 0; display: flex; justify-content: center; }
-.mkt-map-fig > .mkt-loading, .mkt-map-fig > .mkt-err-t { align-self: center; }
+.mkt-map-fig > .mkt-loading, .mkt-map-fig > .mkt-map-err { align-self: center; }
+/* a read that failed with no map to keep: its words, then Try again under them, as one block; no legend and no list beside it */
+.mkt-map-err { min-width: 0; max-width: 62ch; }
+.mkt-map-err > .mkt-err-t { margin: 0 0 0.6rem; }
+.mkt-map-err > .mkt-acts { margin: 0; }
+.mkt-map-body.is-failed .mkt-map-key, .mkt-map-body.is-failed .mkt-map-list { display: none; }
+.mkt-map-body.is-failed .mkt-map-stage { grid-template-columns: minmax(0, 1fr); }
+/* a refresh that failed, said first in the caption (the map it had stays) */
+.mkt-map-stale { display: block; margin-bottom: 0.25rem; }
 .mkt-map-svg { display: block; max-width: 100%; height: auto; touch-action: manipulation; }
 .mkt-map-svg.is-new { opacity: 0; }
 .mkt-map-svg.is-in { opacity: 1; transition: opacity 0.35s ease; }
@@ -387,6 +395,7 @@ section.mkt-map { padding: 0.9rem; }   /* styles.css pads every <section> like a
 .mkt-map-card .mkt-stats { grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5em), 1fr)); }   /* two across on a phone */
 .mkt-map-card .mkt-h3:focus { outline: none; }
 .mkt-map-card .mkt-h3:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.mkt-map-card .mkt-map-ext { display: inline-flex; align-items: center; min-height: 44px; }   /* a 44 px target on a line of its own too (320 px) */
 .mkt-map-list { margin-top: 0.9rem; }
 .mkt-map-pick {
   display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.45rem; min-height: 44px; padding: 0.2rem 0; border: 0; background: none; color: var(--green-bright);

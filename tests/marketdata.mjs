@@ -1495,8 +1495,9 @@ try {
   const twoM = CM.matchCoin(cgM.get('beam-2'), walkM, { priceTol: 1 });
   check('  ...two coins that both pass are neither: with the price test widened to 100% both of CoinLore\'s Beams pass, and no figure is taken from either', twoM.coin === null && /^CoinLore lists two coins that could be it/.test(twoM.why), twoM.why);
   const blastM = CM.matchCoin(cgM.get('blast'), walkM), bnbM = CM.matchCoin(cgM.get('binancecoin'), walkM), bmtM = CM.bySymbol(walkM).get('BMT') || [];
-  check('  ...a same-name coin at another price is a different coin (CoinLore\'s "Blast" at $0.000003 against CoinGecko\'s $0.00003657); a coin under another name is not taken (CoinLore\'s "Binance Coin" is not CoinGecko\'s "BNB"); a coin seen on two pages of the walk (Bubblemaps — the list shifted while it was read) is one coin',
-    blastM.coin === null && /priced \$0\.000003 against CoinGecko’s \$0\.000037 for \$BLAST — a different coin, not used/.test(blastM.why) && bnbM.coin === null && /only under another name \(“Binance Coin”, not CoinGecko’s “BNB”\)/.test(bnbM.why)
+  const blastL = walkM.find((c) => c.symbol === 'BLAST');
+  check('  ...a same-name coin at another price is a different coin (CoinLore\'s "Blast", written $0.000003 — $0.0000028 by its own market cap ÷ supply, the price compared — against CoinGecko\'s $0.00003657); a coin under another name is not taken (CoinLore\'s "Binance Coin" is not CoinGecko\'s "BNB"); a coin seen on two pages of the walk (Bubblemaps — the list shifted while it was read) is one coin',
+    blastM.coin === null && /priced \$0\.0000028 against CoinGecko’s \$0\.000037 for \$BLAST — a different coin, not used/.test(blastM.why) && blastL.price === 0.000003 && Math.abs(blastL.priceFull - 2.81e-6) < 0.01e-6 && bnbM.coin === null && /only under another name \(“Binance Coin”, not CoinGecko’s “BNB”\)/.test(bnbM.why)
     && loreRows.filter((x) => String(x.id) === '151131').length === 2 && bmtM.length === 1, brief([blastM.why, bnbM.why, bmtM.length]));
   const zerosM = ['fantom', 'mixin', 'pulsechain', 'krown-network'].map(xc);
   check('CoinGecko\'s 0 is no market cap: Fantom, Mixin, PulseChain and Krown Network come with 0 and no circulating supply — each null with why in words, never $0',
@@ -1775,8 +1776,8 @@ try {
   const R1 = A1.rows, btcH = R1[0], buidl = R1.find((r) => r.id === 'blackrock-usd-institutional-digital-liquidity-fund');
   const direct = pm.list.map((c) => { const cg = Object.assign({}, c, { readAt: T_H }), m = CM.matchCoin(cg, CM.bySymbol(pl.list)); return CM.crossCheck({ sym: c.symbol, cg, lore: m.coin, loreWhy: m.why, now: T_H }).check.status; });
   const MMSRC = fs.readFileSync(path.join(ROOT, 'lib', 'marketmap.js'), 'utf8');
-  check('  ...its answer: the 100 in CoinGecko\'s order, each dominance its market cap ÷ CoinGecko\'s total (Bitcoin 59.6%, the total\'s read time on it), 17 stablecoins by CoinGecko\'s category, BUIDL\'s 0% a figure of 0 (the legend\'s "0%"), each market cap\'s check lib/chainmcap.js\'s own — matchCoin and crossCheck reused, not forked: the statuses its functions give on the same answers',
-    R1.length === 100 && btcH.id === 'bitcoin' && Math.abs(btcH.dominance.v - (btcH.mcap.v / A1.total.v) * 100) < 1e-9 && Math.abs(btcH.dominance.v - 59.597) < 0.01 && btcH.dominance.at === st1.global.readAt && /^share of CoinGecko's total, \$2\.59T$/.test(btcH.dominance.label)
+  check('  ...its answer: the 100 in CoinGecko\'s order, each dominance its market cap ÷ CoinGecko\'s total in percent (Bitcoin 59.6, as old as the older of its market cap and the total), 17 stablecoins by CoinGecko\'s category, BUIDL\'s 0% a figure of 0 (the legend\'s "0%"), each market cap\'s check lib/chainmcap.js\'s own — matchCoin and crossCheck reused, not forked: the statuses its functions give on the same answers',
+    R1.length === 100 && btcH.id === 'bitcoin' && Math.abs(btcH.dominance.v - (btcH.mcap.v / A1.total.v) * 100) < 1e-9 && Math.abs(btcH.dominance.v - 59.597) < 0.01 && btcH.dominance.at === Math.min(btcH.mcap.at, st1.global.readAt) && btcH.dominance.at < st1.global.readAt && /^share of CoinGecko's total, \$2\.59T, in percent$/.test(btcH.dominance.label)
     && R1.every((r) => r.dominance.v == null || Math.abs(r.dominance.v - (r.mcap.v / A1.total.v) * 100) < 1e-9 * Math.max(1, r.dominance.v)) && R1.filter((r) => r.stable === true).length === 17 && R1.find((r) => r.id === 'tether').stable === true && btcH.stable === false
     && buidl.change24h.v === 0 && !('why' in buidl.change24h) && MM.bucketOf(buidl.change24h.v) === 'flat' && JSON.stringify(R1.map((r) => r.check.status)) === JSON.stringify(direct)
     && /only under another name \(“Binance Coin”/.test(R1.find((r) => r.id === 'binancecoin').check.notes.join(' ')) && R1.find((r) => r.id === 'hyperliquid').check.status === 'differs'
@@ -1802,12 +1803,45 @@ try {
   check('  ...keep-last-good: when CoinGecko cannot be read the run fails and says why, the last good top 100 stays in place (failAt / failWhy beside it) and the answer says when it failed and that the last good read is used',
     !rH4.ok && /not read: top 100 \(upstream 503\)/.test(rH4.note) && A4.rows.length === 100 && st4.coins.list.length === 100 && st4.coins.failAt > st4.coins.readAt && st4.coins.failWhy === 'upstream 503'
     && A4.reads.coins.ok === false && /^CoinGecko's top 100 coins could not be read at 2026-10-30 \d\d:\d\d UTC \(upstream 503\) — the last good read, from 2026-10-30 \d\d:\d\d UTC, is used$/.test(A4.reads.coins.why), brief({ note: rH4.note, why: A4.reads.coins.why }));
+  // …and the CoinLore read those coins were compared with stays with them: two more runs with CoinGecko down read no CoinLore either
+  const sts = (b) => JSON.stringify(b.rows.map((r) => r.check.status)), loreAt2 = st4.lore.readAt, w5 = log.length;
+  hmVendor.down = true; clockH += 10 * 60e3; const rH5 = await mdH.runJob('heatmap'); clockH += 10 * 60e3; const rH6 = await mdH.runJob('heatmap'); hmVendor.down = false;
+  clockH += 20e3; const A6 = mdH.heatmap({}).body, st6 = mdH._test.stGet('heatmap').v;
+  check('  ...and while CoinGecko\'s top 100 cannot be read, CoinLore is not read either: three runs with CoinGecko down (half an hour) keep the CoinLore read the stored coins were compared with — every check as it was before the outage, not "1 source" for want of a CoinLore read within 15 minutes of them — and say why',
+    !rH4.ok && !rH5.ok && !rH6.ok && [rH4, rH5, rH6].every((r) => /CoinLore not read: CoinGecko's top 100 was not read this run/.test(r.note)) && !hmAsk(w5).some((l) => /\/hlore\//.test(l)) && st6.lore.readAt === loreAt2
+    && sts(A6) === sts(A2) && A6.rows.filter((r) => r.check.status === 'single').length < 50 && A6.reads.coinlore.ok, brief({ n5: rH5.note, single: A6.rows.filter((r) => r.check.status === 'single').length }));
   // the stored reads, older than they may be compared: CoinLore 20 minutes off, the total 3 hours old; the stablecoins never read
   const stOld = JSON.parse(JSON.stringify(st1)); stOld.lore.readAt = stOld.coins.readAt - 20 * 60e3; stOld.global.readAt = stOld.coins.readAt - 3 * 3600e3; delete stOld.stables;
   const noneF = (why, src, at, extra) => Object.assign({ v: null, src: src || 'site', at: at || null, why }, extra || {});
   const BO = MM.buildMap(stOld, { fig: MD.fig, none: noneF });
   check('  ...a CoinLore read more than 15 minutes from CoinGecko\'s is not compared (every check "single", saying why); a total more than 2 hours older than the coins is not divided into them (dominance null, saying when it was read); before the stablecoins category is read, stable is null — never false',
     BO.rows.every((r) => r.check.status === 'single' && r.check.notes.some((n) => /more than 15 minutes from CoinGecko's/.test(n))) && BO.rows.every((r) => r.dominance.v === null && /more than 2 hours before these coins/.test(r.dominance.why)) && BO.rows.every((r) => r.stable === null));
+  // the other way round: coins kept last-good for 5 hours (CoinGecko's top 100 failing) while /global went on answering
+  const hmSt = (coinsAt, globAt, loreAt) => ({ coins: Object.assign({ readAt: coinsAt }, pm), global: Object.assign({ readAt: globAt }, pg), stables: Object.assign({ readAt: coinsAt }, ps), lore: Object.assign({ readAt: loreAt == null ? coinsAt : loreAt }, pl) });
+  const BN = MM.buildMap(hmSt(T_H - 5 * 3600e3, T_H), { fig: MD.fig, none: noneF }), BF = MM.buildMap(hmSt(T_H, T_H + 3600e3), { fig: MD.fig, none: noneF });
+  check('  ...and a total read more than 2 hours AFTER the coins is not divided into them either (CoinGecko\'s top 100 kept last-good for 5 hours while /global went on answering): no share of a newer total from older market caps, saying which is older; within 2 hours either way it is, stamped with the older figure\'s time',
+    BN.rows.every((r) => r.dominance.v === null && /^these coins were last read at 2026-10-29 19:30 UTC, more than 2 hours before CoinGecko's total market cap \(read at 2026-10-30 00:30 UTC\)/.test(r.dominance.why))
+    && Math.abs(BF.rows[0].dominance.v - 59.597) < 0.01 && BF.rows[0].dominance.at === BF.rows[0].mcap.at && BF.rows[0].dominance.at <= T_H, brief([BN.rows[0].dominance, BF.rows[0].dominance]));
+  // CoinLore's 6-decimal prices: SHIB "0.000005" and PEPE "0.000004" are the same coins as CoinGecko's $0.00000451 and $0.00000447
+  const B1 = MM.buildMap(hmSt(T_H, T_H), { fig: MD.fig, none: noneF }), rowOf = (id) => B1.rows.find((r) => r.id === id), loreOf = (sym) => HMX.lore.data.find((x) => x.symbol === sym);
+  const shib = rowOf('shiba-inu'), pepe = rowOf('pepe'), lpShib = pl.list.find((c) => c.symbol === 'SHIB'), nB1 = { agreed: 0, differs: 0, single: 0 }; B1.rows.forEach((r) => nB1[r.check.status]++);
+  check('  ...CoinLore writes prices to 6 decimal places, so SHIB is "0.000005" and PEPE "0.000004" — 10.9% and 10.5% from CoinGecko\'s $0.00000451 and $0.00000447 by rounding alone; compared at CoinLore\'s own market cap ÷ circulating supply ($0.00000452, $0.00000448), which rounds to its written price, they are the same coins and their market caps agree ($2.66B / $2.65B, $1.88B / $1.88B) — never "a different coin"; the price CoinLore wrote is kept as its price',
+    loreOf('SHIB').price_usd === '0.000005' && loreOf('PEPE').price_usd === '0.000004' && shib.check.status === 'agreed' && pepe.check.status === 'agreed' && !shib.check.notes.concat(pepe.check.notes).some((n) => /different coin/.test(n))
+    && shib.check.sources[1].src === 'coinlore' && shib.check.sources[1].price === 0.000005 && Math.abs(lpShib.priceFull - 4.51985e-6) < 1e-10 && lpShib.price === 0.000005 && nB1.agreed === 33 && nB1.differs === 32 && nB1.single === 35, brief({ shib: shib.check, pepe: pepe.check.status, nB1 }));
+  check('  ...the unrounded price is taken only where the written one lost its digits and CoinLore\'s own figures round to it: "1.00" (3 digits) and "77209.47" keep their own; a quotient more than one unit of the last written digit away, a number rather than CoinLore\'s string, or no supply gives none; "0.000000" (a price under half a millionth) takes the quotient when it rounds to it',
+    CM.lorePriceFull('1.00', 1002780000, 1e9) === null && CM.lorePriceFull('77209.47', 1.54e12, 19.9e6) === null && CM.lorePriceFull('0.000005', 2e10, 1e15) === null && CM.lorePriceFull(0.000005, 4.52e9, 1e15) === null
+    && CM.lorePriceFull('0.000005', 4.52e9, null) === null && Math.abs(CM.lorePriceFull('0.000005', 4.52e9, 1e15) - 4.52e-6) < 1e-15 && Math.abs(CM.lorePriceFull('0.000000', 3e8, 1e15) - 3e-7) < 1e-15 && CM.lorePriceFull('0.000000', 3e9, 1e15) === null
+    && CM.priceOf({ price: 0.000005, priceFull: 4.52e-6 }) === 4.52e-6 && CM.priceOf({ price: 2.5 }) === 2.5);
+  const defs = MM.DEFINITIONS;
+  check('  ...the definitions say the 24 h change and the dominance are percentages (−5.27 is down 5.27%; 59.6 is 59.6%) — never "in US dollars" — and their labels say so too',
+    /in percent \(−5\.27 means down 5\.27%\)/.test(defs.change24h) && !/US dollars\./.test(defs.change24h) && /in percent \(59\.6 means 59\.6%/.test(defs.dominance) && /more than 2 hours apart/.test(defs.dominance)
+    && btcH.change24h.label === '24 h price change, in percent (CoinGecko)' && /, in percent$/.test(btcH.dominance.label), brief([defs.change24h, defs.dominance]));
+  // the answer's note on the check: counted, never "every market cap is checked"
+  const loreNote = (b) => b.notes.find((n) => /CoinLore/.test(n)) || '';
+  check('  ...the answer\'s note on the check counts the rows it covers — "' + loreNote(A1).slice(0, 60) + '…" — and when CoinLore was not compared it says so and why; never "every market cap is checked" while some have one source',
+    /^Each market cap is looked up in CoinLore's 100 largest coins: \d+ of these 100 were found there and compared \(\d+ agree, \d+ differ by more than 10%\); \d+ have one source — the chip on each coin says which\.$/.test(loreNote(A1))
+    && MM.checkNote(B1.rows, B1.lore) === 'Each market cap is looked up in CoinLore\'s 100 largest coins: 65 of these 100 were found there and compared (33 agree, 32 differ by more than 10%); 35 have one source — the chip on each coin says which.'
+    && /^No market cap here is checked against CoinLore just now: CoinLore's last good read \(.+\) is more than 15 minutes from CoinGecko's/.test(MM.checkNote(BO.rows, BO.lore)) && !A1.notes.concat(A4.notes).some((n) => /Every market cap is checked/.test(n)), loreNote(A1));
   // the route's cuts and the Send API's resource
   const c50 = mdH.heatmap({ limit: '50', stables: '0' }).body, c5 = mdH.heatmap({ limit: '5' }).body, cx = mdH.heatmap({ limit: 'abc', stables: '7' }).body, cs0 = mdH.heatmap({ stables: '0' }).body;
   const apiH = await mdH.apiResource('heatmap', { limit: '20' }, {});
@@ -1821,7 +1855,8 @@ try {
   const mdW = MD.createMarketData({ db: dbW, now: () => T_H, outboundTake: take, urls: Object.assign({}, URLS, { cg: V + '/hcg', coinlore: V + '/hlore' }), bgWaitMs: 1000, askWaitMs: 1000, sleep: async (ms) => { wSleeps.push(ms); } }); mdW.migrate();
   mdW.start({ jobs: ['chains'], staggerMs: 1000 }); const ww = log.length; const rW = await mdW.runJob('heatmap'); mdW.stop();
   check('  ...it never starves the chains run: with that run due within 3 minutes the map waits for it (24 polls of 15 s) and, the run still due, reads nothing from CoinGecko this time and says why',
-    !rW.ok && /the chains run, which reads CoinGecko first, was under way or due for six minutes/.test(rW.note) && wSleeps.filter((x) => x === 15000).length === 24 && !hmAsk(ww).some((l) => /\/hcg\//.test(l)), rW.note);
+    !rW.ok && /the chains run, which reads CoinGecko first, was under way or due for six minutes/.test(rW.note) && wSleeps.filter((x) => x === 15000).length === 24 && !hmAsk(ww).some((l) => /\/hcg\//.test(l))
+    && !hmAsk(ww).some((l) => /\/hlore\//.test(l)) && /CoinLore not read/.test(rW.note), rW.note);
   dbW.close();
   /* the two-minute slot in a timetable: the chains run, the daily references and the map on one clock for four hours, each started when the
      timetable says (the map 10 minutes after its last run ended, the chains run every 30, the references when their day is due), the vendors
