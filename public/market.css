@@ -393,7 +393,7 @@ section.mkt-map { padding: 0.9rem; }   /* styles.css pads every <section> like a
 .mkt-map-tip dt { color: var(--text-mute); }
 .mkt-map-tip dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
 .mkt-map-tip .mkt-s { display: block; }
-.mkt-map-card { margin-top: 0.9rem; }
+.mkt-map-card { margin-top: 0.9rem; scroll-margin-top: calc(var(--nav-h, 58px) + 0.5rem); scroll-margin-bottom: calc(var(--fab-clear, 5.5rem) + 0.25rem); }   /* brought into view clear of the sticky nav and the buttons pinned to the screen's foot */
 .mkt-map-card[hidden] { display: none; }
 .mkt-map-card .mkt-card { margin: 0; background: var(--ink-1); }
 .mkt-map-card .mkt-stats { grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5em), 1fr)); }   /* two across on a phone */
