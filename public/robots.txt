@@ -21,9 +21,11 @@ Allow: /api/calls
 Allow: /api/communities
 Allow: /api/competitions
 Allow: /api/scan/recent$
-# Market Data (/market): the chain list, Robinhood Chain in full and its token list, and the Top tokens tab's list of
-# every chain's tokens, at their default addresses only. A search, another chain alone, a sort, a token, a scan, a
-# custom window and the logo proxy stay below the Disallow.
+# Market Data (/market): the chain list, Robinhood Chain in full and its token list, the Top tokens tab's list of
+# every chain's tokens, and the bubble map of the whole crypto market, at their default addresses only. A search,
+# another chain alone, a sort, a token, a scan, a custom window, the map cut another way and the logo proxy stay
+# below the Disallow.
+Allow: /api/market/heatmap$
 Allow: /api/market/chains$
 Allow: /api/market/chain?key=robinhood$
 Allow: /api/market/tokens?chain=robinhood$

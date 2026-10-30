@@ -307,6 +307,120 @@ body:has(#mkt-tchain-p:not([hidden])) > .nav { z-index: 300; }
 .mkt-filters-b { padding: 0.2rem 0 0.1rem; }
 .mkt-rwa .mkt-table code, .mkt-kv code { overflow-wrap: anywhere; }
 
+/* ---------- the whole crypto market, last 24 h: the bubble map (market.js drawMap) ----------
+   One SVG at the box's own pixel size (so its labels keep the text floor): a big circle packed with a bubble per coin, its area
+   the coin's market cap, its fill the coin's 24 h change in the legend's steps. The steps are mixes of the site's own tokens —
+   deeper for a bigger move, as in the owner's picture — and market.js gives each step's labels the ink that reads best on it
+   (the higher contrast of --text and --ink-1, measured on the fill as drawn). A coin with no 24 h change is hatched and dashed,
+   never a colour of its own. The map is square: the section's width on a phone, at most min(80vh, 760px) on a desktop. */
+.mkt-map {
+  --hm-up10: color-mix(in srgb, var(--green-dark) 50%, var(--ink));
+  --hm-up5: color-mix(in srgb, var(--green-dark) 72%, var(--ink));
+  --hm-up2: var(--green-dark);
+  --hm-up0: var(--green);
+  --hm-flat: var(--text-mute);
+  --hm-dn0: color-mix(in srgb, var(--red) 70%, var(--text));
+  --hm-dn2: var(--red);
+  --hm-dn5: color-mix(in srgb, var(--red) 62%, var(--ink));
+  --hm-dn10: color-mix(in srgb, var(--red) 40%, var(--ink));
+  --hm-none: var(--ink-3);
+  --hm-edge: color-mix(in srgb, var(--text) 42%, transparent);
+  margin: 0 0 1.4rem; padding: 0.9rem; border-radius: 18px; background: var(--ink-2); border: 1px solid var(--ink-4); container: mktm / inline-size;
+}
+@supports not (color: color-mix(in srgb, red 50%, transparent)) {
+  .mkt-map { --hm-up10: #415002; --hm-up5: #5b6f01; --hm-dn0: #fb8a86; --hm-dn5: #a03b3b; --hm-dn10: #692828; --hm-edge: rgba(242,246,236,0.42); }
+}
+section.mkt-map { padding: 0.9rem; }   /* styles.css pads every <section> like a home-page band */
+.mkt-map-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
+.mkt-map-h { margin: 0; font-size: max(var(--text-floor), 1.25rem); line-height: 1.25; min-width: 0; overflow-wrap: anywhere; }
+.mkt-map-tog { flex: 0 0 auto; }
+.mkt-map-body { margin-top: 0.7rem; }
+.mkt-map-body[hidden] { display: none; }
+.mkt-map-lede { margin: 0 0 0.7rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); line-height: 1.45; max-width: 80ch; }
+.mkt-map-ctl { display: flex; flex-wrap: wrap; gap: 0 1.4rem; }
+.mkt-map-cap { margin: 0.1rem 0 0.8rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.86rem); line-height: 1.45; overflow-wrap: anywhere; }
+.mkt-map-cap b { color: var(--text); }
+.mkt-map-stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.8rem; align-items: start; }
+/* a phone: the map runs to the card's own edges (a circle leaves its corners empty), so it is as wide as the screen allows */
+@container mktm (max-width: 520px) { .mkt-map-fig { margin-inline: -0.85rem; } }
+.mkt-map-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; }
+.mkt-map-legend > li { display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0; font-size: max(var(--text-floor), 0.85rem); line-height: 1.3; font-variant-numeric: tabular-nums; }
+.mkt-map-n { color: var(--text-mute); }
+.mkt-map-sw { flex: 0 0 auto; width: 1.05em; height: 1.05em; border-radius: 4px; border: 1px solid var(--hm-edge); }
+.mkt-map-sw.mkt-b-up10 { background: var(--hm-up10); } .mkt-map-sw.mkt-b-up5 { background: var(--hm-up5); } .mkt-map-sw.mkt-b-up2 { background: var(--hm-up2); }
+.mkt-map-sw.mkt-b-up0 { background: var(--hm-up0); } .mkt-map-sw.mkt-b-flat { background: var(--hm-flat); } .mkt-map-sw.mkt-b-dn0 { background: var(--hm-dn0); }
+.mkt-map-sw.mkt-b-dn2 { background: var(--hm-dn2); } .mkt-map-sw.mkt-b-dn5 { background: var(--hm-dn5); } .mkt-map-sw.mkt-b-dn10 { background: var(--hm-dn10); }
+.mkt-map-sw.mkt-b-none { background: repeating-linear-gradient(135deg, var(--ink-5) 0 2px, var(--hm-none) 2px 5px); border-style: dashed; border-color: var(--text-dim); }
+.mkt-map-fig { position: relative; min-width: 0; display: flex; justify-content: center; }
+.mkt-map-fig > .mkt-loading, .mkt-map-fig > .mkt-err-t { align-self: center; }
+.mkt-map-svg { display: block; max-width: 100%; height: auto; touch-action: manipulation; }
+.mkt-map-svg.is-new { opacity: 0; }
+.mkt-map-svg.is-in { opacity: 1; transition: opacity 0.35s ease; }
+.mkt-map-ring { fill: none; stroke: var(--hm-edge); stroke-width: 1.5; }
+.mkt-bub { cursor: pointer; }
+.mkt-bub > circle { stroke: var(--hm-edge); stroke-width: 1; }
+.mkt-bub:hover > circle { stroke: var(--text); stroke-width: 2; }
+.mkt-bub.is-on > circle { stroke: var(--focus); stroke-width: 3; }
+.mkt-bub.mkt-b-up10 > circle { fill: var(--hm-up10); } .mkt-bub.mkt-b-up5 > circle { fill: var(--hm-up5); } .mkt-bub.mkt-b-up2 > circle { fill: var(--hm-up2); }
+.mkt-bub.mkt-b-up0 > circle { fill: var(--hm-up0); } .mkt-bub.mkt-b-flat > circle { fill: var(--hm-flat); } .mkt-bub.mkt-b-dn0 > circle { fill: var(--hm-dn0); }
+.mkt-bub.mkt-b-dn2 > circle { fill: var(--hm-dn2); } .mkt-bub.mkt-b-dn5 > circle { fill: var(--hm-dn5); } .mkt-bub.mkt-b-dn10 > circle { fill: var(--hm-dn10); }
+.mkt-bub.mkt-b-none > circle { fill: url(#mkt-hatch); stroke: var(--text-dim); stroke-dasharray: 4 3; }
+.mkt-hatch-bg { fill: var(--hm-none); }
+.mkt-hatch-ln { stroke: var(--ink-5); stroke-width: 2; }
+.mkt-bub-t { font-family: 'Rubik', system-ui, -apple-system, sans-serif; text-anchor: middle; dominant-baseline: central; pointer-events: none; font-variant-numeric: tabular-nums; }
+/* the floor in pixels, for market.js to measure (a label is drawn only at or above it) */
+.mkt-map-floor { position: absolute; visibility: hidden; font-size: max(var(--text-floor), 1px); }
+/* the figures of the bubble under the pointer: beside it, inside the map's box, never over the pointer */
+.mkt-map-tip {
+  position: absolute; z-index: 5; max-width: min(19rem, 92%); padding: 0.55rem 0.75rem; border-radius: 12px; pointer-events: none;
+  background: var(--ink-1); border: 1px solid var(--ink-5); box-shadow: var(--shadow-2); font-size: max(var(--text-floor), 0.82rem); line-height: 1.4; color: var(--text);
+}
+.mkt-map-tip[hidden] { display: none; }
+.mkt-map-tip b { font-weight: 800; }
+.mkt-map-tip dl { margin: 0.25rem 0 0.3rem; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.05rem 0.6rem; }
+.mkt-map-tip dt { color: var(--text-mute); }
+.mkt-map-tip dd { margin: 0; overflow-wrap: anywhere; font-variant-numeric: tabular-nums; }
+.mkt-map-tip .mkt-s { display: block; }
+.mkt-map-card { margin-top: 0.9rem; }
+.mkt-map-card[hidden] { display: none; }
+.mkt-map-card .mkt-card { margin: 0; background: var(--ink-1); }
+.mkt-map-card .mkt-stats { grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5em), 1fr)); }   /* two across on a phone */
+.mkt-map-card .mkt-h3:focus { outline: none; }
+.mkt-map-card .mkt-h3:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+.mkt-map-list { margin-top: 0.9rem; }
+.mkt-map-pick {
+  display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.45rem; min-height: 44px; padding: 0.2rem 0; border: 0; background: none; color: var(--green-bright);
+  font: inherit; font-size: max(var(--text-floor), 1em); font-weight: 800; text-align: left; cursor: pointer; overflow-wrap: anywhere;
+}
+.mkt-map-pick small { color: var(--text-dim); font-weight: 600; font-size: max(var(--text-floor), 0.85em); }
+.mkt-map-pick:hover { text-decoration: underline; }
+.mkt-map-pick:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.mkt-map-t tr.is-on { background: var(--g-wash); }
+.mkt-map-foot { margin-top: 0.8rem; }
+@container mktm (max-width: 900px) {
+  .mkt-map .mkt-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .mkt-map .mkt-table, .mkt-map .mkt-table tbody, .mkt-map .mkt-table tr, .mkt-map .mkt-table th, .mkt-map .mkt-table td { display: block; width: 100%; box-sizing: border-box; }
+  .mkt-map .mkt-table tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 1.1rem; margin: 0 0 0.5rem; padding: 0.45rem 0.7rem; border: 1px solid var(--ink-4); border-radius: 12px; }
+  .mkt-map .mkt-table th, .mkt-map .mkt-table td { width: auto; max-width: 100%; border: 0; padding: 0.1rem 0; }
+  .mkt-map .mkt-table tbody th { flex: 1 1 60%; }
+  .mkt-map .mkt-table td::before { content: attr(data-l) ': '; font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-mute); font-size: max(var(--text-floor), 0.72rem); }
+}
+/* a wide box: the legend beside the map, as in the owner's picture (top left of the circle), the two centred together; the map as
+   large as the screen allows (market.js: at most 760px, and 80% of the screen's height) */
+@container mktm (min-width: 760px) {
+  .mkt-map-stage { grid-template-columns: max-content minmax(0, 760px); justify-content: center; column-gap: 1.6rem; }
+  .mkt-map-legend { flex-direction: column; flex-wrap: nowrap; }
+  .mkt-map-key { padding-top: 0.4rem; }
+}
+@media (prefers-reduced-motion: reduce) { .mkt-map-svg.is-in { transition: none; } }
+html.motion-off .mkt-map-svg.is-in { transition: none; }
+/* forced colours: the map's colours ARE its reading (the legend names them), so the bubbles and swatches keep them, outlined in the
+   system's colour; the labels and the list carry every figure in words as well */
+@media (forced-colors: active) {
+  .mkt-map-svg, .mkt-map-sw { forced-color-adjust: none; }
+  .mkt-bub > circle, .mkt-map-ring, .mkt-map-sw { stroke: CanvasText; border-color: CanvasText; }
+}
+
 /* ---------- 1280px and up on a screen tall enough: the side column stays in view while the main view scrolls (its own
    list scrolls inside it when it is longer than the screen; every row is a button, so the keyboard reaches all of it) ---------- */
 @media (min-width: 1280px) and (min-height: 700px) {

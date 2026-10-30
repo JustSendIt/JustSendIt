@@ -65,3 +65,13 @@ and fields trimmed to what the code reads, never a value changed:
     "XinFin Network" as XDCE (start=0) — as its walk gave them, keyed by page.
   CoinPaprika's answers were measured for the comparison too, and are NOT here: its free plan is for personal use only, and
   passing its data on needs its Enterprise licence.
+
+Market map fixtures (tests/marketdata.mjs, the market-map section; owner, 2026-10-30: the bubble map of the whole crypto
+market). Read 2026-10-30 ~00:30 UTC with the honest User-Agent; rows were dropped, never invented:
+  heatmap-cg-top100.json — CoinGecko keyless /coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1
+    &price_change_percentage=24h, the whole answer (100 coins; BTC $76,894, −5.27%; TRX +8.48%; HYPE +10.38%; BUIDL exactly 0%);
+  heatmap-cg-global.json — CoinGecko /global, the whole answer (total market cap $2.593T, updated_at 00:29:50 UTC);
+  heatmap-cg-stables.json — CoinGecko /coins/markets?vs_currency=usd&category=stablecoins&order=market_cap_desc&per_page=250,
+    cut to its first 25 rows of 250: the 17 stablecoins among the top 100 (its first 17) and the 8 after them;
+  heatmap-lore-top100.json — CoinLore /tickers/?start=0&limit=100, the whole answer (its first page has no LTC, LEO or WBT,
+    and BNB as "Binance Coin": the check says so for each).

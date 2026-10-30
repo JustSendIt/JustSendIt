@@ -28,6 +28,7 @@ const RW = require(path.join(ROOT, 'lib', 'rwa.js'));
 const { AbiCoder, id: keccakId } = require(path.join(ROOT, 'node_modules', 'ethers'));
 const ABI = AbiCoder.defaultAbiCoder();
 const CM = require(path.join(ROOT, 'lib', 'chainmcap.js'));
+const MM = require(path.join(ROOT, 'lib', 'marketmap.js'));
 
 const SRC = fs.readFileSync(SERVER_JS, 'utf8');
 const LIB = fs.readFileSync(path.join(ROOT, 'lib', 'marketdata.js'), 'utf8');
@@ -35,6 +36,10 @@ const RUNJS = fs.readFileSync(path.join(ROOT, 'tests', 'run.mjs'), 'utf8');
 const DOCS = fs.readFileSync(path.join(ROOT, 'public', 'data.html'), 'utf8');
 const FIX = (f) => JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'marketdata', f), 'utf8'));
 const MCFIX = (f) => JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtures', 'multichain', f), 'utf8'));
+// the bubble map's samples: CoinGecko's and CoinLore's answers of 2026-10-30 ~00:30 UTC (tests/fixtures/marketdata/README.txt)
+const HMX = { top: FIX('heatmap-cg-top100.json'), global: FIX('heatmap-cg-global.json'), stables: FIX('heatmap-cg-stables.json'), lore: FIX('heatmap-lore-top100.json') };
+// what the fake's map routes answer: the samples, or a list changed for a case (top), or a 503 (down)
+const hmVendor = { top: null, down: false };
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
 // MARKET_DUMP_DIR=<dir>: also write the answers this suite read, as samples of the API's real shapes (for the page and the docs)
@@ -122,7 +127,7 @@ const vendor = http.createServer((req, res) => {
   req.on('end', () => {
     const send = (code, o, ct) => { res.writeHead(code, { 'Content-Type': ct || 'application/json' }); res.end(Buffer.isBuffer(o) || typeof o === 'string' ? o : JSON.stringify(o)); };
     const seg = p.split('/')[1];
-    if (['llama', 'coins', 'stables', 'l2beat', 'gtp', 'gt', 'ds', 'cg', 'eth', 'img', 'rhj', 'chainlink', 'lore'].includes(seg)) uas.add(String(req.headers['user-agent']));
+    if (['llama', 'coins', 'stables', 'l2beat', 'gtp', 'gt', 'ds', 'cg', 'eth', 'img', 'rhj', 'chainlink', 'lore', 'hcg', 'hlore'].includes(seg)) uas.add(String(req.headers['user-agent']));
     log.push(req.method + ' ' + p + u.search);
     if (seg === 'lore') loreAt.push([Date.now(), p + u.search]);
     hit(seg);
@@ -153,6 +158,10 @@ const vendor = http.createServer((req, res) => {
     // CoinLore: its walk's pages (start=N), and a /ticker/ read answered from the same rows
     if (p === '/lore/tickers/') { hit('lore-walk'); const st = Number(u.searchParams.get('start') || 0); if (vendorFail.lore || (vendorFail.loreFrom != null && st >= vendorFail.loreFrom)) return send(429, { error: 'slow down' }); return send(200, { data: MC.walk.pages[st] || [], info: MC.walk.info }); }
     if (p === '/lore/ticker/') { hit('lore-ticker'); if (vendorFail.lore) return send(429, { error: 'slow down' }); const want = String(u.searchParams.get('id') || '').split(','); const byId = new Map(loreRows.map((x) => [String(x.id), x])); return send(200, want.map((i) => byId.get(i)).filter(Boolean)); }
+    // the bubble map's CoinGecko (its top 100, its stablecoins category, /global) and CoinLore (its first 100)
+    if (p === '/hcg/coins/markets') { const stab = u.searchParams.get('category') === 'stablecoins'; hit(stab ? 'hcg-stables' : 'hcg-top'); if (hmVendor.down) return send(503, { error: 'down' }); return send(200, stab ? HMX.stables : hmVendor.top || HMX.top); }
+    if (p === '/hcg/global') { hit('hcg-global'); return hmVendor.down ? send(503, { error: 'down' }) : send(200, HMX.global); }
+    if (p === '/hlore/tickers/') { hit('hlore'); return send(200, HMX.lore); }
     // L2BEAT, growthepie
     if (p === '/l2beat/scaling/summary') return send(200, F.l2beat);
     if (p.startsWith('/l2beat/scaling/activity/')) { hit('l2beat-activity'); return p.endsWith('/robinhood') ? send(200, FIX('l2beat-activity-robinhood.json')) : send(404, { error: 'no' }); }
@@ -602,7 +611,7 @@ try {
   check('the Send API resources page by before / limit, filter by chain / address / metric, and give raw logo URLs (programs, not browsers)', r1.body.data.length === 3 && r2.body.data[0].id < r1.body.data[2].id && typeof r1.body.data[0].src === 'object'
     && r3.body.data.length === 5 && r3.body.data.every((x) => x.address === A) && r4.body.data.length === 5 && r4.body.data[0].day === '2026-10-01' && r5.body.data.length >= 40 && r6 === null && r7.status === 400
     && /^https:\/\/icons\.llamao\.fi\//.test(r5.body.data.find((x) => x.key === 'robinhood').logo || ''), brief({ r1: r1.body.next, r3: r3.body.data.length, r4: r4.body.data.length }));
-  check('  ...every resource the contract names is served', ['chains', 'chain', 'chain-history', 'chain-snapshots', 'tokens', 'token', 'pools', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'rwa', 'rwa-token'].every((n) => md.RESOURCES.includes(n)));
+  check('  ...every resource the contract names is served', ['chains', 'chain', 'chain-history', 'chain-snapshots', 'tokens', 'token', 'pools', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'rwa', 'rwa-token', 'heatmap'].every((n) => md.RESOURCES.includes(n)));
 
   // the budgets
   const gtTakes = meter.log.filter(([k]) => k === 'market:geckoterminal' || k === 'market:geckoterminal-asked').length, gtHits = Object.entries(hits).filter(([k]) => k.startsWith('gt-')).reduce((a, [, v]) => a + v, 0);
@@ -1731,6 +1740,143 @@ try {
   const gtAvg = 10 / 10 + 24 / 60 + 8 / 15 + 7 / 30 + 36 / 360;   // the RWAs' own pools: 12 a round, each tried at most 3 times when it fails
   check('  ...the collectors\' GeckoTerminal spend on average stays under their share of 3 a minute with the RWA job\'s reads (' + gtAvg.toFixed(2) + ' a minute), and the server\'s comment says so', gtAvg < rpmOf('market:geckoterminal') && gtAvg > 2.2 && /about 2\.3 a minute on average with the RWA job's reads/.test(SRC)
     && /const RWA_CODE_MAX = 40, RWA_CODE_REFS = 3, RWA_GT_TRIES = 3;/.test(LIB));
+
+  /* ── the bubble map of the whole crypto market (owner, 2026-10-30: "a view like this that shows a 24 quick visual on the top tokens
+     across the whole market"; lib/marketmap.js): its parsers on CoinGecko's and CoinLore's answers of that night, its job (each part read
+     when due, in CoinGecko's two-minute slot, kept last-good), its answer and its resource, and the slot in a timetable with the chains
+     run and the daily references ── */
+  {   // its own names (pl, pm, … are taken above)
+  const T_H = Date.parse('2026-10-30T00:30:00Z');
+  const pm = MM.parseMarkets(HMX.top, T_H), pg = MM.parseGlobal(HMX.global), ps = MM.parseStables(HMX.stables), pl = MM.parseLore(HMX.lore, T_H);
+  const zw = JSON.parse(JSON.stringify(HMX.top)); zw[0].name = '\u200bBit\u200bcoin'; zw[1].symbol = 'eth';
+  check('market map: the parsers on the measured answers — CoinGecko\'s 100 largest in its own order (its rank, the symbol in capitals, the name with zero-width characters gone, price, market cap, 24 h change, 24 h volume), its total ($2.593T, updated 00:29:50 UTC), its 25 stablecoin ids kept here, CoinLore\'s 100 (of the 14,993 it lists); an answer that is not a list is not read',
+    pm.ok && pm.list.length === 100 && pm.list[0].id === 'bitcoin' && pm.list[0].rank === 1 && pm.list[0].symbol === 'BTC' && pm.list[0].price === 76894 && pm.list[0].mcap === 1545487692438 && pm.list[0].change24h === -5.27397 && pm.list[0].volume24h === 43357519576
+    && pm.list.every((c, i) => c.rank === i + 1) && MM.parseMarkets(zw, T_H).list[0].name === 'Bitcoin' && MM.parseMarkets(zw, T_H).list[1].symbol === 'ETH' && Math.round(pg.total) === 2593220316058 && pg.updatedAt === Date.parse('2026-10-30T00:29:50Z')
+    && ps.ok && ps.ids.length === 25 && ps.ids.includes('tether') && pl.ok && pl.list.length === 100 && pl.listed === 14993
+    && !MM.parseMarkets({ error: 'x' }).ok && !MM.parseMarkets([]).ok && !MM.parseGlobal({ data: {} }).ok && !MM.parseStables(null).ok && !MM.parseLore({ data: null }).ok, brief({ p0: pm.list[0], total: pg.total }));
+  // the job, against the fake's /hcg and /hlore, on a clock its waits move
+  const dbH = freshDb('h'); let clockH = T_H; const hmTake = [], hmSleeps = [];
+  const mdH = MD.createMarketData({ db: dbH, now: () => clockH, outboundTake: (k, w) => { hmTake.push([k, clockH]); return take(k, w); }, urls: Object.assign({}, URLS, { cg: V + '/hcg', coinlore: V + '/hlore' }), bgWaitMs: 1000, askWaitMs: 1000,
+    sleep: async (ms) => { hmSleeps.push(ms); clockH += ms; } }); mdH.migrate();
+  const hmAsk = (from) => log.slice(from).filter((l) => /^GET \/(hcg|hlore)\//.test(l));
+  const vh = '127.0.0.1:' + vendor.address().port;
+  // a chains run read CoinGecko 30 s ago: the map's first read waits out the rest of its two minutes, and each part after it waits its own
+  mdH._test.stSet('cg_last', { why: 'chains' }, clockH - 30e3);
+  const w0 = log.length, t0 = hmTake.length, rH1 = await mdH.runJob('heatmap');
+  const asked1 = hmAsk(w0), at1 = hmTake.slice(t0).filter(([k]) => k === vh).map(([, t]) => t);
+  const A1 = mdH.heatmap({}).body, st1 = mdH._test.stGet('heatmap').v;
+  const cgAt1 = asked1.map((l, i) => [l, at1[i]]).filter(([l]) => /\/hcg\//.test(l)).map(([, t]) => t);
+  check('market map: its first run reads CoinGecko\'s top 100, its total and its stablecoins — each in its own two-minute slot (the first after the chains run\'s, 90 s later), never two within two minutes — then CoinLore\'s first 100; every part stored with its read time, the run ok and its note in counts',
+    rH1.ok && asked1.length === 4 && /^GET \/hcg\/coins\/markets\?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&price_change_percentage=24h$/.test(asked1[0]) && asked1[1] === 'GET /hcg/global'
+    && /^GET \/hcg\/coins\/markets\?vs_currency=usd&category=stablecoins&order=market_cap_desc&per_page=250$/.test(asked1[2]) && asked1[3] === 'GET /hlore/tickers/?start=0&limit=100'
+    && cgAt1.length === 3 && cgAt1[0] === T_H + 90e3 && cgAt1.every((t, i) => !i || t - cgAt1[i - 1] >= 120e3) && JSON.stringify(hmSleeps.slice(0, 3)) === JSON.stringify([90e3, 120e3, 120e3])
+    && st1.coins.readAt === T_H + 90e3 && st1.coins.list.length === 100 && st1.global.total > 2.5e12 && st1.stables.ids.length === 25 && st1.lore.list.length === 100 && /^read: top 100, total market cap, stablecoins, CoinLore; 100 coins, 11 up, 88 down; checked against CoinLore: \d+ agree/.test(rH1.note),
+    brief({ asked1, cgAt1, sleeps: hmSleeps.slice(0, 4), note: rH1.note }));
+  const R1 = A1.rows, btcH = R1[0], buidl = R1.find((r) => r.id === 'blackrock-usd-institutional-digital-liquidity-fund');
+  const direct = pm.list.map((c) => { const cg = Object.assign({}, c, { readAt: T_H }), m = CM.matchCoin(cg, CM.bySymbol(pl.list)); return CM.crossCheck({ sym: c.symbol, cg, lore: m.coin, loreWhy: m.why, now: T_H }).check.status; });
+  const MMSRC = fs.readFileSync(path.join(ROOT, 'lib', 'marketmap.js'), 'utf8');
+  check('  ...its answer: the 100 in CoinGecko\'s order, each dominance its market cap ÷ CoinGecko\'s total (Bitcoin 59.6%, the total\'s read time on it), 17 stablecoins by CoinGecko\'s category, BUIDL\'s 0% a figure of 0 (the legend\'s "0%"), each market cap\'s check lib/chainmcap.js\'s own — matchCoin and crossCheck reused, not forked: the statuses its functions give on the same answers',
+    R1.length === 100 && btcH.id === 'bitcoin' && Math.abs(btcH.dominance.v - (btcH.mcap.v / A1.total.v) * 100) < 1e-9 && Math.abs(btcH.dominance.v - 59.597) < 0.01 && btcH.dominance.at === st1.global.readAt && /^share of CoinGecko's total, \$2\.59T$/.test(btcH.dominance.label)
+    && R1.every((r) => r.dominance.v == null || Math.abs(r.dominance.v - (r.mcap.v / A1.total.v) * 100) < 1e-9 * Math.max(1, r.dominance.v)) && R1.filter((r) => r.stable === true).length === 17 && R1.find((r) => r.id === 'tether').stable === true && btcH.stable === false
+    && buidl.change24h.v === 0 && !('why' in buidl.change24h) && MM.bucketOf(buidl.change24h.v) === 'flat' && JSON.stringify(R1.map((r) => r.check.status)) === JSON.stringify(direct)
+    && /only under another name \(“Binance Coin”/.test(R1.find((r) => r.id === 'binancecoin').check.notes.join(' ')) && R1.find((r) => r.id === 'hyperliquid').check.status === 'differs'
+    && /CM\.matchCoin\(/.test(MMSRC) && /CM\.crossCheck\(/.test(MMSRC) && !/0\.1\b|function (matchCoin|crossCheck|sameName|normName)/.test(MMSRC) && A1.legend.length === 10 && A1.counts.drawn === 100 && A1.reads.coins.ok && A1.reads.coinlore.ok,
+    brief({ btc: btcH.dominance, statuses: R1.map((r) => r.check.status).join('').slice(0, 40) }));
+  // the next run, 10 minutes on: the top 100 and CoinLore only (the total is due every 30 minutes, the stablecoins every 6 hours)
+  clockH = st1.lore.readAt + 10 * 60e3; const w2 = log.length; const rH2 = await mdH.runJob('heatmap'); const asked2 = hmAsk(w2);
+  clockH += 21 * 60e3; const w3 = log.length; await mdH.runJob('heatmap'); const asked3 = hmAsk(w3);
+  check('  ...each part on its own cadence: ten minutes on, the top 100 and CoinLore only; half an hour on, the total again; the stablecoins not for six hours',
+    rH2.ok && asked2.length === 2 && /order=market_cap_desc/.test(asked2[0]) && /\/hlore\//.test(asked2[1]) && asked3.length === 3 && asked3[1] === 'GET /hcg/global' && !asked3.some((l) => /category=stablecoins/.test(l)), brief({ asked2, asked3 }));
+  // a coin with no 24 h change, and coins with a market cap of 0: CoinLore's figure where it matched, else none (listed, not drawn)
+  const top2 = JSON.parse(JSON.stringify(HMX.top)), hz = top2.findIndex((c) => c.id === 'hyperliquid'), tz = top2.findIndex((c) => c.id === 'tron'), fz = top2.findIndex((c) => c.id === 'figure-heloc');
+  delete top2[hz].price_change_percentage_24h; top2[tz].market_cap = 0; top2[fz].market_cap = 0;
+  hmVendor.top = top2; clockH += 10 * 60e3; await mdH.runJob('heatmap'); hmVendor.top = null;
+  clockH += 20e3; const A2 = mdH.heatmap({}).body, hyp = A2.rows.find((r) => r.id === 'hyperliquid'), trx = A2.rows.find((r) => r.id === 'tron'), figr = A2.rows.find((r) => r.id === 'figure-heloc');
+  check('  ...a coin CoinGecko gives no 24 h change for is "no change given" — never 0% — and the legend\'s last step; a market cap of 0 is not $0: CoinLore\'s figure where its coin matched (said so, no dominance worked out from it), else none with why — listed, not drawn, and the notes say how many',
+    hyp.change24h.v === null && /^no change given/.test(hyp.change24h.why) && MM.bucketOf(hyp.change24h.v) === 'none' && A2.counts.none === 1
+    && trx.mcap.src === 'coinlore' && trx.mcap.v > 0 && /CoinLore's market cap — CoinGecko gives none/.test(trx.mcap.label) && trx.dominance.v === null && /not CoinGecko's own/.test(trx.dominance.why)
+    && figr.mcap.v === null && /CoinGecko gives no market cap for \$FIGR_HELOC/.test(figr.mcap.why) && figr.dominance.v === null && A2.counts.drawn === 99 && A2.notes.some((n) => /^1 coin has no market cap: listed, not drawn/.test(n)), brief({ hyp: hyp.change24h, trx: trx.mcap, figr: figr.mcap }));
+  // keep-last-good: CoinGecko down — the last good coins stay, said so, with when it failed and why
+  hmVendor.down = true; clockH += 10 * 60e3; const rH4 = await mdH.runJob('heatmap'); hmVendor.down = false;
+  clockH += 20e3; const A4 = mdH.heatmap({}).body, st4 = mdH._test.stGet('heatmap').v;
+  check('  ...keep-last-good: when CoinGecko cannot be read the run fails and says why, the last good top 100 stays in place (failAt / failWhy beside it) and the answer says when it failed and that the last good read is used',
+    !rH4.ok && /not read: top 100 \(upstream 503\)/.test(rH4.note) && A4.rows.length === 100 && st4.coins.list.length === 100 && st4.coins.failAt > st4.coins.readAt && st4.coins.failWhy === 'upstream 503'
+    && A4.reads.coins.ok === false && /^CoinGecko's top 100 coins could not be read at 2026-10-30 \d\d:\d\d UTC \(upstream 503\) — the last good read, from 2026-10-30 \d\d:\d\d UTC, is used$/.test(A4.reads.coins.why), brief({ note: rH4.note, why: A4.reads.coins.why }));
+  // the stored reads, older than they may be compared: CoinLore 20 minutes off, the total 3 hours old; the stablecoins never read
+  const stOld = JSON.parse(JSON.stringify(st1)); stOld.lore.readAt = stOld.coins.readAt - 20 * 60e3; stOld.global.readAt = stOld.coins.readAt - 3 * 3600e3; delete stOld.stables;
+  const noneF = (why, src, at, extra) => Object.assign({ v: null, src: src || 'site', at: at || null, why }, extra || {});
+  const BO = MM.buildMap(stOld, { fig: MD.fig, none: noneF });
+  check('  ...a CoinLore read more than 15 minutes from CoinGecko\'s is not compared (every check "single", saying why); a total more than 2 hours older than the coins is not divided into them (dominance null, saying when it was read); before the stablecoins category is read, stable is null — never false',
+    BO.rows.every((r) => r.check.status === 'single' && r.check.notes.some((n) => /more than 15 minutes from CoinGecko's/.test(n))) && BO.rows.every((r) => r.dominance.v === null && /more than 2 hours before these coins/.test(r.dominance.why)) && BO.rows.every((r) => r.stable === null));
+  // the route's cuts and the Send API's resource
+  const c50 = mdH.heatmap({ limit: '50', stables: '0' }).body, c5 = mdH.heatmap({ limit: '5' }).body, cx = mdH.heatmap({ limit: 'abc', stables: '7' }).body, cs0 = mdH.heatmap({ stables: '0' }).body;
+  const apiH = await mdH.apiResource('heatmap', { limit: '20' }, {});
+  check('  ...limit is how many of the largest coins (20 to 100; anything else 100), stables=0 leaves out the stablecoins among them (the top 50 without theirs is 40 rows); the Send API\'s heatmap resource is the same answer with its rows as data',
+    c50.rows.length === 40 && c50.limit === 50 && c50.stables === false && c50.rows.every((r) => r.stable === false) && c50.counts.drawn === 39 /* Figure's HELOC, its market cap 0 in the run above */ && c5.rows.length === 20 && c5.limit === 20 && cx.rows.length === 100 && cx.stables === true && cs0.rows.length === 83
+    && apiH.status === 200 && apiH.body.data.length === 20 && apiH.body.rows === undefined && apiH.body.legend.length === 10 && apiH.body.total.src === 'coingecko' && mdH.RESOURCES.includes('heatmap'), brief({ c50: c50.rows.length, c5: c5.rows.length, cs0: cs0.rows.length }));
+  dump('heatmap', mdH.heatmap({}).body);
+  dbH.close();
+  // the chains run due within three minutes: the map waits for it (a poll every 15 s, six minutes at most), then reads on its next run
+  const dbW = freshDb('w'); const wSleeps = [];
+  const mdW = MD.createMarketData({ db: dbW, now: () => T_H, outboundTake: take, urls: Object.assign({}, URLS, { cg: V + '/hcg', coinlore: V + '/hlore' }), bgWaitMs: 1000, askWaitMs: 1000, sleep: async (ms) => { wSleeps.push(ms); } }); mdW.migrate();
+  mdW.start({ jobs: ['chains'], staggerMs: 1000 }); const ww = log.length; const rW = await mdW.runJob('heatmap'); mdW.stop();
+  check('  ...it never starves the chains run: with that run due within 3 minutes the map waits for it (24 polls of 15 s) and, the run still due, reads nothing from CoinGecko this time and says why',
+    !rW.ok && /the chains run, which reads CoinGecko first, was under way or due for six minutes/.test(rW.note) && wSleeps.filter((x) => x === 15000).length === 24 && !hmAsk(ww).some((l) => /\/hcg\//.test(l)), rW.note);
+  dbW.close();
+  /* the two-minute slot in a timetable: the chains run, the daily references and the map on one clock for four hours, each started when the
+     timetable says (the map 10 minutes after its last run ended, the chains run every 30, the references when their day is due), the vendors
+     answering at once and every wait a timer on that clock — no two CoinGecko reads within two minutes, ever, and the chains run reading
+     CoinGecko itself on every run (never the relay for want of the slot) */
+  {
+    let clk = NOW_M; const timers = [], cgAt = [], ran = { chains: 0, heatmap: 0, mcapRefs: 0 };
+    const sleepT = (ms) => new Promise((ok) => timers.push({ at: clk + ms, ok }));
+    const okA = (data) => ({ ok: true, status: 200, data, reason: null });
+    const fetchT = async (url) => {
+      const u = new URL(url), p = u.pathname, q = u.searchParams;
+      if (p.startsWith('/cg/')) cgAt.push([clk, p === '/cg/coins/markets' ? (q.get('ids') ? 'chains' : q.get('category') ? 'stables' : 'top') : p.slice(4)]);
+      if (p === '/llama/v2/chains') return okA(MC.chains);
+      if (p === '/cg/coins/markets') { if (q.get('ids')) { const want = new Set(q.get('ids').split(',')); return okA(MC.cg.filter((x) => want.has(x.id))); } return okA(q.get('category') ? HMX.stables : HMX.top); }
+      if (p === '/cg/global') return okA(HMX.global);
+      if (p === '/cg/asset_platforms') return okA(MC.platforms);
+      if (p === '/lore/tickers/') { const st = Number(q.get('start') || 0); return okA(st === 0 ? HMX.lore : { data: MC.walk.pages[st] || [], info: MC.walk.info }); }
+      return { ok: false, status: 0, data: null, reason: 'unreachable' };
+    };
+    const dbT = freshDb('t');
+    const mdT = MD.createMarketData({ db: dbT, now: () => clk, fetchJson: fetchT, sleep: sleepT, urls: { llama: 'http://t.test/llama', coins: 'http://t.test/coins', stables: 'http://t.test/stables', cg: 'http://t.test/cg', coinlore: 'http://t.test/lore' } }); mdT.migrate();
+    const due = { chains: clk + 25e3, heatmap: clk + 30e3, mcapRefs: clk + 215e3 }, end = clk + 4 * 3600e3, nextAtT = mdT._test.nextAt, busy = new Set();
+    const flush = async () => { for (let i = 0; i < 30; i++) await new Promise((r) => setImmediate(r)); };
+    let steps = 0;
+    while (clk < end && steps++ < 50000) {
+      for (const [job, at] of Object.entries(due)) nextAtT.set(job, at);
+      for (const [job, at] of Object.entries(due)) {
+        if (at > clk || busy.has(job)) continue;
+        ran[job]++; busy.add(job); due[job] = Infinity; nextAtT.set(job, Infinity);
+        mdT.runJob(job).then((r) => { busy.delete(job); due[job] = clk + (r.ok ? MD.JOBS[job].every : Math.min(MD.JOBS[job].every, MD.JOBS[job].retry)); });
+      }
+      await flush();
+      timers.sort((a, b) => a.at - b.at);
+      const nt = Math.min(timers.length ? timers[0].at : Infinity, ...Object.values(due));
+      if (!isFinite(nt)) break;
+      clk = Math.max(clk, nt);
+      while (timers.length && timers[0].at <= clk) { timers.shift().ok(); await flush(); timers.sort((a, b) => a.at - b.at); }
+    }
+    const gaps = cgAt.slice(1).map(([t], i) => t - cgAt[i][0]), kinds = (k) => cgAt.filter(([, x]) => x === k).length;
+    check('  ...and in a timetable — the chains run, the daily references and the map on one clock for four hours — no two CoinGecko reads within two minutes, ever; the chains run reads CoinGecko itself on every run; the map reads its top 100 on most of its runs, its total every half hour, its stablecoins once',
+      steps < 50000 && cgAt.length > 20 && gaps.every((g) => g >= 120e3) && kinds('chains') === ran.chains && ran.chains >= 7 && kinds('top') >= ran.heatmap - 3 && ran.heatmap >= 14 && kinds('global') >= 7 && kinds('stables') === 1 && kinds('asset_platforms') >= 1,
+      brief({ ran, n: cgAt.length, minGap: Math.min(...gaps), kinds: ['chains', 'top', 'global', 'stables', 'asset_platforms'].map(kinds) }));
+    dbT.close();
+  }
+  check('  ...the map\'s job in the timetable: every 10 minutes, first just after the chains run, again 10 minutes after a failed run; its total every 30 minutes and its stablecoins every 6 hours; every CoinGecko read in the shared two-minute slot (cg_last) — the chains run\'s, the references\' and the map\'s',
+    MD.JOBS.heatmap.every === 10 * 60e3 && MD.JOBS.heatmap.first === 30 && MD.JOBS.heatmap.first > MD.JOBS.chains.first && MD.JOBS.heatmap.retry === 10 * 60e3 && /const HM_EVERY = \{ global: 30 \* MIN, stables: 6 \* HOUR \}, HM_POLL = 15000, HM_POLLS = 24, HM_SLOT_MAX = 4 \* MIN;/.test(LIB)
+    && /stSet\('cg_last', \{ why: job \}, now\(\) \+ wait\);/.test(LIB) && /const slot = await cgSlot\('heatmap'\);\s+if \(!slot\.ok\)[^\n]+\n\s+const r = await ask\(ctx, urls\.cg \+ path/.test(LIB));
+  // the docs: /data names the resource and every key it returns; the README says what the map is and how it is read; the Privacy Policy §8
+  const hmDoc = DOCS.includes('/api/data/v1/heatmap') ? DOCS.slice(DOCS.indexOf('/api/data/v1/heatmap')).split('</details>')[0] : '';
+  const hmKeys = [...new Set([...Object.keys(A1), ...Object.keys(A1.rows[0]), ...Object.keys(A1.rows[0].check), ...Object.keys(A1.reads)])].filter((k) => k !== 'rows');
+  const README_H = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'), PRIV_H = fs.readFileSync(path.join(ROOT, 'public', 'privacy.html'), 'utf8'), P8 = PRIV_H.split('<h2>8.')[1] || '';
+  check('  ...and the docs: /data documents the heatmap resource with every key it returns (data, the figures, the check, the reads, the legend); the README says what the map is, its sources and cadence and the CoinGecko pacing; the Privacy Policy §8 names the top coins among what CoinGecko and CoinLore are asked for',
+    !!hmDoc && ['data'].concat(hmKeys).every((k) => new RegExp('\\b' + k + '\\b').test(hmDoc)) && /<code>heatmap<\/code>/.test(DOCS) && /bubble map/i.test(README_H) && /`heatmap`/.test(README_H) && /two-minute slot|two minutes/.test(README_H.slice(README_H.indexOf('bubble map')))
+    && /<b>CoinLore<\/b> \([^)]*the top coins by market cap/.test(P8) && /<b>CoinGecko<\/b> and its <b>GeckoTerminal<\/b> \([^)]*the top coins by market cap/.test(P8), hmKeys.filter((k) => !new RegExp('\\b' + k + '\\b').test(hmDoc)).join(','));
+  }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join(' | '));
   check('part 1 ran to the end', false, e.message);
@@ -1821,7 +1967,18 @@ try {
   const td = await api('/api/market/token?chain=robinhood&address=' + USDG);
   check('GET /api/market/token: one token in full with its candles, the logo through our own proxy', td.status === 200 && td.j.symbol === 'USDG' && td.j.candles.rows.length > 0 && /^\/api\/market\/logo\?u=https%3A%2F%2Fcoin-images\.coingecko\.com/.test(td.j.logo || ''), brief(td.j && { l: td.j.logo, c: td.j.candles && td.j.candles.rows && td.j.candles.rows.length }));
   const sr = await api('/api/market/search?q=USDG'), np = await api('/api/market/new-pools?chain=robinhood&limit=5'), no = await api('/api/market/nope');
-  check('GET /api/market/search, /new-pools; an unknown market endpoint is a 404 that lists them', sr.status === 200 && sr.j.tokens[0].address === USDG && np.status === 200 && np.j.rows.length === 5 && no.status === 404 && /chains, chain, tokens, token, scan, search, new-pools, status, logo, rwa, rwa\/token/.test(no.j.error));
+  check('GET /api/market/search, /new-pools; an unknown market endpoint is a 404 that lists them', sr.status === 200 && sr.j.tokens[0].address === USDG && np.status === 200 && np.j.rows.length === 5 && no.status === 404 && /chains, chain, tokens, token, scan, search, new-pools, status, logo, rwa, rwa\/token, heatmap/.test(no.j.error));
+  /* the bubble map through the route (its job is not among this server's MARKET_JOBS — it would wait out CoinGecko's two minutes behind the
+     chains run's read: its store is seeded as the job keeps it, from CoinGecko's and CoinLore's answers of 2026-10-30) */
+  const hmNow = Date.now(), hmSeed = { coins: MM.parseMarkets(HMX.top, hmNow), global: MM.parseGlobal(HMX.global), stables: MM.parseStables(HMX.stables), lore: MM.parseLore(HMX.lore, hmNow) };
+  sdb.prepare("INSERT INTO mkt_state (name, value, at) VALUES ('heatmap', ?, ?) ON CONFLICT(name) DO UPDATE SET value = excluded.value, at = excluded.at")
+    .run(JSON.stringify(Object.fromEntries(Object.entries(hmSeed).map(([k, x]) => { const o = Object.assign({ readAt: hmNow }, x); delete o.ok; return [k, o]; }))), hmNow);
+  // asked as a visitor of its own (the server trusts a loopback proxy here): the status polls above spend most of this connection's 120 a minute
+  const asVisitor = async (p) => { const r = await fetch(B + p, { headers: { 'X-Forwarded-For': '203.0.113.30' } }); let j = null; try { j = await r.json(); } catch {} return { status: r.status, j, cc: r.headers.get('cache-control') || '' }; };
+  const hm = await asVisitor('/api/market/heatmap'), hm50 = await asVisitor('/api/market/heatmap?limit=50&stables=0');
+  check('GET /api/market/heatmap: the bubble map\'s 100 coins with the total, the counts, the reads and the legend (no-store, at the routes\' 120 a minute); limit=50&stables=0 the top 50 without their stablecoins',
+    hm.status === 200 && hm.j.rows.length === 100 && hm.j.rows[0].id === 'bitcoin' && Math.abs(hm.j.rows[0].dominance.v - 59.597) < 0.01 && hm.j.total.src === 'coingecko' && hm.j.legend.length === 10 && hm.j.reads.coins.ok === true && /no-store/.test(hm.cc)
+    && hm50.status === 200 && hm50.j.rows.length === 40 && hm50.j.limit === 50 && hm50.j.stables === false, brief({ s: hm.status, n: hm.j && hm.j.rows && hm.j.rows.length, n50: hm50.j && hm50.j.rows && hm50.j.rows.length }));
   // the RWA tab, through the routes (the RWA job ran once, on the server's own timer, against the fakes)
   const ra = await api('/api/market/rwa'), rt = await api('/api/market/rwa?view=tokens&sort=tvl&dir=asc&kind=stock&issuer=rhj&limit=5'), rc = await api('/api/market/rwa?view=connected'), rs = await api('/api/market/rwa?view=stables');
   check('GET /api/market/rwa: Top RWAs by value on chain, the totals, the reads, the definitions — no-store; view, sort, dir, kind, issuer and limit as asked; the connected and stablecoin views', ra.status === 200 && ra.j.view === 'assets' && ra.j.rows.length > 0 && ra.j.totals && ra.j.reads.registry.ok === true && typeof ra.j.definitions.tvl === 'string' && /no-store/.test(ra.cc)
@@ -1877,9 +2034,9 @@ try {
   const dsn2 = await api('/api/data/v1/chain-snapshots?limit=4&before=' + (dsn.j && dsn.j.next), { key }), dsc = await api('/api/data/v1/scans?chain=ethereum&address=' + PEPE, { key });
   check('  ...with one: the chains (raw logo URLs — programs, not browsers), a chain\'s history, snapshots paged by before / limit, every scan', dc.status === 200 && dc.j.data.length > 0 && dc.j.data[0].tvl.src === 'defillama' && dh.status === 200 && Array.isArray(dh.j.data)
     && dsn.status === 200 && dsn.j.data.length === 4 && dsn.j.next && dsn2.j.data[0].id < dsn.j.data[3].id && dsc.j.data.length === 2 && dsc.j.data.some((x) => x.src === 'market') && dsc.j.data.some((x) => x.src === 'scan'), brief({ dsn: dsn.j && dsn.j.next, dsc: dsc.j && dsc.j.data.map((x) => x.src) }));
-  const dall = await Promise.all(['chain?key=robinhood', 'tokens?chain=robinhood', 'tokens?chain=all', 'token?chain=robinhood&address=' + USDG, 'pools?network=robinhood&limit=3', 'new-pools?limit=3', 'radar', 'pulse?limit=2', 'collectors', 'rwa?view=tokens', 'rwa-token?address=' + TSLA].map((r) => api('/api/data/v1/' + r, { key })));
+  const dall = await Promise.all(['chain?key=robinhood', 'tokens?chain=robinhood', 'tokens?chain=all', 'token?chain=robinhood&address=' + USDG, 'pools?network=robinhood&limit=3', 'new-pools?limit=3', 'radar', 'pulse?limit=2', 'collectors', 'rwa?view=tokens', 'rwa-token?address=' + TSLA, 'heatmap?limit=20'].map((r) => api('/api/data/v1/' + r, { key })));
   const dunk = await api('/api/data/v1/nope', { key });
-  check('  ...every one of the new resources answers, and the unknown-resource error lists them all', dall.every((r) => r.status === 200 && r.j && (r.j.data !== undefined)) && dunk.status === 404 && ['chains', 'chain-history', 'chain-snapshots', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'competition', 'rwa', 'rwa-token'].every((n) => dunk.j.error.includes(n)),
+  check('  ...every one of the new resources answers, and the unknown-resource error lists them all', dall.every((r) => r.status === 200 && r.j && (r.j.data !== undefined)) && dunk.status === 404 && ['chains', 'chain-history', 'chain-snapshots', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'competition', 'rwa', 'rwa-token', 'heatmap'].every((n) => dunk.j.error.includes(n)) && dall[dall.length - 1].j.data.length === 20,
     dall.map((r) => r.status).join(' ') + ' ' + brief(dunk.j));
 
   // the admin browser

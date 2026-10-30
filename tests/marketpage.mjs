@@ -41,6 +41,11 @@
    /api/market/rwa/token; and in the browser, the tab at every width, its choices in the address, Back and Forward, the four
    views, and an RWA's facts on its token view (Robinhood's TSLA, Ondo's TSLAon, a read that fails, a token GeckoTerminal does
    not know that still has its RWA facts).
+   And the 🫧 bubble map of the whole crypto market (owner, 2026-10-30: "a view like this that shows a 24 quick visual on the top tokens
+   across the whole market"): its markup, code and styles from the source; heatmap.json (lib/marketdata.js's own answer, its heatmap job
+   run on CoinGecko's and CoinLore's answers of 2026-10-30) against the contract and lib's real answer; its packing run in a vm (no
+   overlap, all inside, the same every time); and in the browser at every width — the bubbles, their colours and labels, the choices,
+   the tooltip, the card, the list by keyboard, folding it away, a read that fails, reduced motion.
    No live vendor is ever called. */
 import { readFileSync, readdirSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import http from 'node:http';
@@ -55,6 +60,7 @@ const require = createRequire(import.meta.url);
 const MD = require(path.join(ROOT, 'lib', 'marketdata.js'));
 const RW = require(path.join(ROOT, 'lib', 'rwa.js'));
 const CM = require(path.join(ROOT, 'lib', 'chainmcap.js'));
+const MM = require(path.join(ROOT, 'lib', 'marketmap.js'));
 const MDFIX = (f) => JSON.parse(readFileSync(path.join(ROOT, 'tests', 'fixtures', 'marketdata', f), 'utf8'));
 
 const PUB = path.join(ROOT, 'public');
@@ -88,7 +94,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const WINDOWS = (() => { const db = new DatabaseSync(':memory:'); MD.migrate(db); return MD.createMarketData({ db, fetchJson: async () => ({ ok: false, status: 0, data: null, reason: 'no vendor in this test' }) }); })();
 const CHAIN_WINS = ['24h', '7d', '30d'], TOKEN_WINS = ['24h', '6h', '1h', '5m'];
 /* what the browser walk can make the fake do, as the real server does when a source cannot be read */
-const FAKE = { log: [], unavailable: new Set(), zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, pulse: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0 };
+const FAKE = { log: [], unavailable: new Set(), zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, pulse: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0, heatmapDown: false };
 // the logo proxy: DefiLlama's chain icons draw (any PNG will do for the walk) except Solana's, which fails as a missing picture does
 const LOGO_PNG = readFileSync(path.join(PUB, 'assets', 'logo-128.png')), LOGO_BROKEN = /rsz_solana/;
 const none = (why, src, at) => ({ v: null, src, at, why });
@@ -184,6 +190,17 @@ const fakeRwaRow = (chain, addr) => (chain === 'robinhood' ? FIX('rwa-tokens.jso
 // a token that only wears an RWA's ticker: the lookalike answer (lib's rwaLookalike: the 404 body that names its twin), null for anything else
 const fakeLookalike = (chain, addr) => { if (chain !== 'robinhood' || fakeRwaRow(chain, addr)) return null; const [code, b] = fakeRwaToken(new URLSearchParams({ address: addr })); return code === 404 && b && !b.stablecoin && b.twin && /^Same ticker as \$/.test(String(b.why || '')) ? b : null; };
 const rwaKept = (chain, addr) => (chain === 'robinhood' ? { rwa: fakeRwaRow(chain, addr), rwaLookalike: fakeLookalike(chain, addr) } : {});
+/* the bubble map (/api/market/heatmap): lib/marketdata.js's own answer (heatmap.json, its job run on CoinGecko's and CoinLore's answers
+   of 2026-10-30), cut as the route cuts it — the largest `limit` coins (20 to 100), the stablecoins among them left out with stables=0 */
+function fakeHeatmap(q) {
+  if (FAKE.heatmapDown) return [503, { error: 'The market map could not be read just now' }];
+  const j = FIX('heatmap.json'), n = Number(q.get('limit')), limit = q.get('limit') != null && q.get('limit') !== '' && Number.isFinite(n) ? Math.min(100, Math.max(20, Math.round(n))) : 100;
+  const stables = !(q.get('stables') === '0' || q.get('stables') === 'false');
+  let rows = j.rows.slice(0, limit); if (!stables) rows = rows.filter((r) => r.stable !== true);
+  const counts = { up: 0, down: 0, flat: 0, none: 0, drawn: 0 };
+  for (const r of rows) { if (r.mcap.v == null) continue; counts.drawn++; const c = r.change24h.v; if (c == null) counts.none++; else if (c === 0) counts.flat++; else if (c > 0) counts.up++; else counts.down++; }
+  return [200, Object.assign({}, j, { limit, stables, rows, counts })];
+}
 function fakeAnswer(u) {
   const q = u.searchParams, p = u.pathname, qo = Object.fromEntries(q);
   const win = q.get('window') || '24h', from = q.get('from'), to = q.get('to');
@@ -305,6 +322,7 @@ function fakeAnswer(u) {
   }
   if (p === '/api/market/rwa') return fakeRwa(q);
   if (p === '/api/market/rwa/token') return fakeRwaToken(q);
+  if (p === '/api/market/heatmap') return fakeHeatmap(q);
   if (p === '/api/market/new-pools') return [200, { chain: q.get('chain') || 'robinhood', rows: (FIX('chain-robinhood.json').newPools || []).slice(0, Number(q.get('limit')) || 20) }];
   if (p === '/api/market/status') return [200, { collectors: [], tables: [] }];
   return [404, { error: 'not found' }];
@@ -439,6 +457,11 @@ async function realAnswers() {
     assetsOndo: J(md.rwa({ issuer: 'ondo' })), tokensStock: J(md.rwa({ view: 'tokens', sort: 'tvl', dir: 'asc', kind: 'stock' })),
     tsla: J(md.rwaToken({ address: TSLA })), spy: J(md.rwaToken({ address: SPYA })), ondo: J(md.rwaToken({ address: TSLAON })), notRwa: J(md.rwaToken({ address: GME_MEME })), notRwaStatus: md.rwaToken({ address: GME_MEME }).status, notRwaStable: J(md.rwaToken({ address: USDG })) };
   out.tokenTsla = J(await md.token({ chain: 'robinhood', address: TSLA }));
+  // the bubble map's store as its job keeps it: CoinGecko's and CoinLore's answers of 2026-10-30, parsed by lib/marketmap.js, each part
+  // { readAt, … } (tests/marketdata.mjs runs the job itself)
+  const hm = { coins: MM.parseMarkets(FIXMD('heatmap-cg-top100.json'), T), global: MM.parseGlobal(FIXMD('heatmap-cg-global.json')), stables: MM.parseStables(FIXMD('heatmap-cg-stables.json')), lore: MM.parseLore(FIXMD('heatmap-lore-top100.json'), T) };
+  stSet('heatmap', Object.fromEntries(Object.entries(hm).map(([k, p]) => { const o = Object.assign({ readAt: T }, p); delete o.ok; return [k, o]; })));
+  out.heatmap = J(md.heatmap({})); out.heatmapCut = J(md.heatmap({ limit: '50', stables: '0' }));
   return out;
 }
 /* the shape of one answer against another: every key in one is in the other, with the same kind (object, array, number, string,
@@ -463,6 +486,8 @@ function findChrome() {
   return c.find((p) => p && existsSync(p)) || null;
 }
 // what a reader can see: the page never wider than the screen, nothing in the page's column outside it, no text under the floor
+// how far the bubble map (above the two columns) moves everything under it: offsets measured before it was added are kept by adding it
+const MAPSHIFT = '(() => { const m = document.getElementById("mkt-map"); return m ? m.getBoundingClientRect().height + parseFloat(getComputedStyle(m).marginBottom) : 0; })()';
 const LAYOUT = `(() => {
   const wrap = document.querySelector('.mkt-wrap'), wr = wrap.getBoundingClientRect();
   const probe = document.createElement('span'); probe.style.fontSize = 'var(--text-floor)'; document.body.appendChild(probe);
@@ -530,7 +555,7 @@ async function browserWalk() {
     // each part of the walk on its own: one that breaks is a failure of its own, the rest still run, and the fake is put back as it was
     const step = async (name, fn) => {
       try { await fn(); } catch (e) { check(name + ' (the walk broke here)', false, e && e.message); }
-      finally { Object.assign(FAKE, { pulse: null, zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0 }); FAKE.unavailable.clear(); }
+      finally { Object.assign(FAKE, { pulse: null, zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0, heatmapDown: false }); FAKE.unavailable.clear(); }
     };
     await step('every width: the chain view and a token view fit, on the text floor', async () => {
       const fits = [];
@@ -795,7 +820,7 @@ async function browserWalk() {
       // the page's first press brings the nudge up by itself: made on the Chain label, then the nudge put away; the page scrolled
       // until the side column sticks, so the list hangs down from the button towards the player's corner; then the list opened
       await press('document.getElementById("mkt-tf-l")'); await sleep(400); await nudge(false);
-      await ev('window.scrollTo({ top: 900, behavior: "instant" }), true'); await sleep(300);
+      await ev('window.scrollTo({ top: 900 + ' + MAPSHIFT + ', behavior: "instant" }), true'); await sleep(300);
       await press(TRIG); await until('!' + POP + '.hidden'); await sleep(700);
       const before = await ev(PICKSEEN);
       const had = await nudge(true); await sleep(700);
@@ -821,7 +846,7 @@ async function browserWalk() {
     await step('Top tokens\' chain drop-down: looked at only when something changes', async () => {
       // where the column sticks, the list is looked at when something pinned changes — never on a timer
       await go('/market', 1280); await openTokens(); await settled();
-      await ev('window.scrollTo({ top: 900, behavior: "instant" }), true'); await sleep(300);
+      await ev('window.scrollTo({ top: 900 + ' + MAPSHIFT + ', behavior: "instant" }), true'); await sleep(300);
       // Sendy arriving and greeting is a real change to what is pinned (it is looked at); he is taken off the page so the two
       // seconds are ones where nothing changes (he shows himself again if only hidden)
       await ev('(() => { const s = document.getElementById("sendy-widget"); if (s) s.remove(); return true; })()');
@@ -1329,10 +1354,10 @@ async function browserWalk() {
       // 13. a lookalike's own view: the warning under its title, with the real one in full and a way to open it
       await go('/market?chain=robinhood&token=' + GME_MEME, 1280); await until('!!document.querySelector(".mkt-rwa-look")');
       const lk = await ev(`(() => { const s = document.querySelector(".mkt-rwa-look"); if (!s) return null; const b = s.querySelector("[data-open-token]"); const v = document.getElementById("mkt-view"); const fail = v.querySelector(".mkt-fail"), head = v.querySelector(".mkt-vhead"), top = s.getBoundingClientRect().top + scrollY;
-        return { t: s.textContent, open: b ? b.dataset.openToken : null, tip: b ? b.dataset.tip || "" : "", h: b ? Math.round(b.getBoundingClientRect().height) : 0, top: Math.round(top), afterHead: head ? !!(head.compareDocumentPosition(s) & 4) : null, afterFail: fail ? !!(fail.compareDocumentPosition(s) & 4) : null }; })()`);
+        return { t: s.textContent, open: b ? b.dataset.openToken : null, tip: b ? b.dataset.tip || "" : "", h: b ? Math.round(b.getBoundingClientRect().height) : 0, top: Math.round(top), afterHead: head ? !!(head.compareDocumentPosition(s) & 4) : null, afterFail: fail ? !!(fail.compareDocumentPosition(s) & 4) : null, shift: Math.round(${MAPSHIFT}) }; })()`);
       check('review two: the "GameStop" $gme memecoin\'s own /market view says under its title that it only shares Robinhood\'s $GME ticker — "⚠️ Same ticker as Robinhood’s $GME — not it", why, the real one\'s full address and an Open it button (44 px, its data-tip) — not only in the Scanner\'s read far below',
         lk && /⚠️ Same ticker as Robinhood’s \$GME — not it/.test(lk.t) && /Same ticker as \$GME, but not issued by Robinhood Assets \(Jersey\) — the registry lists \$GME at 0x1b0e…153e/.test(lk.t) && /The real \$GME \(Robinhood Assets \(Jersey\) Limited \(RHJ\)\): .*0x1b0e319c6a659f002271b69db8a7df2f911c153e/.test(lk.t)
-        && lk.open === '0x1b0e319c6a659f002271b69db8a7df2f911c153e' && lk.tip.length >= 8 && lk.h >= 44 && lk.top < 1200 && (lk.afterHead !== false) && (lk.afterFail !== false), JSON.stringify(lk).slice(0, 500));
+        && lk.open === '0x1b0e319c6a659f002271b69db8a7df2f911c153e' && lk.tip.length >= 8 && lk.h >= 44 && lk.top - lk.shift < 1200 && (lk.afterHead !== false) && (lk.afterFail !== false), JSON.stringify(lk).slice(0, 500));
       // 14. a token not confirmed on the chain: listed as one, never asserted to be its issuer's; its list-only evidence not proof
       const goog = FIX('rwa-tokens.json').rows.find((r) => /^GOOGLon$/.test(r.symbol)).address;
       await go('/market?chain=robinhood&token=' + goog, 1280); await cardReady();
@@ -1410,6 +1435,113 @@ async function browserWalk() {
       const fd = await ev('({ card: (document.querySelector(".mkt-mcap") || {}).textContent || "", stat: [...document.querySelectorAll(".mkt-stat")].map((s) => s.textContent).find((t) => /Native token market cap/.test(t)) || "" })');
       check('  ...a token CoinGecko gives 0 for (Fantom: no circulating supply) is "Not available" with that reason in the stat and the check, never $0',
         /Not available/.test(fd.stat) && /lists no circulating supply/.test(fd.stat) && /lists no circulating supply/.test(fd.card) && !/\$0(?![.\d])/.test(fd.stat + fd.card), JSON.stringify(fd).slice(0, 400));
+    });
+
+    /* ── the bubble map of the whole crypto market (owner, 2026-10-30) ── */
+    const MAPFIT = `(() => {
+      const fig = document.getElementById('mkt-map-fig'), svg = fig && fig.querySelector('svg.mkt-map-svg'); if (!svg) return null;
+      const probe = document.createElement('span'); probe.style.fontSize = 'var(--text-floor)'; document.body.appendChild(probe); const floor = parseFloat(getComputedStyle(probe).fontSize); probe.remove();
+      const rgb = (s) => { const m = /rgba?\\(\\s*([\\d.]+)[ ,]+([\\d.]+)[ ,]+([\\d.]+)/.exec(s || ''); if (m) return [+m[1], +m[2], +m[3]]; const c = /color\\(srgb\\s+([\\d.e-]+)\\s+([\\d.e-]+)\\s+([\\d.e-]+)/.exec(s || ''); return c ? [c[1] * 255, c[2] * 255, c[3] * 255] : null; };
+      const lum = (x) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(x[0]) + 0.7152 * f(x[1]) + 0.0722 * f(x[2]); };
+      const con = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+      const sw = {}; document.querySelectorAll('#mkt-map-legend .mkt-map-sw').forEach((s) => { const k = [...s.classList].find((c) => c.startsWith('mkt-b-')).slice(6); sw[k] = getComputedStyle(s).backgroundColor; });
+      const bubs = [...svg.querySelectorAll('.mkt-bub')].map((g) => { const c = g.querySelector('circle');
+        return { id: g.dataset.coin, b: [...g.classList].find((x) => x.startsWith('mkt-b-')).slice(6), r: +c.getAttribute('r'), cx: +c.getAttribute('cx'), cy: +c.getAttribute('cy'), fill: getComputedStyle(c).fill, title: !!g.querySelector('title'),
+          texts: [...g.querySelectorAll('text')].map((t) => { const bb = t.getBBox(); return { t: t.textContent, fs: parseFloat(getComputedStyle(t).fontSize), fill: getComputedStyle(t).fill, x0: bb.x, y0: bb.y + bb.height * 0.2, x1: bb.x + bb.width, y1: bb.y + bb.height * 0.8 }; }) }; });
+      const texts = bubs.flatMap((x) => x.texts.map((t) => Object.assign({ id: x.id, cx: x.cx, cy: x.cy, r: x.r, bf: x.fill }, t)));
+      const inC = (t, px, py) => Math.hypot(px - t.cx, py - t.cy) <= t.r + 1;
+      return { n: bubs.length, biggest: bubs.reduce((a, b) => (b.r > a.r ? b : a)).id, buckets: Object.fromEntries(bubs.map((x) => [x.id, x.b])), titles: bubs.every((x) => x.title),
+        wrongFill: bubs.filter((x) => x.b !== 'none' && (!sw[x.b] || x.fill !== sw[x.b])).map((x) => x.id + ':' + x.fill + '≠' + sw[x.b]).slice(0, 4),
+        small: texts.filter((t) => t.fs < floor - 0.5).map((t) => t.id + ':' + t.t + '@' + t.fs).slice(0, 4), labelled: new Set(texts.map((t) => t.id)).size,
+        outside: texts.filter((t) => ![[t.x0, t.y0], [t.x1, t.y0], [t.x0, t.y1], [t.x1, t.y1]].every(([px, py]) => inC(t, px, py))).map((t) => t.id + ':' + t.t).slice(0, 4),
+        lowContrast: texts.filter((t) => !rgb(t.fill) || !rgb(t.bf) || con(rgb(t.fill), rgb(t.bf)) < 4.5).map((t) => t.id + ':' + t.t + ' ' + t.fill + ' on ' + t.bf).slice(0, 4),
+        btc: texts.filter((t) => t.id === 'bitcoin').map((t) => t.t), svgW: Math.round(svg.getBoundingClientRect().width), iw: innerWidth, ih: innerHeight, role: svg.getAttribute('role'), aria: svg.getAttribute('aria-label') || '', floor };
+    })()`;
+    const mapReady = (n) => until('document.querySelectorAll("#mkt-map svg.mkt-map-svg .mkt-bub").length' + (n == null ? ' > 0' : ' === ' + n));
+    const HMF = FIX('heatmap.json').rows, wantB = Object.fromEntries(HMF.map((r) => [r.id, MM.bucketOf(r.change24h.v)]));
+    await step('the bubble map at 320, 390, 1280 and 1920 px', async () => {
+      const fits = [];
+      for (const w of [320, 390, 1280, 1920]) {
+        await go('/market', w); await mapReady(100); await sleep(250);
+        fits.push({ w, m: await ev(MAPFIT), l: await ev(LAYOUT), cap: await textOf('#mkt-map-cap'), legend: await ev('[...document.querySelectorAll("#mkt-map-legend li")].map((li) => li.textContent)') });
+      }
+      const bad = fits.filter(({ w, m, l }) => !m || m.n !== 100 || m.biggest !== 'bitcoin' || !m.titles || m.wrongFill.length || m.small.length || m.outside.length || m.lowContrast.length || m.labelled < 5
+        || Object.entries(wantB).some(([id, b]) => m.buckets[id] !== b) || l.sw > l.iw || l.out.length || l.small.length || m.role !== 'img'
+        || (w < 768 ? m.svgW < m.iw - 2 * 16 - 6 : m.svgW > 760 || m.svgW > m.ih * 0.8 + 1 || m.svgW < 600));
+      const f = fits.find((x) => x.w === 1280) || {};
+      check('the bubble map in a real browser, at 320, 390, 1280 and 1920 px: 100 bubbles, Bitcoin the largest, each coloured by its 24 h step (its fill the legend swatch\'s, from the theme), labels only inside their bubbles and never under the text floor, each in an ink of 4.5:1 or more on its fill, every bubble a <title>; the map as wide as the screen on a phone and at most min(80vh, 760 px) on a desktop; no sideways scroll, nothing outside the page\'s column',
+        fits.length === 4 && !bad.length, JSON.stringify(bad.map((x) => ({ w: x.w, m: x.m && Object.assign({}, x.m, { buckets: undefined }), l: x.l }))).slice(0, 900));
+      check('  ...its words: BTC "$76,894", "Dominance: 59.6%", "▼ −5.27%"; the summary a screen reader hears ("Bitcoin is 59.6% of the market, down 5.3% in 24 h … 88 down, 11 up, 1 unchanged"); the caption (total market cap $2.59T from CoinGecko, how many are down and up, what size and colour mean, not advice); the legend\'s ten steps with their counts',
+        f.m && f.m.btc.join('|') === 'BTC|$76,894|Dominance: 59.6%|▼ −5.27%' && /^Bubble map of the 100 largest coins by market cap: Bitcoin is 59\.6% of the market, down 5\.3% in 24 h; Ethereum is 10\.4% of the market, down 6\.3% in 24 h; 88 down, 11 up, 1 unchanged\./.test(f.m.aria)
+        && /^Total market cap \$2\.59T \(CoinGecko · .+\) · Over 24 h, 88 of these 100 coins are down, 11 up, 1 unchanged · Bubble size: market cap\. Colour: 24 h price change\. Not advice, never a tip to buy\.$/.test(f.cap)
+        && f.legend.length === 10 && f.legend[0] === '>10% (1)' && f.legend[4] === '0% (1)' && f.legend[8] === '<−10% (36)' && f.legend[9] === 'no 24 h change given (0)', JSON.stringify({ btc: f.m && f.m.btc, aria: f.m && f.m.aria, cap: f.cap, legend: f.legend }).slice(0, 700));
+    });
+    await step('the bubble map: its choices, the list, the tooltip and the card', async () => {
+      await go('/market', 1280); await mapReady(100);
+      const n = () => ev('document.querySelectorAll("#mkt-map .mkt-bub").length');
+      await press('document.getElementById("mkt-map-stables")'); await mapReady(83);
+      const noSt = { n: await n(), pressed: await ev('document.getElementById("mkt-map-stables").getAttribute("aria-pressed")'), cap: await textOf('#mkt-map-cap'), rows: await ev('document.querySelectorAll("#mkt-map-table tbody tr").length'), usdt: await ev('!!document.querySelector("#mkt-map [data-coin=tether]")') };
+      await press('document.querySelector("#mkt-map [data-map-top=\\"50\\"]")'); await mapReady(40);
+      const top50 = { n: await n(), p50: await ev('document.querySelector("#mkt-map [data-map-top=\\"50\\"]").getAttribute("aria-pressed")'), p100: await ev('document.querySelector("#mkt-map [data-map-top=\\"100\\"]").getAttribute("aria-pressed")') };
+      await press('document.getElementById("mkt-map-stables")'); await mapReady(50); const top50st = await n();
+      await press('document.querySelector("#mkt-map [data-map-top=\\"100\\"]")'); await mapReady(100);
+      check('  ..."Hide stablecoins" leaves out CoinGecko\'s 17 (83 bubbles, the chip pressed, the caption saying so, the list too) and Top 50 draws the 50 largest (40 without their stablecoins); both undo',
+        noSt.n === 83 && noSt.pressed === 'true' && /stablecoins left out/.test(noSt.cap) && noSt.rows === 83 && !noSt.usdt && top50.n === 40 && top50.p50 === 'true' && top50.p100 === 'false' && top50st === 50 && (await n()) === 100, JSON.stringify({ noSt, top50, top50st }));
+      // the tooltip: a real pointer over HYPE, then off the map
+      await ev('document.getElementById("mkt-map-fig").scrollIntoView({ block: "center", behavior: "instant" }), true'); await sleep(150);
+      const hp = await ev('(() => { const c = document.querySelector("#mkt-map [data-coin=hyperliquid] circle").getBoundingClientRect(); return [c.left + c.width / 2, c.top + c.height / 2]; })()');
+      await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: hp[0], y: hp[1], button: 'none' }); await sleep(150);
+      const tip = await ev('(() => { const t = document.getElementById("mkt-map-tip"), f = document.getElementById("mkt-map-fig").getBoundingClientRect(), r = t.getBoundingClientRect(); return { shown: !t.hidden, text: t.textContent, inBox: r.left >= f.left - 1 && r.right <= f.right + 1 && r.top >= f.top - 1 && r.bottom <= f.bottom + 1, chip: (t.querySelector(".mkt-chk") || {}).textContent || "", title: !!document.querySelector("#mkt-map [data-coin=hyperliquid] title") }; })()');
+      await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 5, button: 'none' }); await sleep(150);
+      const tipGone = await ev('({ hidden: document.getElementById("mkt-map-tip").hidden, title: !!document.querySelector("#mkt-map [data-coin=hyperliquid] title") })');
+      check('  ...a pointer over a bubble shows its tooltip inside the map — symbol, name, price, market cap, dominance, 24 h change, 24 h volume, source and age, the CoinLore chip (HYPE: "⚠ Sources differ") — standing in for its <title> while it shows, and leaving the map hides it',
+        tip.shown && /^HYPE Hyperliquid/.test(tip.text) && /Price\$89\.09/.test(tip.text) && /Market cap\$21\.3B/.test(tip.text) && /Dominance0\.82%/.test(tip.text) && /24 h change▲ \+10\.4%/.test(tip.text) && /24 h volume\$3B/.test(tip.text) && /CoinGecko · /.test(tip.text)
+        && tip.chip === '⚠ Sources differ' && tip.inBox && !tip.title && tipGone.hidden && tipGone.title, JSON.stringify({ tip, tipGone }).slice(0, 500));
+      // a press on a bubble: the card under the map
+      await press('document.querySelector("#mkt-map [data-coin=ethereum] circle")'); await until('!document.getElementById("mkt-map-card").hidden');
+      const card = await ev('(() => { const c = document.getElementById("mkt-map-card"), a = c.querySelector("a.mkt-map-ext"); return { text: c.textContent, href: a ? a.getAttribute("href") : null, rel: a ? a.getAttribute("rel") : null, on: [...document.querySelectorAll("#mkt-map .mkt-bub.is-on")].map((g) => g.dataset.coin), focus: document.activeElement && document.activeElement.id, after: c.compareDocumentPosition(document.getElementById("mkt-map-fig")) & 2 }; })()');
+      const cardL = await ev(LAYOUT);
+      check('  ...a press on a bubble opens its card under the map: its figures with their sources and ages, the check chip and its notes, "View on CoinGecko ↗" (https://www.coingecko.com/en/coins/ethereum, rel="noopener"), not advice; the bubble ringed and the card\'s heading focused',
+        /^ETH Ethereum✓ 2 sources agree/.test(card.text) && /Price\$2,207CoinGecko · /.test(card.text) && /Dominance10\.4%share of CoinGecko's total, \$2\.59T · CoinGecko · /.test(card.text) && /24 h price change▼ −6\.32%CoinGecko · /.test(card.text) && /Rank#2/.test(card.text)
+        && card.href === 'https://www.coingecko.com/en/coins/ethereum' && card.rel === 'noopener' && /View on CoinGecko ↗/.test(card.text) && /Not advice, never a tip to buy\./.test(card.text) && card.on.join() === 'ethereum' && card.focus === 'mkt-mapc-h' && card.after && cardL.sw <= cardL.iw && !cardL.out.length && !cardL.small.length,
+        JSON.stringify({ card, cardL }).slice(0, 600));
+      // the keyboard's way in: the list, a row's button, Enter, then Escape
+      await press('document.querySelector("#mkt-map-list > summary")'); await until('document.getElementById("mkt-map-list").open');
+      const list = await ev('({ rows: document.querySelectorAll("#mkt-map-table tbody tr").length, btns: [...document.querySelectorAll("#mkt-map-table [data-map-coin]")].filter((b) => b.tagName === "BUTTON" && (b.dataset.tip || "").length >= 8 && b.getBoundingClientRect().height >= 43.5).length, head: [...document.querySelectorAll("#mkt-map-table thead th")].map((t) => t.textContent).join("|"), first: document.querySelector("#mkt-map-table tbody tr").textContent })');
+      await ev('document.querySelector("#mkt-map-table [data-map-coin=tether]").focus(), true'); await K.enter(); await until('/^USDT/.test(document.getElementById("mkt-map-card").textContent)');
+      const kb = { focus: await ev('document.activeElement.id'), card: (await textOf('#mkt-map-card')).slice(0, 40), row: await ev('document.querySelector("#mkt-map-table tr.is-on").dataset.coin') };
+      await K.esc(); await sleep(150);
+      const shut = { hidden: await ev('document.getElementById("mkt-map-card").hidden'), focus: await ev('document.activeElement.dataset.mapCoin || document.activeElement.id'), on: await ev('document.querySelectorAll("#mkt-map .mkt-bub.is-on, #mkt-map-table tr.is-on").length') };
+      const listL = await ev(LAYOUT);
+      check('  ..."Show as a list" is the keyboard\'s way in: a table of every coin (rank, coin, price, market cap, dominance, 24 h change, check), each row\'s coin a 44 px button with its description; Enter opens the same card (focused), Escape shuts it and gives the focus back to the row',
+        list.rows === 100 && list.btns === 100 && list.head === 'Rank|Coin|Price|Market cap|Dominance|24 h change|Check' && /^#1BTC Bitcoin\$76,894\$1\.55T59\.6%▼ −5\.27%✓ 2 sources agree$/.test(list.first)
+        && kb.focus === 'mkt-mapc-h' && /^USDT Tether/.test(kb.card) && kb.row === 'tether' && shut.hidden && shut.focus === 'tether' && shut.on === 0 && listL.sw <= listL.iw && !listL.out.length && !listL.small.length, JSON.stringify({ list, kb, shut, listL }).slice(0, 600));
+      await go('/market', 390); await mapReady(100);
+      await press('document.querySelector("#mkt-map-list > summary")'); await until('document.getElementById("mkt-map-list").open');
+      await ev('document.querySelector("#mkt-map-table [data-map-coin=bitcoin]").click(), true'); await until('!document.getElementById("mkt-map-card").hidden');
+      const phone = await ev(LAYOUT);
+      check('  ...and on a phone the list folds into labelled cards and the card fits: no sideways scroll, nothing under the floor', phone.sw <= phone.iw && !phone.out.length && !phone.small.length
+        && (await ev('getComputedStyle(document.querySelector("#mkt-map-table thead")).position')) === 'absolute', JSON.stringify(phone));
+    });
+    await step('the bubble map: folded away and back, remembered; a read that fails; reduced motion', async () => {
+      await go('/market', 1280); await mapReady(100);
+      await press('document.getElementById("mkt-map-tog")'); await sleep(150);
+      const off = await ev('({ body: document.getElementById("mkt-map-body").hidden, exp: document.getElementById("mkt-map-tog").getAttribute("aria-expanded"), text: document.getElementById("mkt-map-tog").textContent, tip: document.getElementById("mkt-map-tog").dataset.tip, kept: localStorage.getItem("jsi:market-map") })');
+      const m0 = FAKE.log.length; await go('/market', 1280); await sleep(400);
+      const back = { body: await ev('document.getElementById("mkt-map-body").hidden'), exp: await ev('document.getElementById("mkt-map-tog").getAttribute("aria-expanded")'), asked: FAKE.log.slice(m0).filter((x) => x.startsWith('/api/market/heatmap')).length };
+      await press('document.getElementById("mkt-map-tog")'); await mapReady(100);
+      const on = { exp: await ev('document.getElementById("mkt-map-tog").getAttribute("aria-expanded")'), kept: await ev('localStorage.getItem("jsi:market-map")'), asked: FAKE.log.slice(m0).filter((x) => x.startsWith('/api/market/heatmap')).length };
+      check('  ...its button folds it away (aria-expanded false, "Show the map", its description saying what a press does now) and this browser remembers it: the page opens with it folded and does not read it until it is opened again',
+        off.body === true && off.exp === 'false' && /^Show the map/.test(off.text) && /Opens the bubble map/.test(off.tip) && off.kept === 'hidden' && back.body === true && back.exp === 'false' && back.asked === 0 && on.exp === 'true' && on.kept === 'shown' && on.asked === 1, JSON.stringify({ off, back, on }));
+      FAKE.heatmapDown = true; await go('/market', 1280); await until('!!document.querySelector("#mkt-map-fig .mkt-err-t")');
+      const down = { t: await textOf('#mkt-map-fig'), retry: await ev('!!document.querySelector("#mkt-map-fig [data-retry=map]")'), svg: await ev('!!document.querySelector("#mkt-map svg")') };
+      FAKE.heatmapDown = false; await press('document.querySelector("#mkt-map-fig [data-retry=map]")'); await mapReady(100);
+      check('  ...a read that fails says so with its reason and a Try again (never an empty map, never "no coins"), and Try again reads it again', /could not be read just now/.test(down.t) && down.retry && !down.svg && (await ev('document.querySelectorAll("#mkt-map .mkt-bub").length')) === 100, JSON.stringify(down));
+      await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] });
+      await go('/market', 1280); await mapReady(100);
+      const rm = await ev('(() => { const s = document.querySelector("#mkt-map svg.mkt-map-svg"); return { cls: s.getAttribute("class"), op: getComputedStyle(s).opacity, tr: getComputedStyle(s).transitionDuration }; })()');
+      await cdp('Emulation.setEmulatedMedia', { features: [] });
+      check('  ...under reduced motion it appears at once (no fade)', rm.cls === 'mkt-map-svg' && rm.op === '1' && parseFloat(rm.tr) <= 0.001, JSON.stringify(rm));
     });
 
     check('no script error from market.js anywhere on the walk', ours().length === 0, ours().map((x) => (x.exception && x.exception.description || x.text || '').split('\n')[0]).slice(0, 3).join(' | '));
@@ -1494,7 +1626,7 @@ async function runSuite() {
       fetches.length === 1 && fetches[0] === 'url' && asks.length >= 8 && asks.every((a) => a === 'url' || /^'\/api\/market\/|^(chainsURL|tokensURL|chainViewURL|tokenViewURL|rwaURL)\(|^v\.token \? tokenViewURL/.test(a))
       && /return '\/api\/market\/rwa' \+ \(q \? '\?' \+ q : ''\);/.test(code) && /getJSON\(rwaURL\(\)\)/.test(code) && /getJSON\('\/api\/market\/rwa\/token\?address=' \+ encodeURIComponent\(addr\)\)/.test(code)
       && /return '\/api\/market\/chains' \+/.test(code) && /return '\/api\/market\/tokens\?' \+/.test(code) && /return '\/api\/market\/chain\?' \+/.test(code) && /return '\/api\/market\/token\?' \+/.test(code)
-      && !/https?:\/\/(?!www\.growthepie\.com|l2beat\.com\/scaling|www\.w3\.org\/2000\/svg)/.test(code.replace(/'https:\/\/'/g, '')) && !/\/api\/scan\?/.test(code), asks.join(' | '));
+      && !/https?:\/\/(?!www\.growthepie\.com|l2beat\.com\/scaling|www\.w3\.org\/2000\/svg|www\.coingecko\.com\/en\/coins\/' \+ encodeURIComponent\(cgId\))/.test(code.replace(/'https:\/\/'/g, '')) && !/\/api\/scan\?/.test(code), asks.join(' | '));
     check('  ...the first view asks exactly /api/market/chains and /api/market/chain?key=robinhood (reads robots.txt opens); Top tokens asks /api/market/tokens?chain=all, or chain=<key> for the chain its filter names',
       /if \(k\.sort !== 'tvl'\) p\.set\('sort'/.test(code) && /if \(k\.win !== '24h'\) \{ p\.set\('window'/.test(code) && /p\.set\('key', key\);/.test(code) && /p\.set\('chain', chain\);\s*if \(k\.sort !== 'volume'\)/.test(code)
       && /const DEFAULT_CHAIN = 'robinhood';/.test(code) && /const chain = S\.tokens\.tchain \|\| 'all'/.test(code) && /getJSON\(tokensURL\(chain\)\)/.test(code));
@@ -1555,8 +1687,9 @@ async function runSuite() {
     check('  ...every row of the all-chains list names its chain (its logo and its name in words — "on Base" to a screen reader) and opens the token on that chain; the row in the main view is matched by chain and address',
       /const chainBadge = \(r\) => '<span class="mkt-chb">'/.test(code) && /'<span class="sr-only">on <\/span>' \+ esc\(r\.chainName \|\| chainName\(r\.chain\)\)/.test(code) && /\(all \? chainBadge\(r\) : ''\)/.test(code)
       && /data-chain="' \+ esc\(on\) \+ '" data-token="' \+ esc\(r\.address\) \+ '"/.test(code) && /const cur = S\.view\.token && S\.view\.chain === on && sameToken\(S\.view\.token, r\.address\);/.test(code) && /b\.dataset\.chain === S\.view\.chain && sameToken\(b\.dataset\.token, S\.view\.token\)/.test(code));
-    check('  ...no storage: the address bar is the state (?chain=&token=&window=&from=&to=), pushed when the view changes, read back on Back / Forward',
-      !/localStorage|sessionStorage|indexedDB|document\.cookie/.test(code) && /p\.set\('chain', v\.chain\);\s*if \(v\.token\) p\.set\('token', v\.token\);/.test(code) && /history\[push \? 'pushState' : 'replaceState'\]/.test(code)
+    const MAP_PREF = "const mapPref = { get: () => { try { return localStorage.getItem(MAP_KEY); } catch { return null; } }, set: (v) => { try { localStorage.setItem(MAP_KEY, v); } catch {} } };";
+    check('  ...no storage: the address bar is the state (?chain=&token=&window=&from=&to=), pushed when the view changes, read back on Back / Forward — the one thing kept in the browser is whether the bubble map is folded away (one key, every read and write behind try/catch)',
+      code.split(MAP_PREF).length === 2 && /const MAP_KEY = 'jsi:market-map';/.test(code) && !/localStorage|sessionStorage|indexedDB|document\.cookie/.test(code.replace(MAP_PREF, '')) && /p\.set\('chain', v\.chain\);\s*if \(v\.token\) p\.set\('token', v\.token\);/.test(code) && /history\[push \? 'pushState' : 'replaceState'\]/.test(code)
       && /window\.addEventListener\('popstate', \(\) => \{ closePick\(true\); readURL\(\);/.test(code) && /q\.get\('from'\)/.test(code) && /q\.get\('to'\)/.test(code));
     check('  ...a token on Robinhood Chain, Ethereum or Solana gets the Scanner\'s own dashboard (NPCard.dashboardHTML + mountDashboard) from /api/market/scan, only once the reader scrolls to it',
       /const SCANS = \['robinhood', 'ethereum', 'solana'\];/.test(code) && /'\/api\/market\/scan\?chain=' \+ encodeURIComponent\(chain\) \+ '&address=' \+ encodeURIComponent\(addr\)/.test(code)
@@ -1601,13 +1734,52 @@ async function runSuite() {
       /\.mkt-chips \.np-chip, \.mkt-wash \{ min-height: 44px;/.test(CSS) && /\.mkt-cpick-b \{[^}]*min-height: 44px;/.test(CSS) && /\.mkt-copt \{ min-height: 44px;/.test(CSS) && /\.mkt-row \{[^}]*min-height: 52px;/.test(CSS) && /\.mkt-row:focus-visible \{ outline: 3px solid var\(--focus\);/.test(CSS)
       && /\.mkt-plot:focus-visible \{ outline: 3px solid var\(--focus\);/.test(CSS) && /\.mkt-row\[aria-current="true"\] \{[^}]*box-shadow: inset 5px 0 0 var\(--green\);/.test(CSS));
 
+    /* ═══ the bubble map of the whole crypto market (owner, 2026-10-30) ═══ */
+    const MAPH = H.slice(H.indexOf('<section class="mkt-map"'), H.indexOf('<div class="mkt-layout">'));
+    check('the bubble map (owner, 2026-10-30: "a view like this that shows a 24 quick visual on the top tokens across the whole market"): a full-width section between the search and the two columns, its own heading, a button that folds it away (aria-expanded, aria-controls, a description), the Top 50 / Top 100 chips and "Hide stablecoins" (aria-pressed, a tick), a live caption, the legend\'s list, the map\'s box, a card under it and "Show as a list"',
+      H.indexOf('</form>') < H.indexOf('<section class="mkt-map" id="mkt-map" aria-labelledby="mkt-map-h">') && H.indexOf('id="mkt-map"') < H.indexOf('<div class="mkt-layout">') && /<h2 class="mkt-map-h" id="mkt-map-h">🫧 [^<]{10,}<\/h2>/.test(MAPH)
+      && /<button class="btn btn-sm btn-ghost mkt-map-tog" id="mkt-map-tog" type="button" aria-expanded="true" aria-controls="mkt-map-body" data-tip="[^"]{30,}">Hide the map<\/button>/.test(MAPH) && /<div class="mkt-map-body" id="mkt-map-body">/.test(MAPH)
+      && /aria-pressed="false" data-map-top="50" data-tip="[^"]{20,}"><span class="mkt-tick" aria-hidden="true">✓&nbsp;<\/span>Top 50<\/button>/.test(MAPH) && /aria-pressed="true" data-map-top="100" data-tip="[^"]{20,}"><span class="mkt-tick" aria-hidden="true">✓&nbsp;<\/span>Top 100<\/button>/.test(MAPH)
+      && /<button class="np-chip" id="mkt-map-stables" type="button" aria-pressed="false" data-tip="[^"]{30,}"><span class="mkt-tick" aria-hidden="true">✓&nbsp;<\/span>Hide stablecoins<\/button>/.test(MAPH)
+      && [...MAPH.matchAll(/<div class="mkt-group" role="group" aria-labelledby="([^"]+)"/g)].length === 2 && [...MAPH.matchAll(/<div class="mkt-group" role="group" aria-labelledby="([^"]+)"/g)].every((m) => MAPH.includes('<p class="mkt-group-l" id="' + m[1] + '">'))
+      && /<p class="mkt-map-cap" id="mkt-map-cap" aria-live="polite"><\/p>/.test(MAPH) && /<ul class="mkt-map-legend" id="mkt-map-legend" aria-labelledby="mkt-map-key-l"><\/ul>/.test(MAPH) && /<div class="mkt-map-fig" id="mkt-map-fig">/.test(MAPH)
+      && /<div class="mkt-map-card" id="mkt-map-card" hidden><\/div>/.test(MAPH) && /<details class="mkt-tbl mkt-map-list" id="mkt-map-list"><summary>Show as a list<\/summary>/.test(MAPH));
+    const legendJS = (code.match(/const MAP_LEGEND = (\[[^\n]+\]);/) || [])[1];
+    let legendOK = false; try { legendOK = JSON.stringify(vm.runInNewContext(legendJS)) === JSON.stringify(MM.BUCKETS.map((b) => [b.key, b.label])); } catch {}
+    const bucketJS = (code.match(/function mapBucket\(v\) \{[\s\S]*?\n  \}/) || [])[0];
+    let bucketOK = false; try { const f = vm.runInNewContext('(' + bucketJS + ')'); bucketOK = [null, NaN, 0, 0.0001, 2, 2.01, 5, 5.01, 10, 10.01, 99, -0.0001, -2, -2.01, -5, -5.01, -10, -10.01, -60].every((x) => f(x) === MM.bucketOf(x)); } catch {}
+    check('  ...market.js reads it from /api/market/heatmap alone (getJSON, one answer: Top 50 and the stablecoins are cut from it here), and its legend and steps are lib/marketmap.js\'s — the same nine steps and "no 24 h change given", the same edges (exactly 10% is ">5%", exactly 0 is "0%", no change is never 0%)',
+      /const j = await getJSON\('\/api\/market\/heatmap'\);/.test(code) && (code.match(/\/api\/market\/heatmap/g) || []).length === 4 && legendOK && bucketOK, JSON.stringify({ legendOK, bucketOK }));
+    check('  ...one SVG, packed and drawn here — no library, no CDN: the front-chain packing and the smallest enclosing circle in the @lift:pack block, the box\'s own pixel size, one role="img" with a summary in words (not 100 tab stops), each bubble a <title>; its area the market cap (the radius the square root), its colour the step\'s class',
+      /\/\* @lift:pack /.test(JS) && /\/\* @lift:pack-end \*\//.test(JS) && /function packCircles\(cs\)/.test(code) && /function packEnclose\(cs\)/.test(code)
+      && /const svg = el\('svg', \{ width: size, height: size, viewBox: '0 0 ' \+ size \+ ' ' \+ size, class: 'mkt-map-svg', role: 'img', 'aria-label': mapSummary\(rows, c\) \}\);/.test(code)
+      && /const top = val\(shown\[0\]\.mcap\), unit = \(r\) => Math\.sqrt\(val\(r\.mcap\) \/ top\) \* 100;/.test(code) && /class: 'mkt-bub mkt-b-' \+ b/.test(code) && /const ti = el\('title', \{\}, g\); ti\.textContent = tipWords\(row\);/.test(code)
+      && !/tabindex|'tabIndex'/.test(code.slice(code.indexOf('function drawMap('), code.indexOf('function tipWords('))) && !/<script[^>]+src="https?:/.test(H) && !/\bd3\./.test(code));
+    check('  ...a label only where it fits at or above the text floor (measured in px, written as max(var(--text-floor), …)): the symbol first, then the price and the change, "Dominance: …" on the three largest; its ink the better contrast of --text and --ink-1 on the fill as drawn',
+      /function fitLabel\(r, lines, floor\)/.test(code) && /let s = Math\.max\(r \* 0\.36, floor\);/.test(code) && /if \(s < floor\) return null;/.test(code) && /style: 'font-size: max\(var\(--text-floor\), ' \+ l\.z\.toFixed\(2\) \+ 'px\); font-weight: ' \+ l\.w \+ '; fill: ' \+ ink\[b\] \}/.test(code)
+      && /'Dominance: ' \+ dm/.test(code) && /const bigIds = new Set\(shown\.slice\(0, 3\)\.map\(\(r\) => r\.id\)\);/.test(code) && /out\[k\] = !fill \|\| contrast\(fill, light\) >= contrast\(fill, dark\) \? 'var\(--text\)' : 'var\(--ink-1\)';/.test(code));
+    check('  ...the tooltip (symbol, name, price, market cap, dominance, 24 h change, 24 h volume, source and age, the CoinLore check chip) on the pointer; a press, or a list row\'s button, opens a card under the map with the same and "View on CoinGecko ↗" (a plain link out, rel="noopener"), its heading focused; Escape or ✕ Close shuts it',
+      /function tipHTML\(r\)/.test(code) && /row\('Price', r\.price, mapPrice\) \+ row\('Market cap', r\.mcap, usd\) \+ row\('Dominance', r\.dominance, domText\) \+ row\('24 h change', r\.change24h, \(x\) => pct\(x\)\) \+ row\('24 h volume', r\.volume24h, usd\)/.test(code) && /srcLine\(fig\(r\.mcap\)\) \+ '<\/span> ' \+ mapChk\(r\)/.test(code)
+      && /href="https:\/\/www\.coingecko\.com\/en\/coins\/' \+ encodeURIComponent\(cgId\) \+ '" target="_blank" rel="noopener">View on CoinGecko ↗<\/a>/.test(code) && /cgId = \/\^\[a-z0-9-\]\{1,80\}\$\/\.test/.test(code)
+      && /data-map-coin="' \+ esc\(r\.id\) \+ '" data-tip="Opens /.test(code) && /if \(e\.key === 'Escape' && MAP\.pick\)/.test(code) && /h\.focus\(\{ preventScroll: true \}\)/.test(code));
+    check('  ...folded away and back by its button, remembered in this browser (and not read until it is opened); read again every 10 minutes while the page is in view; redrawn when its box changes size (after the change settles) and once the site\'s font has loaded; a short fade on its first drawing only, none under reduced motion or the nav\'s ⏸',
+      /if \(mapEl\.sec\) setMapOpen\(mapPref\.get\(\) !== 'hidden', false\);/.test(code) && /if \(remember\) mapPref\.set\(on \? 'shown' : 'hidden'\);/.test(code) && /mapEl\.tog\.setAttribute\('aria-expanded', String\(on\)\);/.test(code)
+      && /const MAP_EVERY = 10 \* 60e3;/.test(code) && /document\.visibilityState === 'visible' && MAP\.shown/.test(code) && /new ResizeObserver\(reMap\)\.observe\(mapEl\.fig\)/.test(code) && /document\.fonts\.ready\.then/.test(code)
+      && /const first = !old && fresh && !reduced\(\);/.test(code) && /@media \(prefers-reduced-motion: reduce\) \{ \.mkt-map-svg\.is-in \{ transition: none; \} \}/.test(CSS) && /html\.motion-off \.mkt-map-svg\.is-in \{ transition: none; \}/.test(CSS));
+    const hmTokens = (CSS.match(/\.mkt-map \{\n([\s\S]*?)\n\s*margin:/) || [])[1] || '';
+    check('  ...its colours are the site\'s own tokens (mixes of --green, --green-dark, --red, --text-mute and the inks, deeper for a bigger move), one rule per step for the bubbles and the legend\'s swatches; the step with no change is hatched and dashed; forced colours keep the map\'s colours with system outlines; the list folds into cards in a narrow box; its buttons are 44 px with a focus ring',
+      ['up10', 'up5', 'up2', 'up0', 'flat', 'dn0', 'dn2', 'dn5', 'dn10', 'none'].every((k) => new RegExp('--hm-' + k + ': (var\\(--[a-z0-9-]+\\)|color-mix\\(in srgb, var\\(--[a-z-]+\\) \\d+%, var\\(--[a-z0-9-]+\\)\\));').test(hmTokens)
+        && new RegExp('\\.mkt-bub\\.mkt-b-' + k + ' > circle \\{ fill: ' + (k === 'none' ? 'url\\(#mkt-hatch\\)' : 'var\\(--hm-' + k + '\\)')).test(CSS) && new RegExp('\\.mkt-map-sw\\.mkt-b-' + k + ' \\{ background: ').test(CSS))
+      && !/#[0-9a-f]{3,6}\b/i.test(hmTokens) && /\.mkt-bub\.mkt-b-none > circle \{[^}]*stroke-dasharray/.test(CSS) && /@media \(forced-colors: active\) \{\s*\.mkt-map-svg, \.mkt-map-sw \{ forced-color-adjust: none; \}/.test(CSS)
+      && /@container mktm \(max-width: 900px\)/.test(CSS) && /\.mkt-map-pick \{[^}]*min-height: 44px;/.test(CSS) && /\.mkt-map-pick:focus-visible \{ outline: 3px solid var\(--focus\);/.test(CSS) && /container: mktm \/ inline-size;/.test(CSS));
+
     /* ═══ the site's lists that name pages ═══ */
     const SM = read('sitemap-pages.xml'), LL = read('llms.txt'), RB = read('robots.txt');
     check('/market is in the static sitemap, in llms.txt\'s pages, and Sendy knows it (its tips, and its links in an answer)',
       SM.includes('<url><loc>https://sendrh.com/market</loc></url>') && /\n- \[Market Data\]\(https:\/\/sendrh\.com\/market\): /.test(LL)
       && /'\/market': \{ tips: \[/.test(SENDY) && /\|data\|market\|newpairs\|/.test(SENDY));
-    check('  ...robots.txt opens exactly the three fixed first-view reads and keeps every caller-chosen market read (search, a token, a scan, the logo proxy, another chain) shut',
-      /^Allow: \/api\/market\/chains\$$/m.test(RB) && /^Allow: \/api\/market\/chain\?key=robinhood\$$/m.test(RB) && /^Allow: \/api\/market\/tokens\?chain=robinhood\$$/m.test(RB) && /^Disallow: \/api\/$/m.test(RB) && !/^Allow: \/api\/market\/?$/m.test(RB));
+    check('  ...robots.txt opens exactly the fixed first-view reads (the bubble map\'s among them, at its default address) and keeps every caller-chosen market read (search, a token, a scan, the logo proxy, another chain, the map cut another way) shut',
+      /^Allow: \/api\/market\/heatmap\$$/m.test(RB) && /^Allow: \/api\/market\/chains\$$/m.test(RB) && /^Allow: \/api\/market\/chain\?key=robinhood\$$/m.test(RB) && /^Allow: \/api\/market\/tokens\?chain=robinhood\$$/m.test(RB) && /^Disallow: \/api\/$/m.test(RB) && !/^Allow: \/api\/market\/?$/m.test(RB));
 
     /* ═══ 2. the fixtures against the contract ═══ */
     const SRCS = ['defillama', 'l2beat', 'growthepie', 'coingecko', 'geckoterminal', 'dexscreener', 'rpc', 'site', 'robinhood', 'chainlink', 'coinlore'];   // the last two: the RWA tab's (lib's SOURCES, market.js's SRC)
@@ -1754,6 +1926,22 @@ async function runSuite() {
     check('  ...and every yes/no reading in them is true or false as read, or null with its reason', !badFact.length, badFact.slice(0, 6).join(' | '));
     check('  ...and every figure in them is an { v, src, at } object, null only with a reason', !badFig.length, badFig.slice(0, 6).join(' | '));
 
+    /* the bubble map's answer: lib/marketdata.js's own, its heatmap job run on CoinGecko's and CoinLore's answers of 2026-10-30 */
+    const HM = FIX('heatmap.json'), HMR = HM.rows, hmBad = [];
+    for (const r of HMR) for (const k of ['price', 'mcap', 'dominance', 'change24h', 'volume24h']) if (!isFig(r[k], 'heatmap.' + r.id + '.' + k)) hmBad.push(r.id + '.' + k);
+    isFig(HM.total, 'heatmap.total');
+    const hmDom = HMR.filter((r) => r.dominance.v != null).every((r) => Math.abs(r.dominance.v - (r.mcap.v / HM.total.v) * 100) < 1e-9 * Math.max(1, r.dominance.v));
+    const buidl = HMR.find((r) => r.id === 'blackrock-usd-institutional-digital-liquidity-fund');
+    check('heatmap.json: the 100 largest coins in CoinGecko\'s order (Bitcoin first and largest), every figure an { v, src, at } from CoinGecko, each dominance its market cap ÷ CoinGecko\'s total ($2.59T), 17 stablecoins, each market cap\'s CoinLore check (agreed / differs / single, with its sources), the legend\'s ten steps, the reads, the not-advice note and the sources',
+      HMR.length === 100 && HM.limit === 100 && HM.stables === true && HMR[0].id === 'bitcoin' && HMR.every((r, i) => !i || r.mcap.v <= HMR[i - 1].mcap.v) && HMR.every((r, i) => r.rank === i + 1) && !hmBad.length && HM.total.src === 'coingecko' && HM.total.v > 2.5e12
+      && hmDom && Math.abs(HMR[0].dominance.v - 59.597) < 0.01 && HMR.filter((r) => r.stable === true).length === 17 && HMR.every((r) => typeof r.stable === 'boolean') && HMR.every((r) => ['agreed', 'differs', 'single'].includes(r.check.status) && Array.isArray(r.check.sources) && Array.isArray(r.check.notes))
+      && JSON.stringify(HM.legend.map((b) => b.key)) === JSON.stringify(MM.BUCKETS.map((b) => b.key)) && Object.values(HM.reads).every((x) => x.ok === true && x.at > 1.7e12) && Object.keys(HM.reads).join() === 'coins,global,stables,coinlore'
+      && HM.notes[0] === 'Not advice, never a tip to buy. Do your own research.' && HM.sources.map((x) => x.id).join() === 'coingecko,coinlore' && HM.counts.drawn === 100 && HM.counts.down + HM.counts.up + HM.counts.flat + HM.counts.none === 100, hmBad.slice(0, 5).join(' | '));
+    check('  ...and its traps as measured: BlackRock\'s BUIDL is exactly 0% (a figure of 0, the legend\'s "0%", never "no change"), BNB is CoinGecko\'s alone (CoinLore lists it only as "Binance Coin"), HYPE\'s sources differ by their circulating supplies, a coin outside CoinLore\'s first 100 says so',
+      buidl && buidl.change24h.v === 0 && !('why' in buidl.change24h) && MM.bucketOf(buidl.change24h.v) === 'flat'
+      && /only under another name \(“Binance Coin”/.test(HMR.find((r) => r.id === 'binancecoin').check.notes.join(' ')) && HMR.find((r) => r.id === 'hyperliquid').check.status === 'differs' && /circulating supply/.test(HMR.find((r) => r.id === 'hyperliquid').check.notes[0])
+      && /CoinLore’s 100 largest coins include none with the symbol \$LTC/.test(HMR.find((r) => r.id === 'litecoin').check.notes.join(' ')));
+
     /* ═══ 3. the number words, run ═══ */
     const lift = JS.slice(JS.indexOf('/* @lift:words'), JS.indexOf('/* @lift:end */'));
     const ctx = vm.createContext({ Math, Number, String, Date, isFinite, esc: (s) => String(s) });
@@ -1768,6 +1956,34 @@ async function runSuite() {
       && F.count(965416274329945.1) === '965T' && F.count(5512186236358.09) === '5.51T' && F.count(146246726558361) === '146T' && F.count(6892115031) === '6.89B' && F.gwei(0.02014) === '0.02014 gwei' && F.amount(262043.43, 'ETH') === '262k ETH',
       [F.pct(-2.55), F.count(207510), F.amount(262043.43, 'ETH'), F.count(965416274329945.1)].join(' '));
     check('  ...and a read time says how long ago, never a guess when there is none', F.agoText(Date.now() - 5 * 60e3) === '5\u00a0min ago' && F.agoText(Date.now() - 3 * 3600e3) === '3\u00a0h ago' && F.agoText(null) === 'time not recorded' && F.utc(Date.parse('2026-10-26T17:30:00Z')) === '2026-10-26 17:30 UTC');
+
+    /* ═══ 3b. the bubble map's packing, run (the @lift:pack block): no two circles overlap, every one inside its ring, the ring as tight
+       as its circles, and the same circles always packed the same way ═══ */
+    const packSrc = JS.slice(JS.indexOf('/* @lift:pack '), JS.indexOf('/* @lift:pack-end */'));
+    const pctx = vm.createContext({ Math, Number, Error });
+    vm.runInContext(packSrc + '\nthis.pack = (rs) => { const cs = rs.map((r) => ({ r })); const R = packCircles(cs); return { R, cs: cs.map((c) => ({ x: c.x, y: c.y, r: c.r })) }; };', pctx);
+    let seed = 7; const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    const sets = {
+      'the 100 coins of heatmap.json (the radius the square root of the market cap)': HMR.map((r) => Math.sqrt(r.mcap.v)),
+      'its 83 without the stablecoins': HMR.filter((r) => !r.stable).map((r) => Math.sqrt(r.mcap.v)),
+      '100 heavy-tailed radii': Array.from({ length: 100 }, () => Math.pow(rand(), 3) * 50 + 0.5).sort((a, b) => b - a),
+      '60 equal circles': Array(60).fill(3), 'one': [5], 'two': [5, 2], 'three': [5, 4, 3],
+    };
+    const packBad = [];
+    for (const [name, rs] of Object.entries(sets)) {
+      const a = pctx.pack(rs), b = pctx.pack(rs), k = 380 / a.R;   // drawn in a 760 px square, as on a desktop
+      const cs = a.cs.map((c) => ({ x: c.x * k, y: c.y * k, r: c.r * k })), R = a.R * k;
+      let over = 0, out = 0, reach = 0;
+      for (let i = 0; i < cs.length; i++) {
+        const d = Math.hypot(cs[i].x, cs[i].y) + cs[i].r; reach = Math.max(reach, d); if (d > R + 0.5) out++;
+        for (let j = i + 1; j < cs.length; j++) if (Math.hypot(cs[i].x - cs[j].x, cs[i].y - cs[j].y) < cs[i].r + cs[j].r - 0.5) over++;
+      }
+      const same = JSON.stringify(a) === JSON.stringify(b), tight = reach > R - 0.5, finite = cs.every((c) => isFinite(c.x) && isFinite(c.y));
+      if (over || out || !same || !tight || !finite) packBad.push(name + ': ' + JSON.stringify({ over, out, same, tight, finite, R: +R.toFixed(2), reach: +reach.toFixed(2) }));
+    }
+    const pk = pctx.pack(sets[Object.keys(sets)[0]]), big = pk.cs[0];
+    check('the bubble map\'s packing (front-chain packing, then the smallest enclosing circle — written in market.js, run here): for the 100 coins, the 83 without stablecoins, 100 heavy-tailed radii, 60 equal circles and one, two and three — no two circles overlap by more than 0.5 px and every one is inside the ring (in a 760 px map), the ring touches its outermost circle, and the same circles are packed the same way every time',
+      !packBad.length && pctx.pack([]).R === 0 && big.r > pk.cs[1].r * 2, packBad.join(' | '));
 
     /* ═══ 4. the fake, against the same contract ═══ */
     const fake = await startFake(0);
@@ -1840,6 +2056,7 @@ async function runSuite() {
       ...['spy', 'gme'].map((k) => ['rwacard/rwa-token-' + k + '.json', RWACARD('rwa-token-' + k + '.json'), R.rwa.spy]),
       ['rwacard/rwa-token-tslaon.json', RWACARD('rwa-token-tslaon.json'), R.rwa.ondo], ['rwacard/rwa-token-gme-memecoin.json', RWACARD('rwa-token-gme-memecoin.json'), R.rwa.notRwa],
       ['rwacard/rwa-token-usdg.json', RWACARD('rwa-token-usdg.json'), R.rwa.notRwaStable],
+      ['heatmap.json', FIX('heatmap.json'), R.heatmap],
     ];
     /* a key lib adds only in a state the answer it is held to is not in: a failed read's reason (reads.<k>.why, Robinhood's API down) and
        chainlinkWhy beside a null chainlink (a ticker Chainlink has no feed for) — dropped from the frozen copy before the comparison when
@@ -1880,9 +2097,13 @@ async function runSuite() {
       ['the RWA row a token answer carries', fb('/api/market/token?chain=robinhood&address=' + TSLA).rwa, R.tokenTsla.rwa],
       ['the RWA tokens, sorted and filtered by the fake', fb('/api/market/rwa?view=tokens&sort=tvl&dir=asc&kind=stock'), Object.assign({}, R.rwa.tokensStock, { rows: R.rwa.tokens.rows })], ['Top RWAs, filtered by the fake', fb('/api/market/rwa?issuer=ondo'), Object.assign({}, R.rwa.assetsOndo, { rows: R.rwa.assets.rows })],
       ['connected tokens, sorted by the fake', fb('/api/market/rwa?view=connected&sort=volume'), R.rwa.connected], ['the stablecoins, sorted by the fake', fb('/api/market/rwa?view=stables&sort=liquidity'), R.rwa.stables],
-      ['a stablecoin\'s RWA 404', fb('/api/market/rwa/token?address=' + USDG), R.rwa.notRwaStable]);
+      ['a stablecoin\'s RWA 404', fb('/api/market/rwa/token?address=' + USDG), R.rwa.notRwaStable],
+      ['the bubble map, cut by the fake (top 50, stablecoins left out)', fb('/api/market/heatmap?limit=50&stables=0'), R.heatmapCut]);
     const fdrift = fakes.map(([n, a, b]) => [n, shapeDiff(a, b)]).filter(([, d]) => d.length);
-    check('  ...and so does every answer the fake builds for itself (a chain with no history, a token from the list, a custom window, an unavailable token, a search with Dexscreener down, an RWA token\'s facts, the RWA lists sorted and filtered)', !fdrift.length && R.unavailable.unavailable === true && typeof R.searchDown.why === 'string',
+    check('  ...the bubble map\'s answer on that database is the fixture\'s, coin for coin (the same 100 in the same order, the same figures, the same checks), and cut the same way by the route and by the fake',
+      JSON.stringify(R.heatmap.rows.map((r) => [r.id, r.mcap.v, r.change24h.v, r.stable, r.check.status])) === JSON.stringify(FIX('heatmap.json').rows.map((r) => [r.id, r.mcap.v, r.change24h.v, r.stable, r.check.status]))
+      && JSON.stringify(R.heatmapCut.rows.map((r) => r.id)) === JSON.stringify(fb('/api/market/heatmap?limit=50&stables=0').rows.map((r) => r.id)) && R.heatmapCut.rows.length === 40 && R.heatmapCut.counts.drawn === 40);
+    check('  ...and so does every answer the fake builds for itself (a chain with no history, a token from the list, a custom window, an unavailable token, a search with Dexscreener down, an RWA token\'s facts, the RWA lists sorted and filtered, the bubble map cut)', !fdrift.length && R.unavailable.unavailable === true && typeof R.searchDown.why === 'string',
       fdrift.map(([n, d]) => n + ': ' + d.slice(0, 4).join('; ')).join(' | '));
     check('  ...market.js knows which chains the server reads a token on, and which the Scanner reads, from the server\'s own lists',
       new RegExp("const READS = \\[" + MD.GT_TRACKED.map((k) => "'" + k + "'").join(', ') + "\\];").test(code) && new RegExp("const SCANS = \\[" + MD.SCAN_CHAINS.map((k) => "'" + k + "'").join(', ') + "\\];").test(code));
