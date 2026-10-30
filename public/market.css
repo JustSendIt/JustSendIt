@@ -308,27 +308,30 @@ body:has(#mkt-tchain-p:not([hidden])) > .nav { z-index: 300; }
 .mkt-rwa .mkt-table code, .mkt-kv code { overflow-wrap: anywhere; }
 
 /* ---------- the whole crypto market, last 24 h: the bubble map (market.js drawMap) ----------
-   One SVG at the box's own pixel size (so its labels keep the text floor): a big circle packed with a bubble per coin, its area
-   the coin's market cap, its fill the coin's 24 h change in the legend's steps. The steps are mixes of the site's own tokens —
-   deeper for a bigger move, as in the owner's picture — and market.js gives each step's labels the ink that reads best on it
-   (the higher contrast of --text and --ink-1, measured on the fill as drawn). A coin with no 24 h change is hatched and dashed,
-   never a colour of its own. The map is square: the section's width on a phone, at most min(80vh, 760px) on a desktop. */
+   One SVG at the box's own pixel size (so its labels keep the text floor): a bubble per coin, bigger for a bigger market cap on a
+   compressed scale and never smaller than its ticker needs, so every ticker shows; its fill the coin's 24 h change in the
+   legend's steps. The steps are the site's own tokens and mixes of them — BRIGHTER for a bigger move, on both sides (owner,
+   2026-10-30: "make the biggest movers be brighter green instead of the shades getting darker get lighter as the percentages go
+   higher"): a dim green or red for a small move, --green-bright and a light red (--red with --red-soft) for the biggest — and
+   market.js gives each step's labels the ink that reads best on it (the higher contrast of --text and --ink-1, measured on the
+   fill as drawn). A coin with no 24 h change is hatched and dashed, never a colour of its own. The map is as wide as its box: one
+   big circle when the box can hold every bubble at that size, else a column as tall as it needs (the page scrolls). */
 .mkt-map {
-  --hm-up10: color-mix(in srgb, var(--green-dark) 50%, var(--ink));
-  --hm-up5: color-mix(in srgb, var(--green-dark) 72%, var(--ink));
+  --hm-up10: var(--green-bright);
+  --hm-up5: var(--green);
   --hm-up2: var(--green-dark);
-  --hm-up0: var(--green);
+  --hm-up0: color-mix(in srgb, var(--green-dark) 55%, var(--ink));
   --hm-flat: var(--text-mute);
-  --hm-dn0: color-mix(in srgb, var(--red) 70%, var(--text));
-  --hm-dn2: var(--red);
-  --hm-dn5: color-mix(in srgb, var(--red) 62%, var(--ink));
-  --hm-dn10: color-mix(in srgb, var(--red) 40%, var(--ink));
+  --hm-dn0: color-mix(in srgb, var(--red) 45%, var(--ink));
+  --hm-dn2: color-mix(in srgb, var(--red) 68%, var(--ink));
+  --hm-dn5: var(--red);
+  --hm-dn10: color-mix(in srgb, var(--red) 40%, var(--red-soft));
   --hm-none: var(--ink-3);
   --hm-edge: color-mix(in srgb, var(--text) 42%, transparent);
   margin: 0 0 1.4rem; padding: 0.9rem; border-radius: 18px; background: var(--ink-2); border: 1px solid var(--ink-4); container: mktm / inline-size;
 }
 @supports not (color: color-mix(in srgb, red 50%, transparent)) {
-  .mkt-map { --hm-up10: #415002; --hm-up5: #5b6f01; --hm-dn0: #fb8a86; --hm-dn5: #a03b3b; --hm-dn10: #692828; --hm-edge: rgba(242,246,236,0.42); }
+  .mkt-map { --hm-up0: #485702; --hm-dn0: #762d2c; --hm-dn2: #af4141; --hm-dn10: #ff9191; --hm-edge: rgba(242,246,236,0.42); }
 }
 section.mkt-map { padding: 0.9rem; }   /* styles.css pads every <section> like a home-page band */
 .mkt-map-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; }
@@ -341,7 +344,8 @@ section.mkt-map { padding: 0.9rem; }   /* styles.css pads every <section> like a
 .mkt-map-cap { margin: 0.1rem 0 0.8rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.86rem); line-height: 1.45; overflow-wrap: anywhere; }
 .mkt-map-cap b { color: var(--text); }
 .mkt-map-stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.8rem; align-items: start; }
-/* a phone: the map runs to the card's own edges (a circle leaves its corners empty), so it is as wide as the screen allows */
+/* a phone: the map runs to the card's own edges (its column keeps 2px inside them), so it is as wide as the screen allows and every
+   ticker has the most room it can */
 @container mktm (max-width: 520px) { .mkt-map-fig { margin-inline: -0.85rem; } .mkt-map-body.is-failed .mkt-map-fig { margin-inline: 0; } }
 .mkt-map-legend { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.3rem 0.9rem; }
 .mkt-map-legend > li { display: inline-flex; align-items: center; gap: 0.4rem; min-width: 0; font-size: max(var(--text-floor), 0.85rem); line-height: 1.3; font-variant-numeric: tabular-nums; }
@@ -414,10 +418,11 @@ section.mkt-map { padding: 0.9rem; }   /* styles.css pads every <section> like a
   .mkt-map .mkt-table tbody th { flex: 1 1 60%; }
   .mkt-map .mkt-table td::before { content: attr(data-l) ': '; font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--text-mute); font-size: max(var(--text-floor), 0.72rem); }
 }
-/* a wide box: the legend beside the map, as in the owner's picture (top left of the circle), the two centred together; the map as
-   large as the screen allows (market.js: at most 760px, and 80% of the screen's height) */
-@container mktm (min-width: 760px) {
-  .mkt-map-stage { grid-template-columns: max-content minmax(0, 760px); justify-content: center; column-gap: 1.6rem; }
+/* a very wide box: the legend beside the map, as in the owner's picture (top left of the circle), and the map as wide as the rest
+   (still wide enough for the ring of every ticker at the floor, which needs about 1200px); anywhere narrower the legend is a row
+   over the map, so the map has the section's whole width */
+@container mktm (min-width: 1600px) {
+  .mkt-map-stage { grid-template-columns: max-content minmax(0, 1fr); column-gap: 1.6rem; }
   .mkt-map-legend { flex-direction: column; flex-wrap: nowrap; }
   .mkt-map-key { padding-top: 0.4rem; }
 }

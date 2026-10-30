@@ -5678,8 +5678,8 @@
  ],
  "definitions": {
   "coins": "The 100 largest coins by market cap on CoinGecko, on every chain, in CoinGecko's order; rank is CoinGecko's market-cap rank.",
-  "bubble": "Bubble size: market cap — each bubble's area is the coin's market cap, so a coin twice the size has twice the area. A coin with no market cap is listed and not drawn.",
-  "colour": "Colour: the 24 h price change, in the legend's nine steps; a coin CoinGecko gives no change for is outlined and hatched (\"no 24 h change given\"), never drawn as 0%.",
+  "bubble": "Bigger bubble = bigger market cap, on a compressed scale (a bubble's area grows with the square root of its market cap) so every ticker fits; a small coin's bubble is as small as its ticker allows, so the smallest ones do not compare by size — the exact share of the market is the Dominance figure in each coin's tooltip, card and the list. A coin with no market cap is listed and not drawn.",
+  "colour": "Colour: the 24 h price change, in the legend's nine steps — brighter for a bigger move, up or down; a coin CoinGecko gives no change for is outlined and hatched (\"no 24 h change given\"), never drawn as 0%.",
   "change24h": "CoinGecko's change in the coin's US-dollar price over the last 24 hours, in percent (−5.27 means down 5.27%); null with why when CoinGecko gives none, never 0.",
   "dominance": "The coin's market cap as a share of CoinGecko's total market cap of every coin it lists, in percent (59.6 means 59.6%; its /global read, every 30 minutes, which the label names). Worked out by this site from CoinGecko's two figures, and as old as the older of them (its at); none when the market cap is not CoinGecko's own, or the total and the coins were read more than 2 hours apart.",
   "volume24h": "CoinGecko's trading volume over the last 24 hours, every market it tracks.",

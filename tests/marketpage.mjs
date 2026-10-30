@@ -1450,7 +1450,11 @@ async function browserWalk() {
           texts: [...g.querySelectorAll('text')].map((t) => { const bb = t.getBBox(); return { t: t.textContent, fs: parseFloat(getComputedStyle(t).fontSize), fill: getComputedStyle(t).fill, x0: bb.x, y0: bb.y + bb.height * 0.2, x1: bb.x + bb.width, y1: bb.y + bb.height * 0.8 }; }) }; });
       const texts = bubs.flatMap((x) => x.texts.map((t) => Object.assign({ id: x.id, cx: x.cx, cy: x.cy, r: x.r, bf: x.fill }, t)));
       const inC = (t, px, py) => Math.hypot(px - t.cx, py - t.cy) <= t.r + 1;
+      let over = 0; for (let i = 0; i < bubs.length; i++) for (let j = i + 1; j < bubs.length; j++) if (Math.hypot(bubs[i].cx - bubs[j].cx, bubs[i].cy - bubs[j].cy) < bubs[i].r + bubs[j].r - 0.5) over++;
+      const sW = +svg.getAttribute('width'), sH = +svg.getAttribute('height'), layout = svg.getAttribute('data-layout'), ring = svg.querySelector('.mkt-map-ring');
+      const outBox = bubs.filter((x) => (layout === 'ring' ? Math.hypot(x.cx - sW / 2, x.cy - sW / 2) + x.r > sW / 2 - 1 : x.cx - x.r < -0.5 || x.cx + x.r > sW + 0.5 || x.cy - x.r < -0.5 || x.cy + x.r > sH + 0.5)).map((x) => x.id).slice(0, 4);
       return { n: bubs.length, biggest: bubs.reduce((a, b) => (b.r > a.r ? b : a)).id, buckets: Object.fromEntries(bubs.map((x) => [x.id, x.b])), titles: bubs.every((x) => x.title),
+        first: Object.fromEntries(bubs.map((x) => [x.id, x.texts.length ? x.texts[0].t : null])), over, outBox, layout, ringDrawn: !!ring, svgH: sH, figW: fig.clientWidth, sw: Object.assign({}, sw),
         wrongFill: bubs.filter((x) => x.b !== 'none' && (!sw[x.b] || x.fill !== sw[x.b])).map((x) => x.id + ':' + x.fill + '≠' + sw[x.b]).slice(0, 4),
         small: texts.filter((t) => t.fs < floor - 0.5).map((t) => t.id + ':' + t.t + '@' + t.fs).slice(0, 4), labelled: new Set(texts.map((t) => t.id)).size,
         outside: texts.filter((t) => ![[t.x0, t.y0], [t.x1, t.y0], [t.x0, t.y1], [t.x1, t.y1]].every(([px, py]) => inC(t, px, py))).map((t) => t.id + ':' + t.t).slice(0, 4),
@@ -1459,21 +1463,32 @@ async function browserWalk() {
     })()`;
     const mapReady = (n) => until('document.querySelectorAll("#mkt-map svg.mkt-map-svg .mkt-bub").length' + (n == null ? ' > 0' : ' === ' + n));
     const HMF = FIX('heatmap.json').rows, wantB = Object.fromEntries(HMF.map((r) => [r.id, MM.bucketOf(r.change24h.v)]));
-    await step('the bubble map at 320, 390, 1280 and 1920 px', async () => {
+    const SYM = Object.fromEntries(HMF.map((r) => [r.id, r.symbol || r.name || r.id]));
+    // a swatch's luminance from its colour as computed: rgb(…) for a token, color(srgb …) for a color-mix()
+    const swLum = (s) => { const m = /rgba?\(\s*([\d.]+)[ ,]+([\d.]+)[ ,]+([\d.]+)/.exec(s || ''), c = /color\(srgb\s+([\d.e-]+)\s+([\d.e-]+)\s+([\d.e-]+)/.exec(s || '');
+      const rgb = m ? [+m[1], +m[2], +m[3]] : c ? [c[1] * 255, c[2] * 255, c[3] * 255] : null; if (!rgb) return NaN;
+      const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(rgb[0]) + 0.7152 * f(rgb[1]) + 0.0722 * f(rgb[2]); };
+    await step('the bubble map at 320, 390, 768, 1024, 1280 and 1920 px', async () => {
       const fits = [];
-      for (const w of [320, 390, 1280, 1920]) {
+      for (const w of [320, 390, 768, 1024, 1280, 1920]) {
         await go('/market', w); await mapReady(100); await sleep(250);
         fits.push({ w, m: await ev(MAPFIT), l: await ev(LAYOUT), cap: await textOf('#mkt-map-cap'), legend: await ev('[...document.querySelectorAll("#mkt-map-legend li")].map((li) => li.textContent)') });
       }
-      const bad = fits.filter(({ w, m, l }) => !m || m.n !== 100 || m.biggest !== 'bitcoin' || !m.titles || m.wrongFill.length || m.small.length || m.outside.length || m.lowContrast.length || m.labelled < 5
-        || Object.entries(wantB).some(([id, b]) => m.buckets[id] !== b) || l.sw > l.iw || l.out.length || l.small.length || m.role !== 'img'
-        || (w < 768 ? m.svgW < m.iw - 2 * 16 - 6 : m.svgW > 760 || m.svgW > m.ih * 0.8 + 1 || m.svgW < 600));
+      const unlabelled = (m) => Object.entries(SYM).filter(([id, sym]) => m.first[id] !== sym).map(([id]) => id + ':' + m.first[id]);
+      const bad = fits.filter(({ w, m, l }) => !m || m.n !== 100 || m.biggest !== 'bitcoin' || !m.titles || m.wrongFill.length || m.small.length || m.outside.length || m.lowContrast.length || m.labelled !== m.n || unlabelled(m).length
+        || m.over || m.outBox.length || Object.entries(wantB).some(([id, b]) => m.buckets[id] !== b) || l.sw > l.iw || l.out.length || l.small.length || m.role !== 'img'
+        || Math.abs(m.svgW - m.figW) > 1 || (m.layout === 'ring') !== m.ringDrawn || (m.layout === 'ring' && m.svgH !== m.svgW)
+        || (w < 768 && (m.svgW < m.iw - 2 * 16 - 6 || m.layout !== 'column')) || (w >= 1280 && (m.layout !== 'ring' || m.svgW < 1100)));
       const f = fits.find((x) => x.w === 1280) || {};
-      check('the bubble map in a real browser, at 320, 390, 1280 and 1920 px: 100 bubbles, Bitcoin the largest, each coloured by its 24 h step (its fill the legend swatch\'s, from the theme), labels only inside their bubbles and never under the text floor, each in an ink of 4.5:1 or more on its fill, every bubble a <title>; the map as wide as the screen on a phone and at most min(80vh, 760 px) on a desktop; no sideways scroll, nothing outside the page\'s column',
-        fits.length === 4 && !bad.length, JSON.stringify(bad.map((x) => ({ w: x.w, m: x.m && Object.assign({}, x.m, { buckets: undefined }), l: x.l }))).slice(0, 900));
-      check('  ...its words: BTC "$76,894", "Dominance: 59.6%", "▼ −5.27%"; the summary a screen reader hears ("Bitcoin is 59.6% of the market, down 5.3% in 24 h … 88 down, 11 up, 1 unchanged"); the caption (total market cap $2.59T from CoinGecko, how many are down and up, what size and colour mean, not advice); the legend\'s ten steps with their counts',
-        f.m && f.m.btc.join('|') === 'BTC|$76,894|Dominance: 59.6%|▼ −5.27%' && /^Bubble map of the 100 largest coins by market cap: Bitcoin is 59\.6% of the market, down 5\.3% in 24 h; Ethereum is 10\.4% of the market, down 6\.3% in 24 h; 88 down, 11 up, 1 unchanged\./.test(f.m.aria)
-        && /^Total market cap \$2\.59T \(CoinGecko · .+\) · Over 24 h, 88 of these 100 coins are down, 11 up, 1 unchanged · Bubble size: market cap\. Colour: 24 h price change\. Not advice, never a tip to buy\.$/.test(f.cap)
+      check('the bubble map in a real browser, at 320, 390, 768, 1024, 1280 and 1920 px (owner, round 2: "Show all the tickers in all of the bubbles"): 100 bubbles, EVERY one with its ticker as its first line, none under the text floor and none wider than its bubble at its height, each in an ink of 4.5:1 or more on its fill; Bitcoin the largest; no two bubbles overlapping and none outside the ring or the column\'s walls; each coloured by its 24 h step (its fill the legend swatch\'s, from the theme), every bubble a <title>; the map as wide as its box (no 760 px cap) — the ring from 1280 px (as wide as the section), a column on a phone (as wide as the screen); no sideways scroll, nothing outside the page\'s column',
+        fits.length === 6 && !bad.length, JSON.stringify(bad.map((x) => ({ w: x.w, un: x.m && unlabelled(x.m).slice(0, 4), m: x.m && Object.assign({}, x.m, { buckets: undefined, first: undefined, sw: undefined }), l: x.l }))).slice(0, 900));
+      const lums = fits.filter((x) => x.m).map((x) => [x.w, ['up0', 'up2', 'up5', 'up10', 'dn0', 'dn2', 'dn5', 'dn10'].map((k) => swLum(x.m.sw[k]))]);
+      const rises = (v) => v.every((y, i) => isFinite(y) && (!i || y > v[i - 1]));
+      check('  ...brighter for a bigger move (owner, round 2: "make the biggest movers be brighter green instead of the shades getting darker"): the legend\'s swatches, as drawn, rise in luminance with the step on each side — >0% < >2% < >5% < >10%, and <0% < <−2% < <−5% < <−10% — at every width; the map\'s layout at each width: ' + fits.map((x) => x.w + ' ' + (x.m && x.m.layout) + ' ' + (x.m && x.m.svgW + '×' + x.m.svgH)).join(', '),
+        lums.length === 6 && lums.every(([, v]) => rises(v.slice(0, 4)) && rises(v.slice(4))), JSON.stringify(lums.map(([w, v]) => [w, v.map((y) => +y.toFixed(3))])));
+      check('  ...its words: BTC "$76,894", "Dominance: 59.6%", "▼ −5.27%"; the summary a screen reader hears ("Bitcoin is 59.6% of the market, down 5.3% in 24 h … 88 down, 11 up, 1 unchanged", and that the sizes are on a compressed scale); the caption (total market cap $2.59T from CoinGecko, how many are down and up, what size and colour mean — a compressed scale, so the smallest do not compare by size and Dominance is the exact share; brighter for a bigger move — not advice); the legend\'s ten steps with their counts',
+        f.m && f.m.btc.join('|') === 'BTC|$76,894|Dominance: 59.6%|▼ −5.27%' && /^Bubble map of the 100 largest coins by market cap: Bitcoin is 59\.6% of the market, down 5\.3% in 24 h; Ethereum is 10\.4% of the market, down 6\.3% in 24 h; 88 down, 11 up, 1 unchanged\. The bubbles’ sizes are on a compressed scale, so every ticker fits; every coin and its exact share of the market is in the list under the map\.$/.test(f.m.aria)
+        && /^Total market cap \$2\.59T \(CoinGecko · .+\) · Over 24 h, 88 of these 100 coins are down, 11 up, 1 unchanged · Bubble size: market cap, on a compressed scale so every ticker fits \(the smallest do not compare by size; Dominance is the exact share\)\. Colour: 24 h price change, brighter for a bigger move\. Not advice, never a tip to buy\.$/.test(f.cap)
         && f.legend.length === 10 && f.legend[0] === '>10% (1)' && f.legend[4] === '0% (1)' && f.legend[8] === '<−10% (36)' && f.legend[9] === 'no 24 h change given (0)', JSON.stringify({ btc: f.m && f.m.btc, aria: f.m && f.m.aria, cap: f.cap, legend: f.legend }).slice(0, 700));
     });
     await step('the bubble map: its choices, the list, the tooltip and the card', async () => {
@@ -1592,7 +1607,8 @@ async function browserWalk() {
       await ev('(() => { const f = document.getElementById("mkt-map-fig").getBoundingClientRect(); window.scrollBy({ top: f.top + 330, behavior: "instant" }); return true; })()'); await sleep(200);
       const navB = await ev('document.querySelector("nav.nav").getBoundingClientRect().bottom'), high = await pick(navB + 8, navB + 90); await hover([high.x, high.y]); const tHigh = await ev(TIPBOX); await hover([5, 5]);
       await go('/market', 320, 568); await mapReady(100);
-      await ev('document.getElementById("mkt-map-fig").scrollIntoView({ block: "center", behavior: "instant" }), true'); await sleep(200);
+      // on a phone the map is a column taller than the screen: Bitcoin's bubble (at its top) is brought to the middle of the screen
+      await ev('document.querySelector("#mkt-map [data-coin=bitcoin] circle").scrollIntoView({ block: "center", behavior: "instant" }), true'); await sleep(200);
       const ph = await centre('bitcoin'); await hover(ph); const tPh = await ev(TIPBOX); await hover([2, 2]);
       const inScreen = (t) => t.shown && t.bottom <= t.ih + 1 && t.top >= t.nav - 1 && t.left >= -1 && t.right <= t.iw + 1;
       check('  ...the tooltip stays on the part of the screen that can be seen: hovering low on the screen (' + (low && low.id) + ') it opens above the pointer, not off the bottom; hovering just under the sticky nav (' + (high && high.id) + ') it stays below the nav; at 320 px, with no room beside the pointer, it sits above or below it, never over it',
@@ -1844,13 +1860,18 @@ async function runSuite() {
     let bucketOK = false; try { const f = vm.runInNewContext('(' + bucketJS + ')'); bucketOK = [null, NaN, 0, 0.0001, 2, 2.01, 5, 5.01, 10, 10.01, 99, -0.0001, -2, -2.01, -5, -5.01, -10, -10.01, -60].every((x) => f(x) === MM.bucketOf(x)); } catch {}
     check('  ...market.js reads it from /api/market/heatmap alone (getJSON, one answer: Top 50 and the stablecoins are cut from it here), and its legend and steps are lib/marketmap.js\'s — the same nine steps and "no 24 h change given", the same edges (exactly 10% is ">5%", exactly 0 is "0%", no change is never 0%)',
       /const j = await getJSON\('\/api\/market\/heatmap'\);/.test(code) && (code.match(/\/api\/market\/heatmap/g) || []).length === 4 && legendOK && bucketOK, JSON.stringify({ legendOK, bucketOK }));
-    check('  ...one SVG, packed and drawn here — no library, no CDN: the front-chain packing and the smallest enclosing circle in the @lift:pack block, the box\'s own pixel size, one role="img" with a summary in words (not 100 tab stops), each bubble a <title>; its area the market cap (the radius the square root), its colour the step\'s class',
+    check('  ...one SVG, sized, packed and drawn here — no library, no CDN: the ring (front-chain packing and the smallest enclosing circle, the @lift:pack block) or the column (the @lift:column block), at the box\'s own pixel width with no cap, one role="img" with a summary in words (not 100 tab stops), each bubble a <title>; a bigger market cap a bigger bubble on a compressed scale (its radius the fourth root, so its area the square root) and never under its ticker\'s minimum at the floor, its colour the step\'s class',
       /\/\* @lift:pack /.test(JS) && /\/\* @lift:pack-end \*\//.test(JS) && /function packCircles\(cs\)/.test(code) && /function packEnclose\(cs\)/.test(code)
-      && /const svg = el\('svg', \{ width: size, height: size, viewBox: '0 0 ' \+ size \+ ' ' \+ size, class: 'mkt-map-svg', role: 'img', 'aria-label': mapSummary\(rows, c\) \}\);/.test(code)
-      && /const top = val\(shown\[0\]\.mcap\), unit = \(r\) => Math\.sqrt\(val\(r\.mcap\) \/ top\) \* 100;/.test(code) && /class: 'mkt-bub mkt-b-' \+ b/.test(code) && /const ti = el\('title', \{\}, g\); ti\.textContent = tipWords\(row\);/.test(code)
+      && /\/\* @lift:column /.test(JS) && /\/\* @lift:column-end \*\//.test(JS) && /function packColumn\(cs, W\)/.test(code) && /function mapLayout\(items, W, gap\)/.test(code)
+      && /const svg = el\('svg', \{ width: L\.w, height: L\.h, viewBox: '0 0 ' \+ L\.w \+ ' ' \+ L\.h, class: 'mkt-map-svg', 'data-layout': L\.ring \? 'ring' : 'column', role: 'img', 'aria-label': mapSummary\(rows, c\) \}\);/.test(code)
+      && /const mapSize = \(\) => Math\.max\(160, Math\.floor\(mapEl\.fig\.clientWidth \|\| 0\)\);/.test(code) && !/innerHeight \* 0\.8|760\)/.test(code.slice(code.indexOf('const mapSize'), code.indexOf('function mapSummary(')))
+      && /const L = mapLayout\(shown\.map\(\(r\) => \(\{ need: mapNeed\(r, floor\), f: Math\.pow\(val\(r\.mcap\) \/ top, 0\.25\) \}\)\), W, gap\);/.test(code)
+      && /const make = \(k\) => items\.map\(\(it, i\) => \(\{ r: Math\.max\(Math\.min\(it\.need, wide\), k \* it\.f\) \+ pad, i \}\)\)/.test(code)
+      && /class: 'mkt-bub mkt-b-' \+ b/.test(code) && /const ti = el\('title', \{\}, g\); ti\.textContent = tipWords\(row\);/.test(code)
       && !/tabindex|'tabIndex'/.test(code.slice(code.indexOf('function drawMap('), code.indexOf('function tipWords('))) && !/<script[^>]+src="https?:/.test(H) && !/\bd3\./.test(code));
-    check('  ...a label only where it fits at or above the text floor (measured in px, written as max(var(--text-floor), …)): the symbol first, then the price and the change, "Dominance: …" on the three largest; its ink the better contrast of --text and --ink-1 on the fill as drawn',
-      /function fitLabel\(r, lines, floor\)/.test(code) && /let s = Math\.max\(r \* 0\.36, floor\);/.test(code) && /if \(s < floor\) return null;/.test(code) && /style: 'font-size: max\(var\(--text-floor\), ' \+ l\.z\.toFixed\(2\) \+ 'px\); font-weight: ' \+ l\.w \+ '; fill: ' \+ ink\[b\] \}/.test(code)
+    check('  ...every bubble its ticker, at or above the text floor (measured in px, written as max(var(--text-floor), …)): a bubble\'s minimum is the radius at which its symbol alone fits by fitLabel\'s own rule, measured in its font and weight, and fitLabel tries the floor itself before it gives up; then the price and the change, "Dominance: …" on the three largest, where they fit; its ink the better contrast of --text and --ink-1 on the fill as drawn',
+      /function fitLabel\(r, lines, floor\)/.test(code) && /let s = Math\.max\(r \* 0\.36, floor\);/.test(code) && /if \(s <= floor\) return null;\n\s*s = Math\.max\(floor, s \* room \* 0\.99\);/.test(code)
+      && /function mapNeed\(row, floor\) \{\n\s*const w = textW\(symOf\(row\), floor, 800\), e = floor \* 0\.52;\n\s*return Math\.max\(Math\.sqrt\(\(w \/ 1\.72\) \* \(w \/ 1\.72\) \+ e \* e\), \(floor \* 1\.04\) \/ 1\.62\) \+ 1;/.test(code) && /const sym = \{ t: symOf\(row\), w: 800 \}/.test(code) && /style: 'font-size: max\(var\(--text-floor\), ' \+ l\.z\.toFixed\(2\) \+ 'px\); font-weight: ' \+ l\.w \+ '; fill: ' \+ ink\[b\] \}/.test(code)
       && /'Dominance: ' \+ dm/.test(code) && /const bigIds = new Set\(shown\.slice\(0, 3\)\.map\(\(r\) => r\.id\)\);/.test(code) && /out\[k\] = !fill \|\| contrast\(fill, light\) >= contrast\(fill, dark\) \? 'var\(--text\)' : 'var\(--ink-1\)';/.test(code));
     check('  ...the tooltip (symbol, name, price, market cap, dominance, 24 h change, 24 h volume, source and age, the CoinLore check chip) on the pointer; a press, or a list row\'s button, opens a card under the map with the same and "View on CoinGecko ↗" (a plain link out, rel="noopener"), its heading focused; Escape or ✕ Close shuts it',
       /function tipHTML\(r\)/.test(code) && /row\('Price', r\.price, mapPrice\) \+ row\('Market cap', r\.mcap, usd\) \+ row\('Dominance', r\.dominance, domText\) \+ row\('24 h change', r\.change24h, \(x\) => pct\(x\)\) \+ row\('24 h volume', r\.volume24h, usd\)/.test(code) && /srcLine\(fig\(r\.mcap\)\) \+ '<\/span> ' \+ mapChk\(r\)/.test(code)
@@ -1861,11 +1882,25 @@ async function runSuite() {
       && /const MAP_EVERY = 10 \* 60e3;/.test(code) && /document\.visibilityState === 'visible' && MAP\.shown/.test(code) && /new ResizeObserver\(reMap\)\.observe\(mapEl\.fig\)/.test(code) && /document\.fonts\.ready\.then/.test(code)
       && /const first = !old && fresh && !reduced\(\);/.test(code) && /@media \(prefers-reduced-motion: reduce\) \{ \.mkt-map-svg\.is-in \{ transition: none; \} \}/.test(CSS) && /html\.motion-off \.mkt-map-svg\.is-in \{ transition: none; \}/.test(CSS));
     const hmTokens = (CSS.match(/\.mkt-map \{\n([\s\S]*?)\n\s*margin:/) || [])[1] || '';
-    check('  ...its colours are the site\'s own tokens (mixes of --green, --green-dark, --red, --text-mute and the inks, deeper for a bigger move), one rule per step for the bubbles and the legend\'s swatches; the step with no change is hatched and dashed; forced colours keep the map\'s colours with system outlines; the list folds into cards in a narrow box; its buttons are 44 px with a focus ring',
+    check('  ...its colours are the site\'s own tokens and mixes of them — BRIGHTER for a bigger move on both sides (owner, 2026-10-30: "make the biggest movers be brighter green"): a dim mix of --green-dark or --red with the ink for a small move, --green / --red for >5%, --green-bright and --red lightened with --red-soft for the biggest; the @supports fallback has the mixes\' hexes — one rule per step for the bubbles and the legend\'s swatches; the step with no change is hatched and dashed; forced colours keep the map\'s colours with system outlines; the list folds into cards in a narrow box; its buttons are 44 px with a focus ring',
       ['up10', 'up5', 'up2', 'up0', 'flat', 'dn0', 'dn2', 'dn5', 'dn10', 'none'].every((k) => new RegExp('--hm-' + k + ': (var\\(--[a-z0-9-]+\\)|color-mix\\(in srgb, var\\(--[a-z-]+\\) \\d+%, var\\(--[a-z0-9-]+\\)\\));').test(hmTokens)
         && new RegExp('\\.mkt-bub\\.mkt-b-' + k + ' > circle \\{ fill: ' + (k === 'none' ? 'url\\(#mkt-hatch\\)' : 'var\\(--hm-' + k + '\\)')).test(CSS) && new RegExp('\\.mkt-map-sw\\.mkt-b-' + k + ' \\{ background: ').test(CSS))
+      && /--hm-up10: var\(--green-bright\);/.test(hmTokens) && /--hm-up5: var\(--green\);/.test(hmTokens) && /--hm-up2: var\(--green-dark\);/.test(hmTokens) && /--hm-up0: color-mix\(in srgb, var\(--green-dark\) \d+%, var\(--ink\)\);/.test(hmTokens)
+      && /--hm-dn0: color-mix\(in srgb, var\(--red\) \d+%, var\(--ink\)\);/.test(hmTokens) && /--hm-dn2: color-mix\(in srgb, var\(--red\) \d+%, var\(--ink\)\);/.test(hmTokens) && /--hm-dn5: var\(--red\);/.test(hmTokens) && /--hm-dn10: color-mix\(in srgb, var\(--red\) \d+%, var\(--red-soft\)\);/.test(hmTokens)
+      && /@supports not \(color: color-mix\(in srgb, red 50%, transparent\)\) \{\n\s*\.mkt-map \{ --hm-up0: #[0-9a-f]{6}; --hm-dn0: #[0-9a-f]{6}; --hm-dn2: #[0-9a-f]{6}; --hm-dn10: #[0-9a-f]{6};/.test(CSS) && !/deeper for a bigger move/.test(CSS)
       && !/#[0-9a-f]{3,6}\b/i.test(hmTokens) && /\.mkt-bub\.mkt-b-none > circle \{[^}]*stroke-dasharray/.test(CSS) && /@media \(forced-colors: active\) \{\s*\.mkt-map-svg, \.mkt-map-sw \{ forced-color-adjust: none; \}/.test(CSS)
       && /@container mktm \(max-width: 900px\)/.test(CSS) && /\.mkt-map-pick \{[^}]*min-height: 44px;/.test(CSS) && /\.mkt-map-pick:focus-visible \{ outline: 3px solid var\(--focus\);/.test(CSS) && /container: mktm \/ inline-size;/.test(CSS));
+
+    // the @supports fallback's hexes are the mixes themselves, worked out from styles.css's tokens (within one step of 255)
+    const STY = read('styles.css'), tok = (k) => { const m = new RegExp('--' + k + ':\\s*#([0-9a-f]{6})', 'i').exec(STY); return m ? [0, 2, 4].map((i) => parseInt(m[1].slice(i, i + 2), 16)) : null; };
+    const hmFb = (CSS.match(/@supports not \(color: color-mix\(in srgb, red 50%, transparent\)\) \{\n\s*\.mkt-map \{([^}]*)\}/) || [])[1] || '';
+    const mixOK = ['up0', 'dn0', 'dn2', 'dn10'].map((k) => {
+      const m = new RegExp('--hm-' + k + ': color-mix\\(in srgb, var\\(--([a-z-]+)\\) (\\d+)%, var\\(--([a-z0-9-]+)\\)\\);').exec(hmTokens), h = new RegExp('--hm-' + k + ': #([0-9a-f]{6});').exec(hmFb);
+      if (!m || !h || !tok(m[1]) || !tok(m[3])) return [k, false];
+      const want = tok(m[1]).map((v, i) => v * (m[2] / 100) + tok(m[3])[i] * (1 - m[2] / 100)), got = [0, 2, 4].map((i) => parseInt(h[1].slice(i, i + 2), 16));
+      return [k, want.every((v, i) => Math.abs(v - got[i]) <= 1), '#' + h[1]];
+    });
+    check('  ...and the fallback for a browser without color-mix() draws the same steps: its hexes are the mixes of styles.css\'s tokens', mixOK.every((x) => x[1]), JSON.stringify(mixOK));
 
     /* ═══ the site's lists that name pages ═══ */
     const SM = read('sitemap-pages.xml'), LL = read('llms.txt'), RB = read('robots.txt');
@@ -2054,8 +2089,10 @@ async function runSuite() {
     /* ═══ 3b. the bubble map's packing, run (the @lift:pack block): no two circles overlap, every one inside its ring, the ring as tight
        as its circles, and the same circles always packed the same way ═══ */
     const packSrc = JS.slice(JS.indexOf('/* @lift:pack '), JS.indexOf('/* @lift:pack-end */'));
+    const colSrc = JS.slice(JS.indexOf('/* @lift:column '), JS.indexOf('/* @lift:column-end */'));
     const pctx = vm.createContext({ Math, Number, Error });
-    vm.runInContext(packSrc + '\nthis.pack = (rs) => { const cs = rs.map((r) => ({ r })); const R = packCircles(cs); return { R, cs: cs.map((c) => ({ x: c.x, y: c.y, r: c.r })) }; };', pctx);
+    vm.runInContext(packSrc + colSrc + '\nthis.pack = (rs) => { const cs = rs.map((r) => ({ r })); const R = packCircles(cs); return { R, cs: cs.map((c) => ({ x: c.x, y: c.y, r: c.r })) }; };'
+      + '\nthis.column = (rs, W) => { const cs = rs.map((r) => ({ r })); const H = packColumn(cs, W); return { H, cs: cs.map((c) => ({ x: c.x, y: c.y, r: c.r })) }; }; this.layout = mapLayout;', pctx);
     let seed = 7; const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     const sets = {
       'the 100 coins of heatmap.json (the radius the square root of the market cap)': HMR.map((r) => Math.sqrt(r.mcap.v)),
@@ -2078,6 +2115,52 @@ async function runSuite() {
     const pk = pctx.pack(sets[Object.keys(sets)[0]]), big = pk.cs[0];
     check('the bubble map\'s packing (front-chain packing, then the smallest enclosing circle — written in market.js, run here): for the 100 coins, the 83 without stablecoins, 100 heavy-tailed radii, 60 equal circles and one, two and three — no two circles overlap by more than 0.5 px and every one is inside the ring (in a 760 px map), the ring touches its outermost circle, and the same circles are packed the same way every time',
       !packBad.length && pctx.pack([]).R === 0 && big.r > pk.cs[1].r * 2, packBad.join(' | '));
+    // the column (the @lift:column block): the same sets, largest first, in a box 354 px wide (a phone) and 699 px wide (a tablet)
+    const colBad = [];
+    for (const [name, rs] of Object.entries(sets)) for (const W of [354, 699]) {
+      const top = Math.max(...rs, 1e-9), sc = (W / 6) / top, rr = rs.map((r) => Math.max(8, r * sc));   // the biggest a third of the width
+      const a = pctx.column(rr, W), b = pctx.column(rr, W), cs = a.cs;
+      let over = 0, out = 0, lowest = 0;
+      for (let i = 0; i < cs.length; i++) {
+        const c = cs[i]; lowest = Math.max(lowest, c.y + c.r);
+        if (c.x - c.r < -0.5 || c.x + c.r > W + 0.5 || c.y - c.r < -0.5) out++;
+        for (let j = i + 1; j < cs.length; j++) if (Math.hypot(c.x - cs[j].x, c.y - cs[j].y) < c.r + cs[j].r - 0.5) over++;
+      }
+      const same = JSON.stringify(a) === JSON.stringify(b), finite = cs.every((c) => isFinite(c.x) && isFinite(c.y)), tight = Math.abs(lowest - a.H) < 1e-6, top0 = !cs.length || Math.abs(cs[0].y - cs[0].r) < 1e-6;
+      if (over || out || !same || !finite || !tight || !top0) colBad.push(name + ' in ' + W + ' px: ' + JSON.stringify({ over, out, same, finite, tight, top0, H: +a.H.toFixed(1) }));
+    }
+    const c1 = pctx.column([30], 300).cs[0], c3 = pctx.column([30, 20, 20], 300).cs;
+    check('  ...and the column, for a box too narrow for the ring (written in market.js, run here): the same sets in a 354 px and a 699 px box — largest first, each at the lowest place it can sit, the nearest the middle line among equals: no two overlap by more than 0.5 px, every one inside the side walls and under the top one, the first against the top wall, the height the lowest bubble\'s bottom, the same every time',
+      !colBad.length && pctx.column([], 300).H === 0 && c1.x === 150 && c1.y === 30 && c3[1].y === 20 && c3[2].y === 20 && Math.abs(Math.abs(c3[1].x - 150) - Math.abs(c3[2].x - 150)) < 1e-9 && Math.abs(Math.abs(c3[1].x - 150) - Math.sqrt(50 * 50 - 10 * 10)) < 1e-9, colBad.join(' | '));
+    /* the sizes and the layout (mapLayout), on the 100 coins of heatmap.json, the 83 without stablecoins and the top 50, at the floor
+       and the box width of each screen the browser walk uses — the ticker's width here an estimate (0.66 of the size a letter, Rubik
+       800's capitals; the browser measures it): every bubble at least its minimum, the largest coin plainly the biggest, no overlap,
+       all inside the ring or the column, the ring only when it is as wide as the box, the column no taller than 2.5 widths unless
+       even its smallest scale is, the same every time */
+    const est = (sym, fl) => { const w = String(sym).length * fl * 0.66, e = fl * 0.52; return Math.max(Math.sqrt((w / 1.72) * (w / 1.72) + e * e), (fl * 1.04) / 1.62) + 1; };
+    const layBad = [], modes = [];
+    const coinSets = { 'the 100': HMR, 'the 83 without stablecoins': HMR.filter((r) => !r.stable), 'the top 50': HMR.slice(0, 50) };
+    for (const [name, rows] of Object.entries(coinSets)) for (const [W, fl] of [[284, 14], [354, 14.19], [699, 18.92], [950, 22.13], [1162, 25.33], [1353, 25.33]]) {
+      const shown = rows.filter((r) => r.mcap.v > 0).sort((a, b) => b.mcap.v - a.mcap.v), top = shown[0].mcap.v, gap = W < 500 ? 0.9 : 1.4;
+      const items = shown.map((r) => ({ need: est(r.symbol, fl), f: Math.pow(r.mcap.v / top, 0.25) }));
+      const t0 = Date.now(), L = pctx.layout(items, W, gap), ms = Date.now() - t0, L2 = pctx.layout(items, W, gap);
+      const cs = L.cs, plain = 1.15 * Math.max(...items.map((x) => x.need));
+      let over = 0, out = 0, under = 0;
+      for (let i = 0; i < cs.length; i++) {
+        const c = cs[i]; if (c.r < items[c.i].need - 1e-9) under++;
+        if (L.ring ? Math.hypot(c.x - W / 2, c.y - W / 2) + c.r > W / 2 - 1.5 + 0.5 : c.x - c.r < -0.5 || c.x + c.r > W + 0.5 || c.y - c.r < -0.5 || c.y + c.r > L.h + 0.5) out++;
+        for (let j = i + 1; j < cs.length; j++) if (Math.hypot(c.x - cs[j].x, c.y - cs[j].y) < c.r + cs[j].r - 0.5) over++;
+      }
+      const biggest = cs.reduce((a, b) => (b.r > a.r ? b : a)), all = cs.length === items.length && new Set(cs.map((c) => c.i)).size === items.length;
+      const sizeOK = L.ring ? L.h === W && L.k >= plain - 1e-9 : L.k >= plain - 1e-9 && L.k <= Math.max(W / 6, plain) + 1e-9 && (L.h <= 2.5 * W + 4 || Math.abs(L.k - plain) < 1e-9);
+      modes.push(name.replace(/^the /, '') + '@' + W + ':' + (L.ring ? 'ring' : 'column ' + L.h) + ' ' + ms + 'ms');
+      if (over || out || under || !all || biggest.i !== 0 || !sizeOK || JSON.stringify(L) !== JSON.stringify(L2) || ms > 1500) layBad.push(name + ' at ' + W + ' px: ' + JSON.stringify({ over, out, under, all, biggest: biggest.i, sizeOK, ring: L.ring, k: +L.k.toFixed(1), h: L.h, ms }));
+    }
+    // a coin labelled by a long name (no symbol) needs more than the box: its bubble is as wide as the box, never wider
+    const huge = pctx.layout([{ need: 20, f: 1 }, { need: 500, f: 0.3 }, { need: 20, f: 0.2 }], 284, 0.9), hugeIn = huge.cs.every((c) => c.x - c.r >= -0.5 && c.x + c.r <= 284.5);
+    const lay = (n, W, fl) => { const rows = HMR.slice(0, n), top = rows[0].mcap.v; return pctx.layout(rows.map((r) => ({ need: est(r.symbol, fl), f: Math.pow(r.mcap.v / top, 0.25) })), W, 1.4); };
+    check('  ...and the sizes (owner, round 2: "adjust the size of the bubbles proportionally so all tickers show"): each bubble\'s radius max(its ticker\'s minimum at the floor, k × (its market cap ÷ the largest\'s)^0.25) — a compressed scale, its area the square root — for the 100 coins, the 83 without stablecoins and the top 50 at the floor and box of 320, 390, 768, 1024, 1280 and 1920 px: every bubble at least its minimum, the largest coin the biggest bubble, none overlapping and all inside; the ring (as wide as the box) where it holds them all, else the column — the 100 in a ring from a 1162 px box, in a column at 284 and 354 px — no bubble wider than the box, and the same every time. ' + modes.join(', '),
+      !layBad.length && hugeIn && lay(100, 1162, 25.33).ring && lay(100, 1353, 25.33).ring && !lay(100, 284, 14).ring && !lay(100, 354, 14.19).ring && pctx.layout([], 300, 1).cs.length === 0, layBad.join(' | '));
 
     /* ═══ 4. the fake, against the same contract ═══ */
     const fake = await startFake(0);

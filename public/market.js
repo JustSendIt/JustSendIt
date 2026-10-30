@@ -29,8 +29,9 @@
  * token answer's rwa key, then /api/market/rwa/token): the evidence, what a holder holds, its price against the underlying's,
  * its corporate actions, its size, the powers its issuer keeps and the tokens paired with it. Not affiliated with Robinhood.
  * Above the two columns, the 🫧 bubble map of the whole crypto market (owner, 2026-10-30: "a view like this that shows a 24 quick
- * visual on the top tokens across the whole market"): CoinGecko's 100 largest coins from /api/market/heatmap, a bubble each — its
- * area the market cap, its colour the 24 h change — packed and drawn here in SVG (no library), with a list for the keyboard. Whether
+ * visual on the top tokens across the whole market"): CoinGecko's 100 largest coins from /api/market/heatmap, a bubble each — bigger
+ * for a bigger market cap on a compressed scale, so every ticker shows (owner, 2026-10-30, round 2), its colour the 24 h change,
+ * brighter for a bigger move — packed and drawn here in SVG (no library), with a list for the keyboard. Whether
  * it is folded away is the one thing this page keeps in the browser (localStorage 'jsi:market-map', behind try/catch).
  */
 (function () {
@@ -1903,11 +1904,17 @@
 
   /* ════════════════════════════ the whole crypto market, last 24 h: the bubble map ════════════════════════════
      Owner, 2026-10-30, with a picture of a "market heatmap": "Add in a view like this that shows a 24 quick visual on the top tokens
-     across the whole market on the Market Data page." One SVG at the box's own pixel size: a big circle packed with a bubble per
-     coin of CoinGecko's 100 largest (/api/market/heatmap; lib/marketmap.js has the rules), its AREA the coin's market cap and its
-     fill the coin's 24 h change in the answer's legend — packed here (the @lift:pack block below), no library. A label only where
-     it fits at or above the text floor (the symbol first, then the price and the change, and "Dominance" on the largest few); the
-     rest is in each bubble's <title>, the tooltip and the list. Not 100 tab stops: the map is one role="img" with a summary in
+     across the whole market on the Market Data page." And, round 2 (2026-10-30): "Show all the tickers in all of the bubbles,
+     adjust the size of the bubbles proportionally so all tickers show. And make the biggest movers be brighter green instead of
+     the shades getting darker get lighter as the percentages go higher". One SVG at the box's own pixel size, a bubble per coin of
+     CoinGecko's 100 largest (/api/market/heatmap; lib/marketmap.js has the rules): bigger for a bigger market cap on a compressed
+     scale (its area grows with the square root of the market cap) and never smaller than its ticker needs at the text floor, so
+     every bubble shows its ticker — the smallest do not compare by size, and the exact share is the Dominance in the tooltip, the
+     card and the list. Its fill is the coin's 24 h change in the answer's legend, brighter for a bigger move. The bubbles go in
+     one big circle, as in the owner's picture, when the box is wide enough to hold them all at that size; else in a column as
+     wide as the box (the @lift:pack and @lift:column blocks below, no library). The symbol is on every bubble, then the price and
+     the change, and "Dominance" on the largest few, where they fit at or above the text floor; the rest is in each bubble's
+     <title>, the tooltip and the list. Not 100 tab stops: the map is one role="img" with a summary in
      words, and "Show as a list" is the keyboard's way in — each row a button that opens the same card. The section folds away
      with its button, and this browser remembers that (the one thing this page keeps in the browser). Read again every 10 minutes
      while the page is open and in view. */
@@ -2001,6 +2008,86 @@
     return e.r;
   }
   /* @lift:pack-end */
+
+  /* @lift:column (tests/marketpage.mjs runs this block, after the ring's, in a vm: no overlap, every bubble inside the walls and at
+     least its minimum, the same every time) */
+  /* Where the ring cannot hold every bubble at a size its ticker can be read at (a phone, a narrow window), the same bubbles go
+     into a column as wide as the box and as tall as they need: largest first, each at the lowest place it can sit — touching two
+     bubbles already placed, one of them and a side wall, or the top wall — the nearest the middle line among equals, never over
+     another and never outside the walls. In: [{ r }] (largest first) and the box's width; each gets its { x, y } (from the box's
+     top left); out: the column's height. */
+  function packColumn(cs, W) {
+    const placed = [], mid = W / 2;
+    let H = 0;
+    const free = (x, y, r) => {
+      if (x < r - 1e-7 || x > W - r + 1e-7 || y < r - 1e-7) return false;
+      for (let i = placed.length - 1; i >= 0; i--) {
+        const p = placed[i], d = p.r + r - 1e-7, dx = p.x - x, dy = p.y - y;
+        if (dx < d && dx > -d && dy < d && dy > -d && dx * dx + dy * dy < d * d) return false;
+      }
+      return true;
+    };
+    for (const c of cs) {
+      const r = c.r;
+      if (2 * r >= W) { c.x = mid; c.y = H + r; placed.push(c); H = c.y + r; continue; }   // as wide as the box: under the rest
+      const cand = [[mid, r], [r, r], [W - r, r]];
+      for (const p of placed) {
+        const s = p.r + r, ty = p.y - r;
+        if (s > ty && s > -ty) { const dx = Math.sqrt(s * s - ty * ty); cand.push([p.x - dx, r], [p.x + dx, r]); }   // the top wall and p
+        for (const x of [r, W - r]) { const tx = p.x - x; if (s > tx && s > -tx) { const dy = Math.sqrt(s * s - tx * tx); cand.push([x, p.y + dy], [x, p.y - dy]); } }   // a side wall and p
+      }
+      for (let i = 0; i < placed.length; i++) for (let j = i + 1; j < placed.length; j++) {   // two placed bubbles
+        const p = placed[i], q = placed[j], a = p.r + r, b = q.r + r, dx = q.x - p.x, dy = q.y - p.y;
+        if (dx > a + b || dx < -(a + b) || dy > a + b || dy < -(a + b)) continue;
+        const d2 = dx * dx + dy * dy, d = Math.sqrt(d2);
+        if (!d || d > a + b || d < Math.abs(a - b)) continue;
+        const l = (a * a - b * b + d2) / (2 * d), h = Math.sqrt(Math.max(0, a * a - l * l)), mx = p.x + (dx * l) / d, my = p.y + (dy * l) / d;
+        cand.push([mx - (dy * h) / d, my + (dx * h) / d], [mx + (dy * h) / d, my - (dx * h) / d]);
+      }
+      // the lowest first; among equals the nearest the middle line, then the left one (so the same bubbles always land the same way)
+      cand.sort((u, v) => u[1] - v[1] || Math.abs(u[0] - mid) - Math.abs(v[0] - mid) || u[0] - v[0]);
+      const at = cand.find(([x, y]) => free(x, y, r)) || [mid, H + r];
+      c.x = at[0]; c.y = at[1]; placed.push(c); H = Math.max(H, c.y + r);
+    }
+    return H;
+  }
+  /* every bubble's size, and where it goes. items: [{ need, f }] — need, the radius its ticker alone needs at the text floor; f,
+     its market cap over the largest one's to the power 0.25, so a bubble's AREA grows with the square root of its market cap (a
+     compressed scale, on which the middle and the small coins are big enough to read). Its radius at the scale k is
+     max(need, k · f), and half the gap round it. k is never under `plain` — 15% more than the biggest minimum (a long ticker's) —
+     so the largest coin's bubble is always plainly the biggest. The ring, as in the owner's picture, when every bubble fits in a
+     circle as wide as the box at that scale, with k as large as still fits; else the column, with k as large as keeps the biggest
+     bubble about a third of the box's width at most (more only where a long ticker needs it: plain) and the column at most 2.5
+     times as tall as it is wide — when even k = plain cannot, as short as it can be. Out: { ring, k, w, h, cs: [{ x, y, r, i }] }
+     — the box's size, and each bubble's centre, drawn radius and item index. */
+  function mapLayout(items, W, gap) {
+    const pad = gap / 2, wide = (W - 4) / 2 - pad;   // no bubble wider than the box (a coin with no symbol is labelled by its name)
+    const make = (k) => items.map((it, i) => ({ r: Math.max(Math.min(it.need, wide), k * it.f) + pad, i })).sort((a, b) => b.r - a.r || a.i - b.i);
+    const out = (ring, k, cs, h) => ({ ring, k, w: W, h, cs: cs.map((c) => ({ x: c.x, y: c.y, r: c.r - pad, i: c.i })) });
+    if (!items.length) return out(false, 0, [], 0);
+    const plain = Math.min(1.15 * Math.max(...items.map((it) => it.need)), wide), half = W / 2 - 2;
+    if (packCircles(make(plain)) <= half) {
+      let lo = plain, hi = Math.max(plain, W / 2);
+      for (let n = 0; n < 24; n++) { const m = (lo + hi) / 2; if (packCircles(make(m)) <= half) lo = m; else hi = m; }
+      const cs = make(lo); packCircles(cs);
+      cs.forEach((c) => { c.x += W / 2; c.y += W / 2; });
+      return out(true, lo, cs, W);
+    }
+    // the column: its walls 2px in from the box's edges (as the ring is), so no bubble's edge sits on the card's
+    const tall = 2.5 * W, col = (k) => { const cs = make(k); return { cs, h: packColumn(cs, W - 4), k }; };
+    const most = Math.min(Math.max(W / 6, plain), wide), least = Math.min(most, plain);
+    let best = col(most);
+    if (best.h > tall) {
+      best = col(least);
+      if (best.h <= tall) {
+        let lo = least, hi = most;
+        for (let n = 0; n < 14; n++) { const m = (lo + hi) / 2, c = col(m); if (c.h <= tall) { lo = m; best = c; } else hi = m; }
+      }
+    }
+    best.cs.forEach((c) => { c.x += 2; c.y += 2; });
+    return out(false, best.k, best.cs, Math.ceil(best.h + 4));
+  }
+  /* @lift:column-end */
 
   const mapEl = { sec: $('mkt-map'), body: $('mkt-map-body'), tog: $('mkt-map-tog'), cap: $('mkt-map-cap'), fig: $('mkt-map-fig'), key: $('mkt-map-legend'), card: $('mkt-map-card'), table: $('mkt-map-table'), foot: $('mkt-map-foot'), stables: $('mkt-map-stables') };
   const MAP = { ans: null, top: 100, stables: true, pick: null, seq: 0, at: 0, timer: 0, drawn: 0, shown: false, soon: 0, ink: null, fail: null };
@@ -2107,7 +2194,7 @@
     const stale = MAP.fail ? '<span class="mkt-map-stale mkt-err-t">⏳ A newer map could not be read at ' + esc(utc(MAP.fail.at).slice(11)) + ' (' + esc(MAP.fail.why) + '): these are CoinGecko’s figures from ' + agoEl(j.at) + ', and the page asks again every 10 minutes.</span> ' : '';
     if (mapEl.cap) mapEl.cap.innerHTML = stale + 'Total market cap ' + (totV != null ? '<b>' + esc(usd(totV)) + '</b> (' + srcLine(tot) + ')' : NA + ' (' + whyOf(tot) + ')') +
       ' · ' + capCounts(c) + (MAP.stables ? '' : ' (stablecoins left out' + (unknownStable ? '; which coins are stablecoins is not known yet' : '') + ')') +
-      ' · Bubble size: market cap. Colour: 24 h price change. Not advice, never a tip to buy.';
+      ' · Bubble size: market cap, on a compressed scale so every ticker fits (the smallest do not compare by size; Dominance is the exact share). Colour: 24 h price change, brighter for a bigger move. Not advice, never a tip to buy.';
     drawMap(true);
     paintMapTable(rows);
     const reads = j.reads || {}, bad = ['coins', 'global', 'stables', 'coinlore'].map((k) => reads[k]).filter((x) => x && !x.ok && x.why);
@@ -2183,13 +2270,15 @@
     return out;
   }
   /* a bubble's label: as many of its lines as fit inside it with none under the floor — the symbol (up to 0.36 of the radius,
-     never under the floor), then the other lines at 0.58 of it; each line no wider than 86% of the bubble's width at its height */
+     never under the floor), then the other lines at 0.58 of it; each line no wider than 86% of the bubble's width at its height.
+     A label too big is made smaller down to the floor, and tried at the floor itself before it is given up (a bubble at its
+     minimum — mapNeed — holds its symbol exactly there) */
   function fitLabel(r, lines, floor) {
     let s = Math.max(r * 0.36, floor);
-    for (let pass = 0; pass < 8; pass++) {
+    for (let pass = 0; pass < 10; pass++) {
       const t = Math.max(floor, s * 0.58), sizes = lines.map((l, i) => (i ? t : s)), hts = sizes.map((z, i) => z * (i ? 1.16 : 1.04));
       const H = hts.reduce((a, b) => a + b, 0);
-      if (H > r * 1.62) { s *= (r * 1.62 / H) * 0.99; if (s < floor) return null; continue; }
+      if (H > r * 1.62) { if (s <= floor) return null; s = Math.max(floor, s * (r * 1.62 / H) * 0.99); continue; }
       let y = -H / 2, room = 1;
       const out = [];
       for (let i = 0; i < lines.length; i++) {
@@ -2200,50 +2289,53 @@
         y = bot;
       }
       if (room >= 1) return out;
-      s *= room * 0.99;
-      if (s < floor) return null;
+      if (s <= floor) return null;
+      s = Math.max(floor, s * room * 0.99);
     }
     return null;
   }
+  const symOf = (row) => row.symbol || coinName(row);
+  /* the smallest radius a bubble can have: the one at which its symbol alone fits at the floor by fitLabel's rule (one line 1.04
+     floors tall, centred, no wider than 86% of the bubble's width at its top and bottom edges, the line no taller than 1.62 radii),
+     measured in the bubble's own font and weight, and a pixel to spare */
+  function mapNeed(row, floor) {
+    const w = textW(symOf(row), floor, 800), e = floor * 0.52;
+    return Math.max(Math.sqrt((w / 1.72) * (w / 1.72) + e * e), (floor * 1.04) / 1.62) + 1;
+  }
   function labelFor(r, row, floor, big) {
-    const sym = { t: row.symbol || coinName(row), w: 800 }, p = mapPrice(val(row.price)), ch = pct(val(row.change24h)), dm = domText(val(row.dominance));
+    const sym = { t: symOf(row), w: 800 }, p = mapPrice(val(row.price)), ch = pct(val(row.change24h)), dm = domText(val(row.dominance));
     const sets = [];
     if (big && dm) sets.push([sym, { t: p, w: 600 }, { t: 'Dominance: ' + dm, w: 600 }, { t: ch || 'no change given', w: 700 }]);
     sets.push([sym, { t: p, w: 600 }, { t: ch || 'no change given', w: 700 }], [sym, { t: ch || 'no change given', w: 700 }], [sym]);
     for (const set of sets) { if (set.some((l) => !l.t)) continue; const fit = fitLabel(r, set, floor); if (fit) return fit; }
     return null;
   }
-  function mapSize() {
-    const w = Math.floor(mapEl.fig.clientWidth || 0);
-    return Math.max(160, Math.min(w, 760, Math.max(320, Math.round(window.innerHeight * 0.8))));
-  }
+  // the box's width: the map is as wide as it (no cap — a ring as wide as the section, or a column as wide as the box)
+  const mapSize = () => Math.max(160, Math.floor(mapEl.fig.clientWidth || 0));
   function mapSummary(rows, c) {
     const big = rows.filter(drawable).slice(0, 2).map((r) => { const d = domText(val(r.dominance)), v = val(r.change24h);
       return coinName(r) + (d ? ' is ' + d + ' of the market' : '') + ', ' + (v == null ? 'no 24 h change given' : (v > 0 ? 'up ' + Math.abs(v).toFixed(1) + '%' : v < 0 ? 'down ' + Math.abs(v).toFixed(1) + '%' : 'unchanged') + ' in 24 h'); });
-    return 'Bubble map of the ' + c.drawn + ' largest coins by market cap' + (MAP.stables ? '' : ', stablecoins left out') + ': ' + big.join('; ') + '; ' + countWords(c) + '. Every coin is in the list under the map.';
+    return 'Bubble map of the ' + c.drawn + ' largest coins by market cap' + (MAP.stables ? '' : ', stablecoins left out') + ': ' + big.join('; ') + '; ' + countWords(c) + '. The bubbles’ sizes are on a compressed scale, so every ticker fits; every coin and its exact share of the market is in the list under the map.';
   }
   function drawMap(fresh) {
     if (!mapEl.fig || !MAP.ans || !MAP.shown) return;
     const rows = mapRows(), shown = rows.filter(drawable).sort((a, b) => val(b.mcap) - val(a.mcap)), c = mapCounts(rows);
-    const size = mapSize(), floor = mapFloor(), half = size / 2;
-    MAP.drawn = size;
+    const W = mapSize(), floor = mapFloor();
+    MAP.drawn = W;
     if (!shown.length) { mapEl.fig.innerHTML = '<p class="mkt-empty">No coin here has a market cap to draw.</p>'; return; }
-    const top = val(shown[0].mcap), unit = (r) => Math.sqrt(val(r.mcap) / top) * 100;
-    // packed twice: once to learn the scale, then with each bubble padded by about a pixel at that scale, so they never touch
-    const gap = size < 500 ? 0.9 : 1.4;
-    let cs = shown.map((r) => ({ r: unit(r) }));
-    const k0 = (half - 2) / packCircles(cs);
-    cs = shown.map((r) => ({ r: unit(r) + gap / k0, row: r }));
-    const k = (half - 2) / packCircles(cs);
+    // each bubble: its minimum (its ticker at the floor) and its market cap over the largest one's, to the power 0.25 (mapLayout);
+    // about a pixel between bubbles, so they never touch
+    const top = val(shown[0].mcap), gap = W < 500 ? 0.9 : 1.4;
+    const L = mapLayout(shown.map((r) => ({ need: mapNeed(r, floor), f: Math.pow(val(r.mcap) / top, 0.25) })), W, gap);
     const ink = MAP.ink = mapInks();
     const old = mapEl.fig.querySelector('svg.mkt-map-svg');
-    const svg = el('svg', { width: size, height: size, viewBox: '0 0 ' + size + ' ' + size, class: 'mkt-map-svg', role: 'img', 'aria-label': mapSummary(rows, c) });
+    const svg = el('svg', { width: L.w, height: L.h, viewBox: '0 0 ' + L.w + ' ' + L.h, class: 'mkt-map-svg', 'data-layout': L.ring ? 'ring' : 'column', role: 'img', 'aria-label': mapSummary(rows, c) });
     const defs = el('defs', {}, svg), pat = el('pattern', { id: 'mkt-hatch', width: 6, height: 6, patternUnits: 'userSpaceOnUse', patternTransform: 'rotate(45)' }, defs);
     el('rect', { width: 6, height: 6, class: 'mkt-hatch-bg' }, pat); el('line', { x1: 0, y1: 0, x2: 0, y2: 6, class: 'mkt-hatch-ln' }, pat);
-    el('circle', { cx: half, cy: half, r: half - 1.5, class: 'mkt-map-ring' }, svg);
+    if (L.ring) el('circle', { cx: W / 2, cy: W / 2, r: W / 2 - 1.5, class: 'mkt-map-ring' }, svg);
     const bigIds = new Set(shown.slice(0, 3).map((r) => r.id));
-    cs.forEach((p) => {
-      const row = p.row, r = Math.max(0.6, (p.r - gap / k0) * k), x = half + p.x * k, y = half + p.y * k, b = mapBucket(val(row.change24h));
+    L.cs.slice().sort((p, q) => p.i - q.i).forEach((p) => {   // in the coins' order (the largest first), wherever each one sits
+      const row = shown[p.i], r = Math.max(0.6, p.r), x = p.x, y = p.y, b = mapBucket(val(row.change24h));
       const g = el('g', { class: 'mkt-bub mkt-b-' + b + (row.id === MAP.pick ? ' is-on' : ''), 'data-coin': row.id }, svg);
       el('circle', { cx: x.toFixed(2), cy: y.toFixed(2), r: r.toFixed(2) }, g);
       const ti = el('title', {}, g); ti.textContent = tipWords(row);
