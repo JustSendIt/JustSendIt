@@ -5,8 +5,10 @@
    re-voices it: its narration is a macOS system voice, which Apple licenses for personal, non-commercial use only, and this
    repository is a CC0 release (.gitignore: "you cannot waive rights you do not hold").
 
-   1. The files: the card sits after Just Spin It and before the competitions, with a skip link in the same order that says it
-      goes to the preview on this page; the one link is absolute https://sendy.gg/, opens a new tab with rel="noopener", is
+   1. The files: the card is the Arcade's featured game (owner, 2026-11-03: "Make Sendy.gg the first Game promoted on the arcade
+      page"): the first card in <main>, before Rocket Run, the slot machine and the competitions, its heading labelled
+      "Featured game", the hero and the page's title, description and social cards leading with it, and the first skip link
+      going to it and saying it goes to the preview on this page; the one link is absolute https://sendy.gg/, opens a new tab with rel="noopener", is
       described (data-tip) and says it goes to another site; the preview is one still (no <video>, <audio>, <track> or frame),
       the title card of the game's guide with its emoji tile painted out (an Apple Color Emoji rocket, which this CC0 repo
       cannot give away); nothing in the card points at another host but that link; the copy says only what the game's own
@@ -55,13 +57,17 @@ const CARD_TEXT = textOf(CARD);
 // every word the card shows or says: its text, and the words in its attributes (alt, data-tip, aria-label, title)
 const CARD_WORDS = [CARD_TEXT, ...[...CARD.matchAll(/\s(?:alt|data-tip|aria-label|title)="([^"]*)"/g)].map((m) => ent(m[1]))].join(' ');
 try {
-  check('the Arcade has a sendy.gg card, labelled by its heading', cardAt > 0 && /aria-labelledby="sendygg-h"/.test(CARD) && /<h2 class="arc-game-h" id="sendygg-h">[^<]*Send: Diamond Forge<\/h2>/.test(CARD), CARD.slice(0, 200));
-  check('  ...after Just Spin It and before the competitions', cardAt > HTML.indexOf('<section class="card slot-card" id="slots"') && HTML.indexOf('<section class="card slot-card" id="slots"') > 0 && cardAt < HTML.indexOf('<section class="cmp" id="cmp"'));
+  check('the Arcade has a sendy.gg card, labelled by its heading', cardAt > 0 && /aria-labelledby="sendygg-h"/.test(CARD) && /<h2 class="arc-game-h" id="sendygg-h">💎 Send: Diamond Forge <span class="sgg-badge">⭐ Featured game<\/span><\/h2>/.test(CARD), CARD.slice(0, 200));
+  const MAIN = HTML.indexOf('<main id="main"'), firstSection = HTML.indexOf('<section', MAIN);
+  check('  ...the first game on the page: the first card in <main>, before Rocket Run, the slot machine and the competitions', MAIN > 0 && firstSection === cardAt && cardAt < HTML.indexOf('<section class="card arc-game" id="arc-game"') && cardAt < HTML.indexOf('<section class="card slot-card" id="slots"') && cardAt < HTML.indexOf('<section class="cmp" id="cmp"'));
+  check('  ...its badge rides the text floor and is styled once, in arcade.css', /\.sgg-badge \{[^}]*font-size: max\(var\(--text-floor\), [^}]*\}/.test(readFileSync(path.join(ROOT, 'public', 'arcade.css'), 'utf8')));
   const skipM = [...HTML.matchAll(/<a class="skip-link" href="#([^"]+)">([^<]+)<\/a>/g)];
-  const skips = skipM.map((m) => m[1]), skipText = (skipM.find((m) => m[1] === 'sendygg') || [])[2] || '';
-  check('  ...and the skip links follow the page: Rocket Run, the slot machine, sendy.gg, the competitions', skips.join(' ') === 'main slots sendygg cmp', skips.join(' '));
+  const skips = skipM.map((m) => m[1]), skipText = (skipM[0] || [])[2] || '';
+  check('  ...and the skip links follow the page: the featured game (the top of <main>), Rocket Run, the slot machine, the competitions', skips.join(' ') === 'main arc-game slots cmp', skips.join(' '));
   check('  ...the card\'s skip link says it goes to the preview on this page, not that it leaves for sendy.gg', /preview/i.test(skipText) && !/sendy\.gg/i.test(skipText), skipText);
-  check('  ...and the hero names it, linking to the card', /<header class="np-hero">[\s\S]*?<a href="#sendygg">[\s\S]*?<\/header>/.test(HTML));
+  check('  ...and the hero names it first, linking to the card', /<header class="np-hero">[\s\S]*?<p class="section-sub"[^>]*>First, the featured game: <a href="#sendygg"><b>Send: Diamond Forge<\/b><\/a>/.test(HTML));
+  const metaOf = (re) => ((HTML.match(re) || [])[1] || '');
+  check('  ...and so do the page\'s title, description and social cards', /^Arcade: Diamond Forge,/.test(metaOf(/<title>([^<]*)<\/title>/)) && /^Send: Diamond Forge/.test(metaOf(/<meta name="description" content="([^"]*)"/)) && /Send: Diamond Forge on sendy\.gg first/.test(metaOf(/<meta property="og:title" content="([^"]*)"/)) && /^Send: Diamond Forge/.test(metaOf(/<meta name="twitter:description" content="([^"]*)"/)));
 
   // the one way to the game: an absolute, outside, described link that opens a new tab
   const links = [...CARD.matchAll(/<a\b[^>]*>[\s\S]*?<\/a>/g)].map((m) => m[0]);
@@ -75,7 +81,7 @@ try {
   // the preview: one still from this site, and no video, sound, captions or frame
   const imgs = [...CARD.matchAll(/<img\b[^>]*>/g)].map((m) => m[0]), im = imgs.length === 1 ? attrs(imgs[0]) : {};
   check('the preview is one still from this site (an <img>), sized 1280x720 so the page does not jump when it arrives', imgs.length === 1 && im.src === JPG && im.width === '1280' && im.height === '720' && /(^|\s)sgg-shot(\s|$)/.test(im.class || ''), imgs.join(' | '));
-  check('  ...described in words for a screen reader (alt names Sendy and the title card), and loaded only as it nears the screen', (im.alt || '').length >= 20 && /Sendy/.test(im.alt || '') && /title card/.test(im.alt || '') && im.loading === 'lazy', im.alt);
+  check('  ...described in words for a screen reader (alt names Sendy and the title card), and loaded at once (it opens the page)', (im.alt || '').length >= 20 && /Sendy/.test(im.alt || '') && /title card/.test(im.alt || '') && im.loading === undefined && im.fetchpriority === 'high', im.alt);
   check('  ...and there is no video, sound, caption track or frame in the card (the welcome video stays out until the game re-renders and re-voices it)', !/<(video|audio|source|track|iframe|object|embed)\b/i.test(CARD) && !/\.(mp4|m4v|webm|mov|vtt|m4a|mp3|ogg|wav)\b/i.test(CARD), (CARD.match(/<(video|audio|source|track|iframe|object|embed)\b[^>]*>/i) || [''])[0]);
   const sggNames = [...new Set([...HTML.matchAll(/sendygg-[\w.-]+/g)].map((m) => m[0]))];
   check('  ...nor anywhere else on the page (its only sendygg- names are the heading\'s id and the still)', sggNames.every((n) => n === 'sendygg-h' || n === 'sendygg-welcome.jpg') && sggNames.includes('sendygg-welcome.jpg'), sggNames.join(' '));
