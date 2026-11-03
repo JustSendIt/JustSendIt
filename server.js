@@ -110,6 +110,7 @@ const KEYLIB = require('./lib/keys.js');
 const ROUTES = require('./lib/routes.js');   // page routes: /about, not /about.html (lib/routes.js)
 const CF = require('./lib/contractfacts.js');   // a contract's powers, the dead addresses, and whether a renounce has neutralised a power
 const BUNDLES = require('./lib/bundles.js');   // who bought and moved tokens in the same block (lib/bundles.js)
+const RWA = require('./lib/rwa.js');          // what counts as a real-world asset on evidence: no health score, no swap for one (lib/rwa.js counted)
 const GA4 = require('./lib/ga.js');           // Google Analytics: the admin page's reports (lib/ga.js)
 const PAGE_NAMES = ROUTES.pageNames(PUBLIC_DIR);   // read once at boot: a page added to public/ is served after a restart
 let DATA_KEY_SOURCE = 'generated';   // where the key came from: 'env', 'file' (DATA_KEY_FILE), 'data-dir' (beside the database) — shown to the admin, never the key
@@ -5702,7 +5703,8 @@ function bestRunners(wkey) {
     if (!(gain > 0)) continue;
     if (!namedToken(r.symbol, r.name)) continue;   // same rule as the radar: nothing unidentifiable on this page
     const ath = (r.peak_price > 0 && caughtPrice > 0) ? (r.peak_price / caughtPrice - 1) : null; // peak since we caught it — same baseline as sinceX, so "peak" can never read below "now"
-    scored.push({ token: r.token_addr, pair: r.pair_addr, symbol: r.symbol, name: r.name, brand: runnerBrand(r.brand), mcap: r.cur_mc, liq: r.cur_liq, holders: r.cur_holders, health: r.cur_health, priceChange24: r.cur_pc24, gain, ath, sinceX, caughtAt, exact, depthDays: Math.max(0, Math.round((now() - baseAt) / 864e5)), firstSeenAt: r.first_seen_at });
+    let ns = null; try { ns = MKT.rwaCounted(r.token_addr); } catch {}   // a real-world asset counted on evidence: no health score, said why (a stored one from before the rule too)
+    scored.push({ token: r.token_addr, pair: r.pair_addr, symbol: r.symbol, name: r.name, brand: runnerBrand(r.brand), mcap: r.cur_mc, liq: r.cur_liq, holders: r.cur_holders, health: ns ? null : r.cur_health, ...(ns ? { noScore: ns } : {}), priceChange24: r.cur_pc24, gain, ath, sinceX, caughtAt, exact, depthDays: Math.max(0, Math.round((now() - baseAt) / 864e5)), firstSeenAt: r.first_seen_at });
   }
   scored.sort((a, b) => b.gain - a.gain); // rank by the TRUE (uncapped) gain — the liquidity floor above is the dust guard, so no display cap is needed
   return scored.slice(0, 50);
@@ -8896,6 +8898,8 @@ const SWAPKIT = require('./lib/swapkit.js');
 let _skInst = null;
 const swapkit = () => _skInst || (_skInst = SWAPKIT.createSwapKit({
   mc: mc(), ethUsd, take: outboundTake, now, userAgent: HONEST_UA,
+  // no swap for a tokenized real-world asset on Robinhood Chain (owner, 2026-11-03): one Market Data counts on evidence is refused, in these words
+  rwaRefusal: (chain, token) => (chain === 'robinhood' && MKT.rwaCounted(token) ? RWA.NOSWAP_WHY : null),
   jgetR: (u, headers) => (headers && Object.keys(headers).length ? jgetHR(u, headers) : jgetR(u)),
   rhCall: async (to, data) => {
     try { return await rpc('eth_call', [{ to, data }, 'latest']); }
@@ -10182,7 +10186,27 @@ function applyRisk(e, deployerCounts, deployerDied) {
   const worst = Object.keys(RISK).reduce((m, k) => r[k] ? Math.max(m, SEV_RANK[RISK[k].sev] || 0) : m, 0);
   if (worst >= 3 && r.triage === 'ok') r.triage = 'caution';
   e.risk = r;
+  rwaScoreGate(e);
 }
+/* NO HEALTH SCORE FOR A REAL-WORLD ASSET (owner, 2026-11-03: "Don't show health scores for real stocks"). A Robinhood Chain token
+   Market Data counts as an RWA on evidence (MKT.rwaCounted: Robinhood's registry and its code on the chain, or an issuer on this
+   site's list confirmed by its own beacon — stocks, ETFs, bonds, commodities, credit) carries no score: health and triage are null,
+   and risk.noScore says why ({ rwa, symbol, issuer, kind, confidence, why }). The score is built for memecoin risks, and an issuer
+   keeps pause, freeze and mint powers by design, so a number would mislead either way. The flags themselves stay: they are readings
+   (thin liquidity, few holders), not a score, and the dashboard still shows the contract facts, holders, liquidity, LP and bundlers.
+   A lookalike (a ticker or a name only), a token not confirmed yet and every other chain keep their score. Run wherever a score is
+   finished (applyRisk, riskFinish, rescoreCachedPair) and on the answer (withRwa, the watchlist): a stored profile is never served
+   with a score it should not carry, and a token that stops being counted gets its score back from its flags (riskFinish). */
+function rwaScoreGate(e) {
+  const r = e && e.risk; if (!r || !e.token) return e;
+  let n = null;
+  if (!e.chain || e.chain === 'robinhood') { try { n = MKT.rwaCounted(e.token.address); } catch {} }   // (before Market Data is wired, nothing is counted)
+  if (n) { r.health = null; r.triage = null; r.noScore = n; }
+  else if (r.noScore) { delete r.noScore; riskFinish(e); }
+  return e;
+}
+// a profile as an answer carries it: the gate run on a copy (a cached profile object is never changed in place here)
+const rwaGated = (p) => (p && p.risk && p.token ? rwaScoreGate(Object.assign({}, p, { risk: Object.assign({}, p.risk) })) : p);
 
 /* The totals of applyRisk, re-derived from the flags as they stand now: lib/multichain.js sets a vendor's honeypot
    verdict on a profile after applyRisk has scored it, and the health, triage and honesty floor must follow. */
@@ -10195,6 +10219,7 @@ function riskFinish(e) {
   const SEV_RANK = { low: 1, medium: 2, high: 3, critical: 4 };
   const worst = Object.keys(RISK).reduce((m, k) => r[k] ? Math.max(m, SEV_RANK[RISK[k].sev] || 0) : m, 0);
   if (worst >= 3 && r.triage === 'ok') r.triage = 'caution';
+  rwaScoreGate(e);   // a real-world asset counted on evidence carries no score (the gate's un-gating calls this again with noScore gone: it stops there)
 }
 
 /* Block-0 snipers, read from the cached scan — a synchronous primary-key lookup, because this runs for
@@ -10224,7 +10249,7 @@ function rescoreCachedPair(pair) {
     const before = pair.risk.sniperOk;
     applySniperFlags(pair, pair.risk);
     applyBundleFlags(pair, pair.risk);
-    if (before === pair.risk.sniperOk && pair.risk.dataKnown && 'snipers' in pair.risk.dataKnown) return pair;
+    if (before === pair.risk.sniperOk && pair.risk.dataKnown && 'snipers' in pair.risk.dataKnown) return rwaScoreGate(pair);   // a real-world asset counted on evidence: no score
     const r = pair.risk;
     const penalty = Object.keys(RISK).reduce((a, k) => a + (r[k] ? RISK[k].w : 0), 0);
     r.health = Math.max(0, Math.min(100, 100 - penalty));
@@ -10235,6 +10260,7 @@ function rescoreCachedPair(pair) {
     const SEV_RANK = { low: 1, medium: 2, high: 3, critical: 4 };
     const worst = Object.keys(RISK).reduce((m, k) => r[k] ? Math.max(m, SEV_RANK[RISK[k].sev] || 0) : m, 0);
     if (worst >= 3 && r.triage === 'ok') r.triage = 'caution';
+    rwaScoreGate(pair);
   } catch {}
   return pair;
 }
@@ -10327,7 +10353,7 @@ async function enrichPairs() {
      reports nothing, which scores better than the truth. So a carried row keeps the verdict it last earned on
      data we actually read, and is marked stale rather than re-judged on the absence of evidence. */
   for (const e of enriched) {
-    if (e.priceStale && e._prevRisk) { e.risk = e._prevRisk; delete e._prevRisk; continue; }
+    if (e.priceStale && e._prevRisk) { e.risk = e._prevRisk; delete e._prevRisk; rwaScoreGate(e); continue; }   // a carried verdict is still no score for a real-world asset
     delete e._prevRisk;
     applyRisk(e, deployerCounts, deployerDied);
     goplusHoneypotFloor(e);
@@ -10355,12 +10381,16 @@ async function enrichPairs() {
       if (!r) continue;
       const nowMc = (e.market && e.market.marketCap != null) ? e.market.marketCap : (e.market && e.market.fdv != null ? e.market.fdv : null);
       const x = (from) => (from > 0 && nowMc > 0) ? Math.round((nowMc / from - 1) * 100) / 100 : null;  // the site's +100% = 1x convention
+      /* "First tagged" is a stamp derived from the score (the cap when it first earned the top verdict): a real-world asset counted
+         on evidence carries no score (rwaScoreGate, run above), so it carries none of that stamp either, even one recorded before the
+         rule — null, its reason risk.noScore.why beside it. The row keeps it: a token that stops being counted shows it again. */
+      const ns = !!(e.risk && e.risk.noScore);
       e.caps = {
         firstMc: r.first_mc, firstSeenAt: r.first_seen_at,
-        qualMc: r.qual_mc, qualAt: r.qual_at,
+        qualMc: ns ? null : r.qual_mc, qualAt: ns ? null : r.qual_at,
         peakMc: r.peak_mc, peakAt: r.peak_at,
         nowMc,
-        xFromFirst: x(r.first_mc), xFromQual: x(r.qual_mc),
+        xFromFirst: x(r.first_mc), xFromQual: ns ? null : x(r.qual_mc),
         // how far off its own high it currently sits — a fact about the past, stated as one
         offPeakPct: (r.peak_mc > 0 && nowMc > 0) ? Math.round((1 - nowMc / r.peak_mc) * 1000) / 10 : null,
       };
@@ -10553,7 +10583,7 @@ MKT.migrate();
 function withRwa(p) {
   if (!p || !p.token || !/^0x[0-9a-f]{40}$/i.test(String(p.token.address || '')) || (p.chain && p.chain !== 'robinhood')) return p;
   let rwa = null; try { rwa = MKT.rwaFacts(p.token.address) || MKT.rwaLookalike(p.token.address, p.token.symbol); } catch {}
-  return Object.assign({}, p, { rwa });
+  return rwaGated(Object.assign({}, p, { rwa }));   // counted on evidence: no health score on the answer either (rwaScoreGate)
 }
 // the radar resumes where it stopped: its block cursor and its newest pairs (until now they lived in memory only)
 try { const rr = MKT.radarRestore(Math.max(PAIRS_KEEP, 120)); if (rr.cursor && !pairsScanBlock) { pairsScanBlock = rr.cursor; pairsRaw = rr.raw; } } catch {}
@@ -11342,7 +11372,7 @@ async function watchlistView(userId) {
   for (const e of fresh) if (e) out.push(e);
   for (const r of rest) out.push(wlSnapshot(r));
   out.sort((a, b) => ((b._wl && b._wl.added_at) || 0) - ((a._wl && a._wl.added_at) || 0));
-  return out;
+  return out.map(rwaGated);   // a saved snapshot from before the rule, too: a real-world asset counted on evidence carries no score
 }
 
 const IS_HTTPS = BASE_URL.startsWith('https');
@@ -18283,7 +18313,11 @@ const server = http.createServer(async (req, res) => {
         maybeRefreshCalls();
         const c = db.prepare('SELECT * FROM calls WHERE id = ?').get(Number(cm[1]));
         if (!c || (c.squad_id && !canReadSquad(me && me.id, c.squad_id))) return bad(res, 'call not found', 404);
-        let snapshot = null; try { snapshot = JSON.parse(c.snapshot || 'null'); } catch {} // call-time enriched pair (fallback detail if the token later delists)
+        /* the call-time enriched pair (the fallback detail when the token cannot be read live: public/sendcall.js). Served under the
+           RWA rule as it stands now (withRwa: a Send Call is a Robinhood Chain token): a real-world asset counted on evidence has no
+           score however its snapshot was stored, with the RWA card's facts its no-score line points to; one no longer counted gets
+           its score back from its flags (rwaScoreGate). The stored row is never changed. */
+        let snapshot = null; try { snapshot = withRwa(JSON.parse(c.snapshot || 'null')); } catch {}
         return send(res, 200, { call: callView(c, me), snapshot });
       }
       // the full ranked list of everyone who Sent It on a call (expand under the top 3) — freshens spends on-chain in the background
@@ -19010,6 +19044,7 @@ const server = http.createServer(async (req, res) => {
         if (chain === 'solana' && !rateLimit('swapqs:' + clientIp(req), 12, 6e4)) return bad(res, 'too many Solana quotes — slow down', 429);
         try {
           const q = await swapkit().quote(chain, parsed.addr, url.searchParams.get('amount'), { slippagePct: url.searchParams.get('slippage'), taxPct: url.searchParams.get('tax') });
+          if (q.refused) return send(res, 403, { error: q.error, refused: q.refused });   // a tokenized real-world asset on Robinhood Chain: no swap is quoted
           if (q.bad) return bad(res, q.bad);
           return send(res, 200, q);
         } catch (e) { console.error('[swap:quote] ' + String((e && e.stack) || e).split('\n').slice(0, 3).join(' | ')); return bad(res, 'the quote failed — try again', 502); }
@@ -19025,6 +19060,7 @@ const server = http.createServer(async (req, res) => {
         if (chain === 'solana' && !rateLimit('swapbs:' + clientIp(req), 6, 6e4)) return bad(res, 'too many Solana swaps built — slow down', 429);
         try {
           const r = await swapkit().build(chain, parsed.addr, b.amount, from, { slippagePct: b.slippage, taxPct: b.tax });
+          if (r.refused) return send(res, 403, { error: r.error, refused: r.refused });   // …and none is built
           if (r.bad) return bad(res, r.bad);
           return send(res, 200, r);
         } catch (e) { console.error('[swap:build] ' + String((e && e.stack) || e).split('\n').slice(0, 3).join(' | ')); return bad(res, 'the swap could not be built — try again', 502); }
@@ -21275,6 +21311,8 @@ function tgSend(chatId, html, extra) {
    reader's bar" for a message posted to a group, so everything sent from here is the site speaking. */
 function scanVerdict(p) {
   const r = p.risk || {};
+  // a real-world asset counted on evidence carries no score (rwaScoreGate), so no verdict is derived from one — said why, in its place
+  if (r.noScore && r.noScore.rwa) return { emoji: '🏛️', word: 'Real-world asset — no health score', note: String(r.noScore.why || ''), noScore: true };
   const health = Math.round(r.health || 0);
   /* A red power the contract read found and no renounce has neutralised (lib/contractfacts.js) — the page's verdictOf in the same
      place: before thin data and the block-0 wait, and only over the ok / caution tiers (high and avoid keep their own, worse word).
@@ -21320,7 +21358,7 @@ function tgScanMessage(p) {
   const sym = p.token.symbol ? '$' + p.token.symbol : 'this token';
   const L = [];
   L.push('<b>' + tgEsc(p.token.name || 'Unnamed token') + ' ' + tgEsc(sym) + '</b>');
-  L.push(v.emoji + ' <b>' + tgEsc(v.word) + '</b> · health ' + Math.round(r.health || 0) + '/100');
+  L.push(v.emoji + ' <b>' + tgEsc(v.word) + '</b>' + (v.noScore ? '' : ' · health ' + Math.round(r.health || 0) + '/100'));   // no number for a real-world asset
   if (v.note) L.push('<i>' + tgEsc(v.note) + '</i>');
   L.push('');
   L.push('💰 Market cap: ' + tgEsc(tgUsd(p.market.marketCap)) + '   💧 Liquidity: ' + tgEsc(tgUsd(p.market.liquidityUsd)));
@@ -21352,7 +21390,10 @@ function tgScanMessage(p) {
   L.push('');
   L.push('<code>' + tgEsc(p.token.address) + '</code>');
   const site = BASE_URL.replace(/\/+$/, '');
-  L.push('🔎 <a href="' + tgEsc(site + '/newpairs') + '">Full scan on the radar</a> · <a href="' + tgEsc(BLOCKSCOUT + '/token/' + p.token.address) + '">Explorer</a>');
+  /* the token's own scan page (Robinhood Chain pinned: the bot reads that chain only), not the radar list — the page with its full
+     scan, and for a real-world asset the RWA card its note points to */
+  const scanHref = site + '/newpairs?scan=' + String(p.token.address).toLowerCase() + '&chain=robinhood';
+  L.push('🔎 <a href="' + tgEsc(scanHref) + '">' + (v.noScore ? 'Its real-world-asset card' : 'Full scan on the Scanner') + '</a> · <a href="' + tgEsc(BLOCKSCOUT + '/token/' + p.token.address) + '">Explorer</a>');
   L.push('');
   L.push('<i>🎉 Entertainment only — not financial advice, and never a signal to buy. Most new tokens go to zero. Do your own research.</i>');
   return L.join('\n');

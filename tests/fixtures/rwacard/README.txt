@@ -31,6 +31,10 @@ rwa-token-*.json — the server's own /api/market/rwa/token answers (lib/marketd
   tests/fixtures/market/rwa-token-0x322f…3b2d.json): issuerProfile.sentences is lib/rwa.js's ISSUER_TEXT.rhj as it now
   stands, where the custody sentence became two, each linking the page it comes from (the FAQ; the service-providers page
   that names Alpaca). tests/marketpage.mjs holds these files to lib's shapes, and the market copy's list to lib's text.
+  Dumped again on 2026-11-03 by the same harness and switch, after the owner's "Don't show health scores for real stocks": the
+  only change in every file with Robinhood's controls (tsla, tsla-registry-down, spy, week, tslaon, googlon, gme, and
+  tests/fixtures/market/rwa-token-0x322f…3b2d.json) is controls.note, whose last sentence is now "The Scanner shows no health
+  score for a token counted as an RWA here." (lib/marketdata.js rwaToken).
 
 goplus-4663-tsla.json — GoPlus Security's token_security/4663 answer for TSLA, read 2026-10-28 with the site's honest
   User-Agent (the research read in the RWA build's detail.md §5); the result object is unchanged, in the wrapper the

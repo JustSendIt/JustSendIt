@@ -30,6 +30,7 @@ import { ROOT, SERVER_JS } from './_paths.mjs';
 const require = createRequire(import.meta.url);
 const SB = require(path.join(ROOT, 'lib', 'sendybrain.js'));
 const MD = require(path.join(ROOT, 'lib', 'marketdata.js'));
+const RW = require(path.join(ROOT, 'lib', 'rwa.js'));
 
 const SRC = fs.readFileSync(SERVER_JS, 'utf8');
 const LIB = fs.readFileSync(path.join(ROOT, 'lib', 'sendybrain.js'), 'utf8');
@@ -106,6 +107,28 @@ const leak = (s) => PRIVATE.filter((p) => String(s).toLowerCase().includes(p.toL
   const counting = SB.createSendyBrain({ db, root: tmp, siteMap: '', market: { tokens: () => { lists++; return { status: 200, body: { rows: [] } }; }, chains: () => ({ status: 200, body: { rows: [] } }) } });
   const sixty = await counting.answerBrain('price of ' + Array.from({ length: 60 }, (_, i) => '$ZQM' + i).join(' '), '/', []);
   check('a question naming sixty tokens looks up only the first three of them (' + lists + ' token lists read, nine networks each)', lists > 0 && lists <= 27 && /couldn't find that one/.test(sixty.answer), lists + ' ' + sixty.answer.slice(0, 80));
+  /* no health score for a real-world asset (owner, 2026-11-03: "Don't show health scores for real stocks"): a Robinhood Chain token
+     Market Data counts on evidence (MKT.rwaCounted) is said to have none, and why, wherever Sendy answers about it — the tool the model
+     reads carries it too (rwa.healthScore null); a lookalike with the same ticker and an ordinary token are answered as before */
+  const TSLA_A = '0x322f0929c4625ed5bad873c95208d54e1c003b2d', LOOK_A = '0x' + 'cd'.repeat(20), PLAIN_A = '0x' + 'ce'.repeat(20);
+  const tpj = (n, sy, liq) => JSON.stringify({ token: { name: n, symbol: sy }, market: { priceUsd: 396.5, liquidityUsd: liq, marketCap: 4500000 }, volume: { h24: 105000 }, priceChange: { h24: -2 }, holders: { count: 900 }, risk: { health: 100, triage: 'ok' } });
+  const tIns = db.prepare('INSERT INTO token_cache (token_addr, pair_json, symbol, name, found, reads, updated_at) VALUES (?,?,?,?,1,5,?)');
+  tIns.run(TSLA_A, tpj('Tesla • Robinhood Token', 'TSLA', 1230000), 'TSLA', 'Tesla • Robinhood Token', Date.now() - 60000);
+  tIns.run(LOOK_A, tpj('Tesla Moon', 'TSLA', 5000), 'TSLA', 'Tesla Moon', Date.now() - 60000);
+  tIns.run(PLAIN_A, tpj('Zq Plain', 'ZQRWAPLAIN', 7000), 'ZQRWAPLAIN', 'Zq Plain', Date.now() - 60000);
+  const tslaRow = { address: TSLA_A, symbol: 'TSLA', issuer: { key: 'rhj', name: 'Robinhood Assets (Jersey) Limited (RHJ)' }, confidence: 'confirmed', underlying: { kind: 'stock' } };
+  const rwaBrain = SB.createSendyBrain({ db, root: tmp, siteMap: '', market: { tokens: () => ({ status: 200, body: { rows: [] } }), chains: () => ({ status: 200, body: { rows: [] } }), rwaCounted: (a) => (String(a).toLowerCase() === TSLA_A ? RW.noScoreOf(tslaRow) : null) } });
+  const ft = rwaBrain.runTool('find_token', { query: 'TSLA', chain: null }), ftT = ((ft.tokens) || []).find((x) => x.address === TSLA_A), ftL = ((ft.tokens) || []).find((x) => x.address === LOOK_A);
+  check('no health score for a real-world asset: find_token carries rwa on Robinhood\'s TSLA (healthScore null, the issuer, lib/rwa.js\'s why) and nothing on the lookalike that only shares its ticker; the tool\'s description says so',
+    ftT && ftT.rwa && ftT.rwa.realWorldAsset === true && ftT.rwa.healthScore === null && ftT.rwa.why === RW.NOSCORE_WHY && ftT.rwa.issuer === 'Robinhood Assets (Jersey) Limited (RHJ)' && ftL && !('rwa' in ftL)
+    && /healthScore null/.test(rwaBrain.TOOL_DEFS.find((d) => d.name === 'find_token').description), brief(ft.tokens && ft.tokens.map((x) => [x.address, x.rwa])));
+  const NOSAY = /The Scanner shows no health score for \$TSLA: it is counted as a tokenized real-world asset, issued by Robinhood Assets \(Jersey\) Limited \(RHJ\) — the score is built for memecoin risks, and its issuer keeps powers to pause it, freeze wallets or mint more by design\. Its real-world-asset card on the Scanner page has the issuer facts\./;
+  const aScore = await rwaBrain.answerBrain("what's the health score of $TSLA?", '/', []), aSafe = await rwaBrain.answerBrain('is $TSLA safe?', '/', []), aPrice = await rwaBrain.answerBrain('price of $TSLA', '/', []);
+  const pScore = await rwaBrain.answerBrain("whats the score of $ZQRWAPLAIN", '/', []), pSafe = await rwaBrain.answerBrain('is $ZQRWAPLAIN safe?', '/', []);
+  check('  ...what Sendy says about TSLA\'s score, its safety and its price: that the Scanner shows no health score for it, and why — never a number out of 100; an ordinary token\'s answers carry no such line',
+    NOSAY.test(aScore.answer) && NOSAY.test(aSafe.answer) && aSafe.intent === 'safety' && NOSAY.test(aPrice.answer) && /price about \$396\.5/.test(aPrice.answer) && ![aScore, aSafe, aPrice].some((a) => /\/100|out of 100|health \d/.test(a.answer))
+    && !/no health score/.test(pScore.answer) && !/no health score/.test(pSafe.answer), brief([aScore.answer, aSafe.answer.slice(-300), pScore.answer]));
+  rwaBrain.stop();
   counting.stop(); brain.stop(); db.close();
   fs.rmSync(tmp, { recursive: true, force: true });
 }

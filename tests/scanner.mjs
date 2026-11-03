@@ -113,8 +113,8 @@ try {
     check('every token scoring a full 100 earns the rocket',
       /if \(health >= 100 && !floorBreached\(p\)\) \{/.test(NP)
       && /ico: '🚀', word: 'Looks Good, Send It'/.test(NP));
-    check('  ...and the score plus the floor is the whole of the rule — no block-0 gate on top of it',
-      /const earnsSendIt = \(p\) => healthOfP\(p\) >= 100 && !floorBreached\(p\);/.test(NP));
+    check('  ...and the score plus the floor is the whole of the rule — no block-0 gate on top of it (a real-world asset counted on evidence has no score, so it never earns it: owner, 2026-11-03)',
+      /const earnsSendIt = \(p\) => !rwaCountedOf\(p\) && healthOfP\(p\) >= 100 && !floorBreached\(p\);/.test(NP));
     check('  ...and missing data is on the floor on EVERY chain — not only off the home chain',
       /function floorBreached\(p\) \{\s*if \(!p\.risk\) return true;\s*if \(thinData\(p\)\) return true;/.test(NP) && !/foreignChain\(p\) && \(thinData\(p\)/.test(NP));
     {

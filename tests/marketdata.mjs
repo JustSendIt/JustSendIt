@@ -1303,6 +1303,35 @@ try {
     check('  ..."Not My Stock", BLACKROCK and Blockchain USD (USDB) are 404s that say which evidence is missing (not in the registry, not on the list — a name is never enough); USDG is a fiat-backed stablecoin, listed apart; a bad address is a 400',
       [nms, blk, usdb].every((r) => r.status === 404 && r.body.notRwa && /not in Robinhood's Stock Token registry/.test(r.body.why) && /A name or a symbol is never enough/.test(r.body.why)) && usdgT.status === 404 && usdgT.body.stablecoin === true && /fiat-backed stablecoin — listed apart/.test(usdgT.body.why)
       && mdR.rwaToken({ address: 'nope' }).status === 400, brief([nms.body, usdgT.body]));
+    /* no health score, no swap for a real-world asset counted on evidence (owner, 2026-11-03: "Don't show health scores for real stocks";
+       "Swap in my wallet" hidden "only if they are RWA on the robinhood chain") — rwaCounted is the one predicate the Scanner, the swap API
+       and the Send API ask: every row this module counts (confirmed or registry-listed, any kind), never a lookalike, a token not
+       confirmed yet, a stablecoin or anything else */
+    const GOOGLON_A = '0xe10cc5f0cd0c90322ebeb33e7757b2c9090146dc', nsT = mdR.rwaCounted(TSLA), nsOn = mdR.rwaCounted(TSLAON), nsWk = mdR.rwaCounted(WEEK);
+    const rowsNow = mdR.rwa({ view: 'tokens', limit: 300 }).body.rows, countedRows = rowsNow.filter((r) => r.confidence !== 'not-confirmed');
+    check('RWA no score: rwaCounted is Market Data\'s own count — TSLA (Robinhood\'s, confirmed, a stock), TSLAon (Ondo\'s, confirmed by its beacon) and WEEK (a bond fund the chain confirms as Robinhood\'s) carry { rwa, issuer, kind, confidence, why } with lib/rwa.js\'s sentence; every counted row and no other; the GME lookalike, GOOGLon (not confirmed yet), USDG, a plain token and a bad address are null',
+      nsT && nsT.rwa === true && nsT.why === RW.NOSCORE_WHY && nsT.kind === 'stock' && nsT.issuer.key === 'rhj' && nsT.confidence === 'confirmed' && nsT.symbol === 'TSLA'
+      && nsOn && nsOn.issuer.key === 'ondo' && nsWk && nsWk.kind === 'bond' && mdR.rwaCounted(TSLA.toUpperCase().replace('0X', '0x')) && countedRows.length > 3 && countedRows.every((r) => mdR.rwaCounted(r.address))
+      && rowsNow.some((r) => r.confidence === 'not-confirmed') && rowsNow.filter((r) => r.confidence === 'not-confirmed').every((r) => mdR.rwaCounted(r.address) === null) && mdR.rwaCounted(GME_MEME) === null && mdR.rwaCounted(GOOGLON_A) === null
+      && mdR.rwaCounted(USDG) === null && mdR.rwaCounted('0x' + 'ab'.repeat(20)) === null && mdR.rwaCounted('nope') === null && RW.counted(tb) && !RW.counted(meme.body) && RW.counted(null) === false,
+      brief([nsT, nsOn && nsOn.issuer, nsWk && nsWk.kind]));
+    nsT.why = 'changed by a caller';
+    check('  ...each answer is a copy: a caller changing one never changes the next', mdR.rwaCounted(TSLA).why === RW.NOSCORE_WHY);
+    // the Send API's scans and radar: a counted RWA's stored score is null with the reason beside it — a lookalike, a plain token and another chain keep theirs
+    const PLAIN_A = '0x' + 'ab'.repeat(20), scoredJson = (h, t) => JSON.stringify({ token: { address: '' }, risk: { health: h, triage: t, lowHolders: true } });
+    const insScan = (chain, a, sy, h, t) => dbR.prepare("INSERT INTO mkt_scan (chain, address, at, read_at, src, symbol, name, verdict, health, json) VALUES (?, ?, ?, ?, 'scan', ?, ?, ?, ?, ?)").run(chain, a, rclock, rclock, sy, sy, t, h, scoredJson(h, t));
+    insScan('robinhood', TSLA, 'TSLA', 100, 'ok'); insScan('robinhood', GME_MEME, 'gme', 70, 'ok'); insScan('robinhood', PLAIN_A, 'ZQPLAIN', 55, 'caution'); insScan('ethereum', TSLA, 'TSLA', 90, 'ok');
+    dbR.prepare("INSERT INTO mkt_radar (pair, token, symbol, name, health, verdict, json, first_seen, updated_at) VALUES (?, ?, 'TSLA', 'Tesla', 100, 'ok', ?, ?, ?)").run('0x' + 'a1'.repeat(20), TSLA, scoredJson(100, 'ok'), rclock, rclock);
+    dbR.prepare("INSERT INTO mkt_radar (pair, token, symbol, name, health, verdict, json, first_seen, updated_at) VALUES (?, ?, 'ZQPLAIN', 'Plain', 55, 'caution', ?, ?, ?)").run('0x' + 'a2'.repeat(20), PLAIN_A, scoredJson(55, 'caution'), rclock, rclock);
+    const scanOf = async (chain, a) => (((await mdR.apiResource('scans', { chain, address: a }, { limit: 5 })).body || {}).data || [])[0] || {};
+    const sT = await scanOf('robinhood', TSLA), sM = await scanOf('robinhood', GME_MEME), sP = await scanOf('robinhood', PLAIN_A), sE = await scanOf('ethereum', TSLA);
+    const radarRows = ((await mdR.apiResource('radar', {}, { limit: 50 })).body || {}).data || [], rT = radarRows.find((r) => r.token === TSLA) || {}, rP = radarRows.find((r) => r.token === PLAIN_A) || {};
+    check('RWA no score: the Send API\'s scans — TSLA\'s stored health and verdict null (never 0) with health_why saying why, its profile\'s risk the same (health and triage null, noScore); the lookalike (70), a plain token (55) and TSLA\'s address on Ethereum (90) keep their score and no health_why; every field stays where it was',
+      'health' in sT && sT.health === null && sT.verdict === null && sT.health_why === RW.NOSCORE_WHY && sT.json && sT.json.risk.health === null && sT.json.risk.triage === null && sT.json.risk.noScore && sT.json.risk.noScore.rwa === true && sT.json.risk.lowHolders === true
+      && sM.health === 70 && sM.verdict === 'ok' && !('health_why' in sM) && sP.health === 55 && !('health_why' in sP) && sE.health === 90 && sE.chain === 'ethereum' && !('health_why' in sE) && Object.keys(sM).every((k) => k in sT),
+      brief([sT.health, sT.verdict, sT.health_why, sM.health, sP.health, sE.health]));
+    check('  ...and the radar: TSLA\'s row null with health_why, a plain token\'s 55 kept', rT.health === null && rT.verdict === null && rT.health_why === RW.NOSCORE_WHY && rT.json.risk.health === null && rP.health === 55 && rP.verdict === 'caution' && !('health_why' in rP), brief([rT.health, rT.health_why, rP.health]));
+    check('  ...the issuer\'s powers are said as powers a regulated issuer keeps, and that the Scanner shows no health score for a token counted here', /The Scanner shows no health score for a token counted as an RWA here\./.test(tb.controls.note) && !/does not count them/.test(tb.controls.note));
     // the token view's rwa key, the Scanner's lookups
     check('RWA: the token view (/api/market/token) carries the RWA row for a Robinhood Chain RWA, null for anything else (USDG)', (await mdR.token({ chain: 'robinhood', address: TSLA })).body.rwa.address === TSLA && (await mdR.token({ chain: 'robinhood', address: USDG })).body.rwa === null
       && 'rwa' in (await mdR.token({ chain: 'robinhood', address: USDG })).body);
