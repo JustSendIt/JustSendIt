@@ -669,7 +669,7 @@
       return '<div class="hstat"><div class="lbl">' + lbl + when + '</div><div class="val">' + npFmtUsd(v) + ' ' + xs + '</div></div>';
     };
     const rows = row('First seen', c.firstMc, c.firstSeenAt, c.xFromFirst)
-      + row('First tagged', c.qualMc, c.qualAt, c.xFromQual)
+      + (rwaCountedOf(p) ? '' : row('First tagged', c.qualMc, c.qualAt, c.xFromQual))   // a stamp from the score: none for a real-world asset, which has no score (even one recorded before the rule)
       + row('Peak', c.peakMc, c.peakAt, null);
     if (!rows) return '';
     const off = (c.offPeakPct != null && c.offPeakPct > 0)
@@ -2311,8 +2311,24 @@
   function renderEmpty() {
     listEl.removeAttribute('aria-busy');
     if (state.q) { listEl.innerHTML = '<li class="np-msg">No pair matches ' + (/^0x[0-9a-f]{12,40}$/i.test(state.q) ? addrFit(state.q) : '“' + esc(state.q) + '”') + '. <button class="btn btn-sm btn-ghost" id="np-clearq" type="button" data-tip="Empties the search box and shows the full list">Clear search</button></li>'; return; }
-    if (state.safety === 'safer' && state.all.length) { listEl.innerHTML = '<li class="np-msg np-allclear">🛡️ All clear in Safer view — every new pair matching your filters tripped our checks, so none are shown by default.<div style="margin-top:0.7rem; display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap;"><button class="btn btn-sm btn-ghost" id="np-showrisky" type="button" data-tip="Switches to the Risky tab, which shows the hidden pairs">Show risky ☠️</button><button class="btn btn-sm btn-ghost" id="np-reset2" type="button" data-tip="Clears the search and returns every filter to its default">Reset filters</button></div></li>'; return; }
+    const hid = state.all.filter((p) => passFilters(p) && !saferOk(p));
+    if (state.safety === 'safer' && hid.length) { listEl.innerHTML = saferEmptyHTML(hid); return; }
     listEl.innerHTML = '<li class="np-msg">Nothing matches these filters. <button class="btn btn-sm btn-ghost" id="np-reset2" type="button" data-tip="Clears the search and returns every filter to its default">Reset filters</button></li>';
+  }
+  /* The Safer tab's empty message, from what it hid (the pairs that pass the filters and not the Safer bar): why, and a button to
+     the tab that shows each. The Risky tab shows what All auto-hides (hideFromMain); All shows the rest. A real-world asset counted
+     on evidence tripped nothing: it has no health score to clear the bar with (rwaCountedOf), and it is listed on All. */
+  function saferEmptyHTML(hidden) {
+    const H = Array.isArray(hidden) ? hidden : [];
+    const nNs = H.filter((p) => rwaCountedOf(p)).length, nRisky = H.filter(hideFromMain).length, nAll = H.length - nRisky;
+    const NS = 'a tokenized real-world asset, which has no health score to clear the Safer bar';
+    const why = nNs && nNs === H.length ? 'every new pair matching your filters is ' + NS
+      : nNs ? 'every new pair matching your filters tripped our checks or is ' + NS
+      : 'every new pair matching your filters tripped our checks';
+    return '<li class="np-msg np-allclear">🛡️ All clear in Safer view — ' + why + ', so none are shown by default.<div style="margin-top:0.7rem; display:flex; gap:0.5rem; justify-content:center; flex-wrap:wrap;">' +
+      (nAll ? '<button class="btn btn-sm btn-ghost" id="np-showall" type="button" data-tip="Switches to the All tab, which shows the hidden pairs that are not high-risk">Show all</button>' : '') +
+      (nRisky ? '<button class="btn btn-sm btn-ghost" id="np-showrisky" type="button" data-tip="Switches to the Risky tab, which shows the hidden high-risk pairs">Show risky ☠️</button>' : '') +
+      '<button class="btn btn-sm btn-ghost" id="np-reset2" type="button" data-tip="Clears the search and returns every filter to its default">Reset filters</button></div></li>';
   }
   function updateStatus() {
     if (state.lookup && state.mode === 'list') return; // renderLookup owns the status line during an address lookup
@@ -3038,6 +3054,7 @@
       else if (t.id === 'np-clearq') { $('np-q').value = ''; state.q = ''; clearNamed(); const cb = $('np-q-clear'); if (cb) cb.hidden = true; clearLookup(); applyView(); render(); announce(state.view.length + ' pairs shown'); }
       else if (t.id === 'np-lookup-retry') { const addr = state.q.toLowerCase(); if (LOOKUP_RE.test(addr)) { if (window.SFX) SFX.play('scan'); const seq = ++lookupSeq; state.lookup = { addr, status: 'loading', p: null }; render(); fetchLookup(addr, seq); } }
       else if (t.id === 'np-showrisky') selectSafety('risky');
+      else if (t.id === 'np-showall') selectSafety('all');
       else if (t.id === 'np-reset2') resetFilters();
     });
     statusEl.addEventListener('click', e => { const t = e.target.closest('button'); if (!t) return; if (t.id === 'np-showhidden') selectSafety('all'); else if (t.id === 'np-showhigh') selectSafety('risky'); });
@@ -3664,7 +3681,7 @@
     redFactsOf: (p) => ({ found: vendorFacts(p).map((x) => x.k), neutralised: vendorNeutral(p).map((x) => x.k) }), VENDOR_EVM, OWNER_GATED: [...OWNER_GATED], DEAD_ADDRS: [...DEAD_ADDRS], LP_UNLOCKED,
     verdictWordOf: (p) => { const v = verdictOf(p); return { word: v.word, vendor: /np-t-vendor/.test(v.cls || '') }; },   // the verdict the page gives — the same test runs it beside scanVerdict
     // a real-world asset counted on evidence (no score, no swap) — and the DEX row, the Hot Feed's test and a runner's figures, for tests/rwanoscore.mjs
-    rwaCountedOf, RWA_NOSCORE_WHY, RWA_NOSWAP_SAY, rowHTML, feedQualifies, saferOk, runnerMetricsHTML, passFilters: (p, f) => passFilters(p, Object.assign(defaultFilters(), f || {})),
+    rwaCountedOf, RWA_NOSCORE_WHY, RWA_NOSWAP_SAY, rowHTML, feedQualifies, saferOk, saferEmptyHTML, runnerMetricsHTML, passFilters: (p, f) => passFilters(p, Object.assign(defaultFilters(), f || {})),
   };
 
   /* Lazy-load the honeypot/contract read the first time its section is expanded. Attached on EVERY page,

@@ -10381,12 +10381,16 @@ async function enrichPairs() {
       if (!r) continue;
       const nowMc = (e.market && e.market.marketCap != null) ? e.market.marketCap : (e.market && e.market.fdv != null ? e.market.fdv : null);
       const x = (from) => (from > 0 && nowMc > 0) ? Math.round((nowMc / from - 1) * 100) / 100 : null;  // the site's +100% = 1x convention
+      /* "First tagged" is a stamp derived from the score (the cap when it first earned the top verdict): a real-world asset counted
+         on evidence carries no score (rwaScoreGate, run above), so it carries none of that stamp either, even one recorded before the
+         rule — null, its reason risk.noScore.why beside it. The row keeps it: a token that stops being counted shows it again. */
+      const ns = !!(e.risk && e.risk.noScore);
       e.caps = {
         firstMc: r.first_mc, firstSeenAt: r.first_seen_at,
-        qualMc: r.qual_mc, qualAt: r.qual_at,
+        qualMc: ns ? null : r.qual_mc, qualAt: ns ? null : r.qual_at,
         peakMc: r.peak_mc, peakAt: r.peak_at,
         nowMc,
-        xFromFirst: x(r.first_mc), xFromQual: x(r.qual_mc),
+        xFromFirst: x(r.first_mc), xFromQual: ns ? null : x(r.qual_mc),
         // how far off its own high it currently sits — a fact about the past, stated as one
         offPeakPct: (r.peak_mc > 0 && nowMc > 0) ? Math.round((1 - nowMc / r.peak_mc) * 1000) / 10 : null,
       };
@@ -18309,7 +18313,11 @@ const server = http.createServer(async (req, res) => {
         maybeRefreshCalls();
         const c = db.prepare('SELECT * FROM calls WHERE id = ?').get(Number(cm[1]));
         if (!c || (c.squad_id && !canReadSquad(me && me.id, c.squad_id))) return bad(res, 'call not found', 404);
-        let snapshot = null; try { snapshot = JSON.parse(c.snapshot || 'null'); } catch {} // call-time enriched pair (fallback detail if the token later delists)
+        /* the call-time enriched pair (the fallback detail when the token cannot be read live: public/sendcall.js). Served under the
+           RWA rule as it stands now (withRwa: a Send Call is a Robinhood Chain token): a real-world asset counted on evidence has no
+           score however its snapshot was stored, with the RWA card's facts its no-score line points to; one no longer counted gets
+           its score back from its flags (rwaScoreGate). The stored row is never changed. */
+        let snapshot = null; try { snapshot = withRwa(JSON.parse(c.snapshot || 'null')); } catch {}
         return send(res, 200, { call: callView(c, me), snapshot });
       }
       // the full ranked list of everyone who Sent It on a call (expand under the top 3) — freshens spends on-chain in the background
@@ -21382,7 +21390,10 @@ function tgScanMessage(p) {
   L.push('');
   L.push('<code>' + tgEsc(p.token.address) + '</code>');
   const site = BASE_URL.replace(/\/+$/, '');
-  L.push('🔎 <a href="' + tgEsc(site + '/newpairs') + '">Full scan on the radar</a> · <a href="' + tgEsc(BLOCKSCOUT + '/token/' + p.token.address) + '">Explorer</a>');
+  /* the token's own scan page (Robinhood Chain pinned: the bot reads that chain only), not the radar list — the page with its full
+     scan, and for a real-world asset the RWA card its note points to */
+  const scanHref = site + '/newpairs?scan=' + String(p.token.address).toLowerCase() + '&chain=robinhood';
+  L.push('🔎 <a href="' + tgEsc(scanHref) + '">' + (v.noScore ? 'Its real-world-asset card' : 'Full scan on the Scanner') + '</a> · <a href="' + tgEsc(BLOCKSCOUT + '/token/' + p.token.address) + '">Explorer</a>');
   L.push('');
   L.push('<i>🎉 Entertainment only — not financial advice, and never a signal to buy. Most new tokens go to zero. Do your own research.</i>');
   return L.join('\n');

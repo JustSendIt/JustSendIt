@@ -9,13 +9,15 @@
    ordinary token and every other chain keep both. Here, in four parts, each on the four kinds of token:
      1. lib/rwa.js's rule and words, on the server's own RWA answers (tests/fixtures/rwacard).
      2. The server's pieces, run from its source in a sandbox — the gate every score passes (rwaScoreGate, riskFinish), the answer copy
-        (rwaGated), the Telegram verdict and message — and where the source runs them (applyRisk, the cache rescore, the radar's carried
-        rows, withRwa, the watchlist, the runners).
-     3. The pages, run in a sandbox: the dashboard, the DEX list row, the classic detail, the Hot Feed's test, the Safer tab, the
-        min-health filter and the runners in public/newpairs.js; the button in public/swapkit.js; the watchlist page.
+        (rwaGated), the Telegram verdict and message and its link to the token's scan page — and where the source runs them (applyRisk, the
+        cache rescore, the radar's carried rows, withRwa, the watchlist, the runners), and the radar's "First tagged" stamp withheld.
+     3. The pages, run in a sandbox: the dashboard, the DEX list row, the classic detail, the Hot Feed's test, the Safer tab and its
+        empty message, the min-health filter, "First tagged" and the runners in public/newpairs.js; the button in public/swapkit.js; the
+        watchlist page.
      4. The live server (this run's throwaway one): TSLA in Robinhood's registry as Market Data keeps it, and three cached profiles —
         TSLA, a lookalike with its ticker, a plain token — through /api/scan, /api/market/scan, /api/pairs/lookup, the swap routes, the
-        watchlist and Best Runners. Every row it writes is taken out again in the finally block. */
+        watchlist, Best Runners and a Send Call's call-time snapshot (/api/calls/:id). Every row it writes is taken out again in the
+        finally block. */
 import fs from 'node:fs';
 import vm from 'node:vm';
 import path from 'node:path';
@@ -81,6 +83,12 @@ const S = sb.S;
   check('  ...the Telegram verdict: no tag derived from a score — "🏛️ Real-world asset — no health score" with why, and no "health N/100" line; a plain 100 keeps its 🚀 and its number',
     sv.word === 'Real-world asset — no health score' && sv.emoji === '🏛️' && sv.note === RW.NOSCORE_WHY && sv.noScore === true && svP.word === 'Looks Good, Send It'
     && tg.includes('🏛️ <b>Real-world asset — no health score</b>') && !/health \d+\/100/.test(tg) && !/Looks Good/.test(tg) && tgP.includes('🚀 <b>Looks Good, Send It</b> · health 100/100'), tg.split('\n').slice(0, 3).join(' | '));
+  check('  ...and the message links where its note points: the token\'s own scan page on the Scanner (Robinhood Chain pinned), which carries the real-world-asset card — "Its real-world-asset card"; a plain token\'s link is its own scan page too, never the radar list',
+    tg.includes('🔎 <a href="http://localhost:1/newpairs?scan=' + TSLA + '&amp;chain=robinhood">Its real-world-asset card</a> · <a href="https://robinhoodchain.blockscout.com/token/' + TSLA + '">Explorer</a>')
+    && tgP.includes('🔎 <a href="http://localhost:1/newpairs?scan=' + PLAIN + '&amp;chain=robinhood">Full scan on the Scanner</a>') && ![tg, tgP].some((m) => /\/newpairs"/.test(m)), [tg, tgP].map((m) => m.split('\n').find((l) => l.startsWith('🔎'))).join(' | '));
+  check('  ...the radar\'s "First tagged" stamp (the cap when it first earned the 🚀 verdict, kept in runner_tokens) is not served for a profile with no score: qualMc, qualAt and xFromQual null beside risk.noScore; First seen and Peak stay',
+    /const ns = !!\(e\.risk && e\.risk\.noScore\);/.test(SRC) && /qualMc: ns \? null : r\.qual_mc, qualAt: ns \? null : r\.qual_at,/.test(SRC) && /xFromFirst: x\(r\.first_mc\), xFromQual: ns \? null : x\(r\.qual_mc\),/.test(SRC)
+    && /firstMc: r\.first_mc, firstSeenAt: r\.first_seen_at,/.test(SRC) && /peakMc: r\.peak_mc, peakAt: r\.peak_at,/.test(SRC));
   // where the source runs it: wherever a score is finished, and on every answer that carries a profile
   check('  ...the source runs it wherever a score is finished — applyRisk\'s end, riskFinish\'s, both of the cache rescore\'s exits, the radar\'s carried rows — and on the answers: withRwa (every Scanner answer), the watchlist, Best Runners (health null with noScore), the swap kit\'s hook',
     /e\.risk = r;\n  rwaScoreGate\(e\);\n\}/.test(SRC) && /return rwaScoreGate\(pair\);/.test(SRC) && /    rwaScoreGate\(pair\);\n  \} catch \{\}\n  return pair;/.test(SRC)
@@ -163,6 +171,32 @@ const K = {
     /<span class="np-runner-health np-runner-noscore" role="img" aria-label="A real-world asset: no health score" title="No health score for a tokenized/.test(rm) && />🏛️ no score<\/span>/.test(rm) && !/🩺/.test(rm) && /🩺 77/.test(rp));
   check('the page source: the score sort puts a counted RWA after every scored row (never as a 0), and the Safer tab\'s hidden count says when what it hid is a real-world asset with no score, not "risky or under 75%"',
     /const hk = \(p\) => \(rwaCountedOf\(p\) \? -1 : \(p\.risk\.health \|\| 0\)\); v\.sort\(\(a, b\) => hk\(b\) - hk\(a\)\);/.test(PUB('newpairs.js')) && /a real-world asset' : 'real-world assets'\) \+ ' — no health score'/.test(PUB('newpairs.js')) && /'risky, under ' \+ SAFER_MIN \+ '%, or a real-world asset with no health score'/.test(PUB('newpairs.js')));
+  // the Safer tab's empty message: why what it hid was hidden, and a button to the tab that shows each
+  {
+    const SE = NPC.saferEmptyHTML, plainTok = { address: PLAIN, name: 'Zq Plain', symbol: 'ZQPLAIN' };
+    const rwaP = bare({ rwa: T }), riskyP = bare({ token: plainTok, risk: Object.assign({}, SCORED, { health: 10, triage: 'avoid' }) }), lowP = bare({ token: plainTok, risk: Object.assign({}, SCORED, { health: 60, triage: 'caution' }) });
+    const one = typeof SE === 'function' ? SE([rwaP]) : '', mixed = typeof SE === 'function' ? SE([rwaP, riskyP]) : '', risky = typeof SE === 'function' ? SE([riskyP]) : '', low = typeof SE === 'function' ? SE([lowP]) : '';
+    const btns = (h) => [...h.matchAll(/<button [^>]*id="([^"]+)"[^>]*data-tip="([^"]*)"/g)].map((m) => [m[1], m[2]]), ids = (h) => btns(h).map((b) => b[0]).join(',');
+    const ALL_BTN = /<button class="btn btn-sm btn-ghost" id="np-showall" type="button" data-tip="Switches to the All tab, which shows the hidden pairs that are not high-risk">Show all<\/button>/;
+    check('the Safer tab\'s empty message when what it hid is a real-world asset: it says the asset has no health score to clear the Safer bar (not that it "tripped our checks"), and its button goes to the All tab, where the asset is listed — not to Risky, which does not show it',
+      /every new pair matching your filters is a tokenized real-world asset, which has no health score to clear the Safer bar, so none are shown by default\./.test(text(one)) && !/tripped our checks/.test(one) && ALL_BTN.test(one) && ids(one) === 'np-showall,np-reset2',
+      text(one) + ' | ' + ids(one));
+    check('  ...with risky pairs as well: "tripped our checks or is a tokenized real-world asset, which has no health score", and both buttons — All for the asset, Risky for the high-risk pair; the risky-only message keeps its words and its one button; a pair under the bar but not high-risk gets Show all, never a Risky tab that would not show it',
+      /every new pair matching your filters tripped our checks or is a tokenized real-world asset, which has no health score to clear the Safer bar, so none are shown by default\./.test(text(mixed)) && ids(mixed) === 'np-showall,np-showrisky,np-reset2'
+      && /All clear in Safer view — every new pair matching your filters tripped our checks, so none are shown by default\./.test(text(risky)) && ids(risky) === 'np-showrisky,np-reset2' && ids(low) === 'np-showall,np-reset2'
+      && [one, mixed, risky, low].every((h) => btns(h).every((b) => b[1].length >= 8)), [ids(mixed), ids(risky), ids(low)].join(' | '));
+    check('  ...the page uses it: renderEmpty hands it what the Safer tab hid (passes the filters, not the bar) and says "Nothing matches these filters" when nothing passed them; Show all switches to the All tab',
+      /const hid = state\.all\.filter\(\(p\) => passFilters\(p\) && !saferOk\(p\)\);\n    if \(state\.safety === 'safer' && hid\.length\) \{ listEl\.innerHTML = saferEmptyHTML\(hid\); return; \}/.test(PUB('newpairs.js'))
+      && /else if \(t\.id === 'np-showall'\) selectSafety\('all'\);/.test(PUB('newpairs.js')));
+  }
+  // "First tagged" — the cap when it first cleared the site's own 🚀 bar — is a stamp derived from the score
+  {
+    const caps = { firstMc: 1.2e6, firstSeenAt: Date.now() - 864e5, qualMc: 2.4e6, qualAt: Date.now() - 3600e3, peakMc: 5e6, peakAt: Date.now() - 1800e3, nowMc: 4.5e6, xFromFirst: 2.75, xFromQual: 0.88, offPeakPct: 10 };
+    const wc = (k) => Object.assign({}, K[k], { caps }), views = (k) => [NPC.detailHTML(wc(k), { sections: { market: true } }), NPC.dashboardHTML(wc(k))];
+    check('a counted RWA\'s market figures print no "First tagged" (the cap when it first earned the 🚀 verdict), even from a stamp kept from before the rule — in the classic detail and the dashboard\'s Market card; First seen and Peak still show; a plain token keeps its First tagged',
+      ['counted', 'radar'].every((k) => views(k).every((h) => !/First tagged/.test(h) && /First seen/.test(h) && /Peak/.test(h))) && views('plain').every((h) => /First tagged/.test(h) && /\+0\.88x/.test(h)),
+      ['counted', 'radar', 'plain'].map((k) => k + ':' + views(k).map((h) => /First tagged/.test(h)).join('/')).join(' '));
+  }
   // the button itself (public/swapkit.js), whoever calls it
   const B = W.SwapKit.buttonHTML;
   check('SwapKit gives no button for a counted RWA on Robinhood Chain (the server\'s noScore or the card\'s facts), and the same button as before for a lookalike, a token not confirmed yet, a plain token and another chain',
@@ -211,7 +245,7 @@ function cleanup() {
   try {
     for (const a of addrs) { db.prepare('DELETE FROM token_cache WHERE token_addr = ?').run(a); db.prepare('DELETE FROM scans WHERE token_addr = ?').run(a); db.prepare('DELETE FROM mkt_scan WHERE address = ?').run(a); db.prepare('DELETE FROM runner_tokens WHERE token_addr = ?').run(a); db.prepare('DELETE FROM runner_snaps WHERE token_addr = ?').run(a); }
     db.prepare("DELETE FROM mkt_state WHERE name = 'rhj_assets'").run();
-    for (const id of made) { db.prepare('DELETE FROM watchlist WHERE user_id = ?').run(id); db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id); db.prepare('DELETE FROM users WHERE id = ?').run(id); }
+    for (const id of made) { db.prepare('DELETE FROM calls WHERE user_id = ?').run(id); db.prepare('DELETE FROM watchlist WHERE user_id = ?').run(id); db.prepare('DELETE FROM sessions WHERE user_id = ?').run(id); db.prepare('DELETE FROM users WHERE id = ?').run(id); }
     db.prepare("DELETE FROM mkt_runs WHERE note = 'tests/rwanoscore.mjs'").run();
   } catch (e) { console.log('cleanup: ' + e.message); }
 }
@@ -251,6 +285,20 @@ try {
   const rr = await api('/api/runners?window=24h', { sid: me.sid }), runners = (rr.j && rr.j.runners) || [], rnT = runners.find((x) => x.token === TSLA) || {}, rnP = runners.find((x) => x.token === PLAIN) || {};
   check('Best Runners: TSLA\'s stored health (100, from before the rule) is served as null with noScore; the plain runner keeps its 77',
     rr.status === 200 && 'health' in rnT && rnT.health === null && rnT.noScore && rnT.noScore.why === RW.NOSCORE_WHY && rnP.health === 77 && !rnP.noScore, brief([rr.status, rnT, rnP.health]));
+  /* A Send Call's call-time snapshot: what a call's detail falls back to when the token cannot be read live (public/sendcall.js —
+     the token popup and the classic detail). Stored with a score before the rule (TSLA, PLAIN), or with no score after it on a
+     token that is no longer counted (the lookalike's address), it is served under the rule as it stands now. */
+  const callRow = (addr, pj) => Number(db.prepare('INSERT INTO calls (user_id, token_addr, pair_addr, symbol, name, quote_symbol, entry_price, entry_mc, peak_price, cur_price, cur_mc, last_check, snapshot, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
+    .run(me.id, addr, JSON.parse(pj).pair.address, JSON.parse(pj).token.symbol, JSON.parse(pj).token.name, 'WETH', 1, 1e5, 1, 1, 1e5, NOW, pj, NOW).lastInsertRowid);
+  const cT = callRow(TSLA, stored(TSLA, 'Tesla • Robinhood Token', 'TSLA', { health: 100, triage: 'ok', concentrated: false })), cP = callRow(PLAIN, stored(PLAIN, 'Zq Plain', 'ZQRWAPLAIN'));
+  const cL = callRow(LOOK, stored(LOOK, 'Tesla Moon', 'TSLA', { health: null, triage: null, noScore: RW.noScoreOf(T) }));
+  const gc = async (id) => { const r = await api('/api/calls/' + id); return { status: r.status, snap: (r.j && r.j.snapshot) || {} }; };
+  const kT = await gc(cT), kP = await gc(cP), kL = await gc(cL);
+  check('a Send Call\'s call-time snapshot of TSLA (stored at 100/100 before the rule) is served with no score — health and triage null, risk.noScore with lib/rwa.js\'s why — and the RWA card\'s facts the no-score line points to; a plain token\'s snapshot keeps its score and carries no RWA facts',
+    kT.status === 200 && kT.snap.risk && 'health' in kT.snap.risk && kT.snap.risk.health === null && kT.snap.risk.triage === null && kT.snap.risk.noScore && kT.snap.risk.noScore.why === RW.NOSCORE_WHY && kT.snap.rwa && kT.snap.rwa.confidence === 'issuer-listed'
+    && kP.status === 200 && kP.snap.risk && kP.snap.risk.health === 80 && !kP.snap.risk.noScore && kP.snap.rwa === null, brief([kT.status, kT.snap.risk, kP.snap.risk && kP.snap.risk.health]));
+  check('  ...and a snapshot that carries no score for a token that is no longer counted gets its score back from its flags (a number, never a 0 or a null), with no noScore',
+    kL.status === 200 && kL.snap.risk && typeof kL.snap.risk.health === 'number' && kL.snap.risk.health > 0 && typeof kL.snap.risk.triage === 'string' && !kL.snap.risk.noScore, brief(kL.snap.risk));
 } catch (e) {
   check('the live part ran to the end', false, (e && e.stack) || e);
 } finally {
