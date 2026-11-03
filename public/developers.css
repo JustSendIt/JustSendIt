@@ -1,0 +1,87 @@
+/* ===== /developers: Sign in with Send for app builders (developers.html, developers.js) =====
+   Built on the Data API page's pieces (np-hero, np-wrap, card, dk-endpoints, dk-pre, dk-note); what is here is what that
+   page does not have: tables that turn into labelled rows on a phone instead of scrolling sideways, code that wraps, the
+   button previews, and "Your apps" (the list, the forms, and the secret shown once). Every size rides the text floor and
+   every control is at least 44px tall. */
+.dv-hero-note { color: var(--text-dim); font-size: max(var(--text-floor), 0.95rem); max-width: 60ch; margin: 0 auto 0.9rem; }
+.dv-cta { display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; margin: 0 0 0.6rem; }
+.dv-wrap { padding: 0 0 2rem; }
+.dv-sec { padding: 1.1rem 1.2rem; margin: 0 0 1rem; min-width: 0; overflow-wrap: anywhere; }
+.dv-sec code { overflow-wrap: anywhere; }
+#main .dv-sec .ab-mini-list code { word-break: normal; }   /* a path like /oauth/ moves to the next line whole (the site's list rule breaks any character, for 42-character addresses) */
+.dv-h3 { font-size: max(var(--text-floor), 1.02rem); font-weight: 800; margin: 1.2rem 0 0.4rem; color: var(--text); }
+.dv-steps { padding-left: 1.4rem; }
+.dv-req { display: inline-block; margin-left: 0.3rem; padding: 0 0.45rem; border-radius: var(--r-pill, 999px); background: var(--ink-3); border: 1px solid var(--edge-ctl); color: var(--text-dim); font-size: max(var(--text-floor), 0.78rem); }
+
+/* the two tables: a table on a wide screen, labelled rows on a narrow one (nothing scrolls sideways at 320px) */
+.dv-table { width: 100%; border-collapse: collapse; margin: 0.4rem 0 0.6rem; table-layout: auto; }
+.dv-table td code, .dv-table th { overflow-wrap: anywhere; }
+@media (max-width: 760px) {
+  .dv-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  .dv-table, .dv-table tbody, .dv-table tr, .dv-table td { display: block; width: auto; }
+  .dv-table tr { border: 1px solid var(--hair); border-radius: 12px; padding: 0.35rem 0.6rem; margin: 0 0 0.6rem; background: var(--ink-2); }
+  .dv-table td { border: 0; padding: 0.25rem 0; }
+  .dv-table td::before { content: attr(data-label); display: block; color: var(--text-dim); font-weight: 700; font-size: max(var(--text-floor), 0.8rem); }
+}
+
+/* code: wraps like text at every width, so a phone never scrolls a line sideways */
+pre.dv-code { white-space: break-spaces; overflow-wrap: anywhere; overflow-x: hidden; margin: 0.4rem 0 0.6rem; font-family: var(--mono, ui-monospace, Menlo, monospace); font-size: max(var(--text-floor), 0.8rem); line-height: 1.5; color: var(--text); }
+pre.dv-code code { font: inherit; color: inherit; }
+
+/* the button, as it ships */
+.dv-btn-show { display: flex; flex-wrap: wrap; gap: 1rem; margin: 0.6rem 0 0.8rem; }
+.dv-btn-fig { margin: 0; display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem; padding: 0.8rem; border-radius: 14px; min-width: 0; max-width: 100%; box-sizing: border-box; }
+.dv-btn-fig-dark { background: #2a2f22; }
+.dv-btn-fig-lime { background: #f2f6ec; }
+.dv-btn-fig img { display: block; width: clamp(212px, 20vw, 318px); max-width: 100%; height: auto; }
+.dv-btn-fig figcaption { font-size: max(var(--text-floor), 0.85rem); font-weight: 700; }
+.dv-btn-fig-dark figcaption { color: #f2f6ec; }
+.dv-btn-fig-lime figcaption { color: #020301; }
+
+/* Your apps */
+.dv-count { margin: 0 0 0.6rem; }
+.dv-app-list { list-style: none; margin: 0.4rem 0 1rem; padding: 0; display: grid; gap: 0.8rem; }
+.dv-app { border: 1px solid var(--edge-ctl); border-radius: 14px; padding: 0.8rem 0.9rem; background: var(--ink-2); min-width: 0; }
+.dv-app.is-off { border-color: var(--gold); }
+.dv-app-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; margin: 0 0 0.5rem; }
+.dv-app-name { margin: 0; font-size: max(var(--text-floor), 1.1rem); font-weight: 800; color: var(--text); overflow-wrap: anywhere; min-width: 0; }
+.dv-chip { display: inline-block; padding: 0.1rem 0.55rem; border-radius: 999px; border: 1px solid var(--edge-ctl); color: var(--text-dim); font-size: max(var(--text-floor), 0.8rem); }
+.dv-chip.is-ok { border-color: var(--green); color: var(--green-bright); }
+.dv-chip.is-warn { border-color: var(--gold); color: var(--gold); }
+.dv-dl { display: grid; gap: 0.45rem; margin: 0; }
+.dv-dl > div { display: grid; grid-template-columns: minmax(0, 11rem) minmax(0, 1fr); gap: 0.15rem 0.8rem; }
+.dv-dl dt { color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); }
+.dv-dl dd { margin: 0; min-width: 0; font-size: max(var(--text-floor), 0.92rem); overflow-wrap: anywhere; }
+.dv-dl dd ul { margin: 0; padding-left: 1.1rem; }
+@media (max-width: 560px) { .dv-dl > div { grid-template-columns: minmax(0, 1fr); } }
+.dv-off { color: var(--gold); font-weight: 700; margin: 0.6rem 0 0; font-size: max(var(--text-floor), 0.92rem); }
+.dv-app .dk-actions, .dv-form .dk-actions { margin-top: 0.8rem; }
+.dv-app .dk-actions .btn, .dv-form .dk-actions .btn, .dv-secret .btn { min-height: 44px; }
+.dv-copy-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; }
+.dv-copy-row code { min-width: 0; }
+
+/* the forms: new app, and edit */
+.dv-form { border-top: 1px solid var(--hair); margin-top: 1rem; padding-top: 0.6rem; min-width: 0; }
+.dv-app .dv-form { border-top-color: var(--ink-4); }
+.dv-form .addr-input { width: 100%; box-sizing: border-box; max-width: 100%; }
+.dv-form textarea.addr-input { min-height: 6.5em; resize: vertical; font-family: var(--mono, ui-monospace, Menlo, monospace); }
+.dv-form textarea.dv-desc { font-family: inherit; min-height: 4.5em; }
+.dv-help { margin: 0.2rem 0 0.4rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); }
+.dv-kinds { border: 0; margin: 0.6rem 0 0; padding: 0; min-width: 0; }
+.dv-kinds legend { padding: 0; }
+.dv-kind { display: flex; gap: 0.7rem; align-items: flex-start; box-sizing: border-box; min-height: 44px; margin: 0.45rem 0; padding: 0.6rem 0.8rem; border: 1px solid var(--edge-ctl); border-radius: 12px; cursor: pointer; background: var(--ink-2); }
+.dv-kind:has(input:checked) { border-color: var(--green-bright); }
+.dv-kind:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+.dv-kind input { flex: 0 0 auto; width: 22px; height: 22px; margin: 0.1rem 0 0; accent-color: var(--green-bright); }
+.dv-kind span { display: flex; flex-direction: column; gap: 0.1rem; min-width: 0; }
+.dv-kind b { font-size: max(var(--text-floor), 0.98rem); color: var(--text); }
+.dv-kind small { font-size: max(var(--text-floor), 0.85rem); color: var(--text-dim); }
+
+/* the secret, shown once */
+.dv-secret { border: 2px solid var(--gold); border-radius: 14px; padding: 0.8rem 0.9rem; margin: 0 0 1rem; background: var(--ink-3); min-width: 0; }
+.dv-secret:focus { outline: 3px solid var(--focus); outline-offset: 2px; }
+.dv-secret h3 { margin: 0 0 0.4rem; font-size: max(var(--text-floor), 1.05rem); }
+.dv-secret code { font-family: var(--mono, ui-monospace, Menlo, monospace); color: var(--green-bright); font-size: max(var(--text-floor), 0.92rem); overflow-wrap: anywhere; word-break: break-all; }
+.dv-secret .dv-once { color: var(--gold); font-weight: 700; }
+
+@media (min-width: 1280px) { .dv-wrap { max-width: var(--page-max, 1200px); } }

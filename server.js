@@ -11520,8 +11520,9 @@ const SENDY_SITE_MAP = `PAGES — point people to these by path:
 /communities — communities (holders-only walls, proposals) and Send Squads
 /arcade — the Arcade: the weekly competitions and boards
 /data — the Data API
+/developers — Sign in with Send, for people building apps and games around Send: their members sign in with their Send account and bring their handle, Send ID, Send Power and Send Boost, sharing only what each member ticks; register an app there
 /market — Market Data: chain and token figures with Robinhood Chain as the default view — DeFi TVL, DEX volume, liquidity, fees, stablecoins, market caps where a chain or token has one, the chain's own pulse (blocks, gas, pools created) — each figure with its source and when it was read (DefiLlama, L2BEAT, growthepie, GeckoTerminal, Dexscreener, the chain itself); a search bar; top chains and top tokens sortable by market cap, liquidity, TVL, volume and fees over a chosen time frame
-/profile — the account: link wallets, username, two-factor, delete the account
+/profile — the account: link wallets, username, two-factor, the apps you signed in to with Send (and Revoke), delete the account
 /support — the Support board: ask in public, answer others, vote answers up
 /whitepaper — the white paper · /terms — the Terms · /privacy — the Privacy Policy
 /u/<username> — one person's Send Wall
@@ -11554,7 +11555,7 @@ function sendyKnowledge() {
   if (sendyKnowledgeCache) return sendyKnowledgeCache;
   const parts = [SENDY_SITE_MAP];
   try { const r = fs.readFileSync(path.join(__dirname, 'README.md'), 'utf8'); const i = r.indexOf('\n## 5.'); parts.push('=== README — how the site works ===\n' + (i > 0 ? r.slice(0, i) : r)); } catch {}
-  for (const f of ['index', 'support', 'communities', 'newpairs', 'wall', 'watchlist', 'tracker', 'arcade', 'data', 'market', 'privacy', 'whitepaper']) {
+  for (const f of ['index', 'support', 'communities', 'newpairs', 'wall', 'watchlist', 'tracker', 'arcade', 'data', 'market', 'developers', 'privacy', 'whitepaper']) {
     try { parts.push('=== the page ' + ROUTES.cleanPath(f + '.html') + (f === 'whitepaper' ? ' — the white paper, in full' : '') + ' ===\n' + sendyHtmlToText(fs.readFileSync(path.join(__dirname, 'public', f + '.html'), 'utf8'))); } catch {}
   }
   // the Terms are long and legal: Sendy gets the section index and points people to the section, never paraphrasing what it cannot see
@@ -20487,7 +20488,7 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
 
-    /* The admin page and its scripts (admin.js, admincodes.js, adminrestore.js, adminanalytics.js) are the admin account's alone (ADMIN_USER_IDS): anyone else gets the same 404 as a
+    /* The admin page and its scripts (admin.js, admincodes.js, adminrestore.js, adminanalytics.js, adminapps.js) are the admin account's alone (ADMIN_USER_IDS): anyone else gets the same 404 as a
        page that does not exist — for every method and every spelling that reaches the file (case on a case-insensitive
        disk, //, /./, %2e), so the test is on the file the path RESOLVES to, before anything else serves it. Neither
        may be kept by the edge (private, no-store): a cached copy would reach everyone; a cached 404 would lock the
@@ -20496,7 +20497,7 @@ const server = http.createServer(async (req, res) => {
       // its address is /admin now (2026-10-15); /admin.html, /Admin, /admin/ and the rest are the same page to this gate
       const fpLc = path.normalize(path.join(PUBLIC_DIR, p)).toLowerCase().replace(/[\\/]+$/, ''), base = PUBLIC_DIR.toLowerCase() + path.sep;
       const isPage = fpLc === base + 'admin' || fpLc === base + 'admin.html';
-      const adminScript = ['admin.js', 'admincodes.js', 'adminrestore.js', 'adminanalytics.js'].find((n) => fpLc === base + n);
+      const adminScript = ['admin.js', 'admincodes.js', 'adminrestore.js', 'adminanalytics.js', 'adminapps.js'].find((n) => fpLc === base + n);
       if (isPage || adminScript) {
         if (!isAdmin(getUser(req)) || (req.method !== 'GET' && req.method !== 'HEAD')) return notFoundPage(res, { 'Cache-Control': 'private, no-store' });
         if (isPage && p !== '/admin') { res.writeHead(301, { Location: '/admin' + url.search, 'Cache-Control': 'private, no-store', 'Vary': 'Cookie', ...SEC_HEADERS }); return res.end(); }

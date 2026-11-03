@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="212" height="44" viewBox="0 0 212 44" role="img" aria-label="Sign in with Send">
+  <title>Sign in with Send</title>
+  <rect x="1" y="1" width="210" height="42" rx="21" fill="#c6f000" stroke="#020301" stroke-width="2"/>
+  <g transform="translate(10 10)">
+    <circle cx="12" cy="12" r="12" fill="#020301"/>
+    <path d="M16.2 8.2C15.4 6.9 13.9 6.3 12.2 6.3 9.9 6.3 8.2 7.5 8.2 9.3c0 1.9 1.8 2.5 3.8 2.9 2.2.4 4 1.1 4 3.1 0 1.8-1.8 2.9-4.1 2.9-1.9 0-3.5-.8-4.3-2.2" fill="none" stroke="#c6f000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="44" y="27.5" fill="#020301" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif" font-size="16" font-weight="700" textLength="150" lengthAdjust="spacingAndGlyphs">Sign in with Send</text>
+</svg>

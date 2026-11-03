@@ -54,7 +54,7 @@
 
 <main id="main" class="wrap" style="padding-top:2.2rem; padding-bottom:4rem;">
   <h1 class="display" style="font-size:max(var(--text-floor), 1.6rem); margin:0 0 0.3rem;">Admin 🛠️</h1>
-  <p class="section-sub" style="margin:0 0 1.2rem;">Only the admin account can open this page. How the site is doing, your invite codes to hand out, every public dataset the platform collects, what Sendy could not answer, then the moderation queue.</p>
+  <p class="section-sub" style="margin:0 0 1.2rem;">Only the admin account can open this page. How the site is doing, your invite codes to hand out, every public dataset the platform collects, what Sendy could not answer, the apps that sign people in with Send, then the moderation queue.</p>
 
   <p class="modal-note" id="adm-gate" role="status" aria-live="polite">Checking who you are…</p>
 
@@ -171,6 +171,24 @@
     <div id="adm-sendy-body"></div>
   </section>
 
+  <!-- Sign in with Send: every registered app, reviewed or not, switched on or off, and the signing keys (adminapps.js, /api/admin/oauth/*) -->
+  <section class="card adm-ov adm-apps" id="adm-apps" hidden aria-labelledby="adm-apps-h">
+    <div class="adm-ov-head">
+      <h2 id="adm-apps-h" class="adm-h2">Sign in with Send: apps 🔑</h2>
+      <button class="btn btn-sm" id="adm-apps-refresh" type="button" data-tip="Reads the registered apps and the signing keys again">↻ Refresh</button>
+    </div>
+    <p class="modal-note adm-codes-lede">Every app members have registered to sign people in with their Send account. Marking one reviewed changes one line on its sign-in page (“Reviewed by Just Send It” instead of “Not reviewed”); it is still run by its developer. Switching one off stops new sign-ins and ends its tokens at once; what members allowed is kept, so after switching it back on they can sign in again without being asked again for the same things.</p>
+    <p class="modal-note" id="adm-apps-sum" role="status" aria-live="polite"></p>
+    <div id="adm-apps-body"></div>
+    <h3 class="adm-h3">Signing keys</h3>
+    <p class="modal-note adm-codes-lede">The keys ID tokens are signed with. A new key is published a day before it signs, so apps that keep a copy of the keys pick it up; an old one stays published for 30 days after it stops.</p>
+    <div id="adm-apps-keys"></div>
+    <div class="adm-codes-more">
+      <button class="btn btn-sm" id="adm-apps-rotate" type="button" data-tip="Publishes a new signing key now, which signs from tomorrow: tap twice to be sure">Rotate the signing key</button>
+      <span class="modal-note" id="adm-apps-keys-status" role="status" aria-live="polite"></span>
+    </div>
+  </section>
+
   <div id="adm-tools" hidden>
     <h2 class="adm-h2">Moderation 🧹</h2>
     <p class="modal-note" style="margin:0 0 1rem;">Reports from senders, newest first. Every action here notifies the person it lands on and is written to the report it resolves.</p>
@@ -213,5 +231,6 @@
 <script src="admincodes.js"></script>
 <script src="adminrestore.js"></script>
 <script src="adminanalytics.js"></script>
+<script src="adminapps.js"></script>
 </body>
 </html>

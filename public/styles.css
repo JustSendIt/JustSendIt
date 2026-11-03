@@ -5066,6 +5066,18 @@ code.bd-addr { color: var(--text); }
 }
 .alert-who { color: var(--green-bright); font-weight: 800; text-decoration: none; }
 .alert-who:hover { text-decoration: underline; }
+/* ---- Settings → Apps you've signed in to (appgrants.js; Sign in with Send) ---- */
+.grant-list { list-style: none; margin: 0.5rem 0 0; padding: 0; display: grid; gap: 0.6rem; }
+.grant-row { background: var(--ink); border: 1.5px solid var(--ink-4); border-radius: 10px; padding: 0.6rem 0.75rem; min-width: 0; overflow-wrap: anywhere; }
+.grant-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.3rem 0.7rem; }
+.grant-name { font-size: max(var(--text-floor), 1rem); color: var(--text); }
+.grant-home { color: var(--green-bright); font-size: max(var(--text-floor), 0.88rem); }
+.grant-chip { display: inline-block; padding: 0.05rem 0.5rem; border-radius: var(--r-pill); border: 1px solid var(--edge-ctl); color: var(--text-dim); font-size: max(var(--text-floor), 0.78rem); }
+.grant-chip.is-ok { border-color: var(--green); color: var(--green-bright); }
+.grant-chip.is-warn { border-color: var(--gold); color: var(--gold); }
+.grant-line { margin: 0.45rem 0 0.15rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); }
+.grant-sees { margin: 0; padding-left: 1.2rem; font-size: max(var(--text-floor), 0.9rem); color: var(--text); }
+.grant-when { margin-bottom: 0.5rem; }
 
 /* ═══ SCANNER: strategies and the settings that move when you press one ═════════════════════════════
    A strategy is a saved search shape, not a grade — so these read as controls, not as badges, and the
@@ -5417,6 +5429,27 @@ button.adm-code:focus-visible { outline: 3px solid var(--focus); outline-offset:
 .adm-codes-table td small { display: block; white-space: normal; min-width: 9em; }
 .adm-codes-mono { font-family: var(--mono); letter-spacing: 0.06em; white-space: nowrap; }
 .adm-codes-more { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-top: 1rem; }
+/* Sign in with Send on the admin page (adminapps.js): one card per app, then the signing keys */
+.adm-app { border: 1px solid var(--ink-4); border-radius: 12px; padding: 0.7rem 0.8rem; margin: 0 0 0.7rem; background: var(--ink-3); min-width: 0; overflow-wrap: anywhere; }
+.adm-app.is-off { border-color: var(--gold); }
+.adm-app-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.3rem 0.6rem; margin: 0 0 0.4rem; }
+.adm-app-name { margin: 0; font-size: max(var(--text-floor), 1.02rem); color: var(--text); }
+.adm-app-chip { display: inline-block; padding: 0.05rem 0.5rem; border-radius: var(--r-pill); border: 1px solid var(--edge-ctl); color: var(--text-dim); font-size: max(var(--text-floor), 0.78rem); }
+.adm-app-chip.is-ok { border-color: var(--green); color: var(--green-bright); }
+.adm-app-chip.is-warn { border-color: var(--gold); color: var(--gold); }
+.adm-app-dl { display: grid; gap: 0.3rem; margin: 0; font-size: max(var(--text-floor), 0.88rem); }
+.adm-app-dl > div { display: grid; grid-template-columns: minmax(0, 10rem) minmax(0, 1fr); gap: 0.1rem 0.7rem; }
+.adm-app-dl dt { color: var(--text-dim); }
+.adm-app-dl dd { margin: 0; min-width: 0; }
+.adm-app-dl dd ul { margin: 0; padding-left: 1.1rem; }
+.adm-app-dl a { color: var(--green-bright); }
+@media (max-width: 560px) { .adm-app-dl > div { grid-template-columns: minmax(0, 1fr); } }
+.adm-app .adm-actions { align-items: flex-end; }
+.adm-app-why { display: flex; flex-direction: column; flex: 1 1 14rem; min-width: 0; }
+.adm-app-why .f-label { margin: 0 0 0.2rem; }
+.adm-app-why .addr-input { margin: 0; min-height: 44px; box-sizing: border-box; width: 100%; }
+.adm-keys { list-style: none; margin: 0.3rem 0 0; padding: 0; display: grid; gap: 0.5rem; }
+.adm-key { border: 1px solid var(--ink-4); border-radius: 12px; padding: 0.55rem 0.7rem; background: var(--ink-3); min-width: 0; overflow-wrap: anywhere; }
 /* a member's kept history (adminrestore.js) */
 .adm-hist-find { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 0 0 0.5rem; }
 .adm-hist-find .addr-input { flex: 1 1 12rem; min-width: 0; }

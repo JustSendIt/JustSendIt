@@ -286,8 +286,8 @@ try {
   check('  ...and answers a repeat with a 304', !!idx.h('etag') && again304.status === 304, idx.h('etag') + ' ' + again304.status);
 
   const pagesMap = await get('/sitemap-pages.xml');
-  const want = ['/', '/about', '/wall', '/communities', '/newpairs', '/support', '/tracker', '/market', '/arcade', '/whitepaper', '/privacy'].map((p) => BASE + p);
-  check('the static pages sitemap lists exactly the eleven indexable pages, with no invented lastmod or priority', pagesMap.status === 200 && JSON.stringify(locs(pagesMap.text).sort()) === JSON.stringify(want.slice().sort()) && !/<lastmod>|<priority>|<changefreq>/.test(pagesMap.text), locs(pagesMap.text).join(' '));
+  const want = ['/', '/about', '/wall', '/communities', '/newpairs', '/support', '/tracker', '/market', '/developers', '/arcade', '/whitepaper', '/privacy'].map((p) => BASE + p);
+  check('the static pages sitemap lists exactly the twelve indexable pages, with no invented lastmod or priority', pagesMap.status === 200 && JSON.stringify(locs(pagesMap.text).sort()) === JSON.stringify(want.slice().sort()) && !/<lastmod>|<priority>|<changefreq>/.test(pagesMap.text), locs(pagesMap.text).join(' '));
   check('  ...and public/sitemap.xml is gone (the index is built by the server)', !existsSync(path.join(PUB, 'sitemap.xml')));
 
   const prof = await get('/sitemap-profiles.xml'), pl = locs(prof.text);
