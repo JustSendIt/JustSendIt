@@ -232,6 +232,8 @@ try {
     fill(d, 'calls', { user_id: uid, token_addr: '0x' + randomBytes(20).toString('hex'), created_at: t, ip: L.bidx('ip:' + IPS.call) });
     fill(d, 'tracker_cache', { user_id: uid, addr_idx: L.bidx(TRACKED), report: L.encField('{"report":"kr"}'), updated_at: t });
     fill(d, 'wallet_hist', { user_id: uid, addr_idx: L.bidx(W1a), read_to: 1, updated_at: t, partial: 0, hist: L.encBlob(randomBytes(70000)) });
+    // Sign in with Send's signing keys (lib/oidc.js): a key waiting a year to sign, so no server here ever signs with this stand-in
+    fill(d, 'oauth_keys', { kid: 'kr-oidc-key', public_jwk: '{}', private_enc: L.encField('{"kr":"oidc"}'), created_at: t, active_from: t + 365 * 864e5 });
     d.close();
   }
   check('every seeded index holds under the single key (epoch 0)', expectIndexes(K.Keys.legacy(K1), 0, uid).length === 0, expectIndexes(K.Keys.legacy(K1), 0, uid).join(', '));

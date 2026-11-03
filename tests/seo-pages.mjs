@@ -23,6 +23,7 @@ const PAGES = {
   'newpairs.html':    ['Robinhood Chain Token Scanner & New Pairs — Just Send It', 'index'],
   'tracker.html':     ['Robinhood Chain Wallet Tracker: Holdings, PNL — Just Send It', 'index'],
   'market.html':      ['Market Data — Just Send It', 'index'],
+  'developers.html':  ['Sign in with Send for Developers — Just Send It', 'index'],
   'arcade.html':      ['Arcade: Rocket Run, Slots & Competitions — Just Send It', 'index'],
   'communities.html': ['Token Communities on Robinhood Chain — Just Send It', 'index'],
   'support.html':     ['Support Board: Ask & Answer Questions — Just Send It', 'index'],

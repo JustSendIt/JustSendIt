@@ -278,6 +278,18 @@
           </div>
         </details>
 
+        <!-- Sign in with Send (lib/oidc.js): the apps this account signed in to, what each can see, and Revoke (appgrants.js, /api/oauth/grants).
+             The consent page links here as /profile#sec-apps. -->
+        <details class="setting-card" id="sec-apps">
+          <summary>🔑 Apps you’ve signed in to <span class="sec-state" id="apps-state" aria-live="polite"></span></summary>
+          <div class="setting-body">
+            <p class="modal-note" style="margin-top:0;">Apps built around Send that you signed in to with your Send account, and what each one can see. Revoke ends an app’s sign-in at once and forgets what you allowed it: it gets nothing more from your account unless you sign in to it again. Changing your password, ending your other sessions or turning two-factor off signs you out of every app too. No app ever gets your email, your wallets or your sign-in history.</p>
+            <ul class="grant-list" id="grant-list" aria-label="Apps you have signed in to"></ul>
+            <p class="modal-note" id="grant-note" role="status" aria-live="polite"></p>
+            <p class="modal-note">Building an app yourself? <a href="/developers">Sign in with Send for developers</a>.</p>
+          </div>
+        </details>
+
         <details class="setting-card" id="sec-wall">
           <summary>🎨 My Wall Style</summary>
           <div class="setting-body">
@@ -352,6 +364,7 @@
      <a href="/about">About</a>
      <a href="/arcade">Arcade</a>
      <a href="/communities">Communities</a>
+     <a href="/developers">Developers</a>
      <a href="/">Home</a>
      <a href="/guide">How to Buy</a>
      <a href="/market">Market Data</a>
@@ -388,6 +401,7 @@
 <script src="dashtabs.js"></script>
 <script src="wallstyle.js"></script>
 <script src="profile.js"></script>
+<script src="appgrants.js"></script>
 <script src="gamify.js"></script>
 <script src="notifications.js"></script>
 <script src="voicememo.js"></script>

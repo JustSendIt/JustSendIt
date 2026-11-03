@@ -97,6 +97,11 @@
       <p class="dk-note"><b>Encryption, plainly.</b> Every private field is stored scrambled (AES-256-GCM) with a key held outside the database — emails, wallets, 2FA secrets, tracked wallets and your preference blobs. Public content is stored readable, because search, sorting and every wall need to read it. Your API key is stored only as a hash: it is shown once, and if it leaks, rotate it here — the old secret dies, the new one keeps your paid time.</p>
     </section>
 
+    <section class="card reveal" aria-labelledby="dk-signin-h" style="padding:1.1rem 1.2rem; margin:0 0 1rem;">
+      <h2 class="ab-eng-h" id="dk-signin-h">Building an app or a game? Sign in with Send</h2>
+      <p class="dk-note">The Data API is for reading the site in bulk. To let people sign in to <b>your</b> app with their Send account, and bring their handle, Send ID, Send Power and Send Boost with them, use <b>Sign in with Send</b>: standard OpenID Connect, no key and no burn, and each member ticks what your app may see. Everything about it, and registering an app, is on <a href="/developers">Sign in with Send for developers</a>.</p>
+    </section>
+
     <section class="card reveal" aria-labelledby="dk-use-h" style="padding:1.1rem 1.2rem; margin:0 0 1rem;">
       <h2 class="ab-eng-h" id="dk-use-h">Using it</h2>
       <p class="dk-note">Send the key as a bearer token. A list is newest-first and pages with <code>before=</code> the <code>next</code> of the page before it; <code>next</code> is <code>null</code> on the last page. <code>limit</code> is 100 by default, 200 at most. <b>120 requests per minute per key</b>, across every resource. Responses are JSON: a list is <code>{ data, next, limit }</code>, a single reading <code>{ data }</code>.</p>
@@ -108,7 +113,7 @@
         <thead><tr><th>GET /api/data/v1/…</th><th>Returns</th></tr></thead>
         <tbody>
           <tr class="dk-grp"><th colspan="2" scope="rowgroup">Your account and the site</th></tr>
-          <tr><td><code>me</code></td><td>Your own account, decrypted for you: profile, prefs, wallets, watchlist, tracked wallets, pins, communities, follows, mutes, and your most recent 1,000 points events, 200 calls and 500 each of posts, comments, Sends and notifications.</td></tr>
+          <tr><td><code>me</code></td><td>Your own account, decrypted for you: profile, prefs, wallets, watchlist, tracked wallets, pins, communities, follows, mutes, the apps you signed in to with Send and the ones you registered, and your most recent 1,000 points events, 200 calls and 500 each of posts, comments, Sends and notifications.</td></tr>
           <tr><td><code>users</code></td><td>Public profiles — what a wall already shows anyone.</td></tr>
           <tr><td><code>posts</code></td><td>Send Wall and community posts, with reactions and comment counts.</td></tr>
           <tr><td><code>comments</code></td><td>Comments, with the post they belong to.</td></tr>
@@ -152,7 +157,9 @@
   pointsEvents: [ …1,000 newest ], guestFlights: [ … ], posts: [ …500 ], comments: [ …500 ],
   calls: [ …200 ], sends: [ …500 ], sendComments: [ … ], sendReactions: [ … ],
   watchlist: [ … ], trackedWallets: [ { id, address, label, created_at } ], pinnedTokens: [ … ],
-  communities: [ … ], following: [ … ], followers: [ … ], notifications: [ …500 ], mutes: [ … ], alerts: [ … ] },
+  communities: [ … ], following: [ … ], followers: [ … ], notifications: [ …500 ], mutes: [ … ], alerts: [ … ],
+  signInApps: [ { clientId, name, homepage, redirectHosts, reviewed, disabled, scopes, shares, grantedAt, updatedAt, signedInUntil } ],
+  appsRegistered: [ { clientId, name, description, homepage, redirectUris, kind, hasSecret, secretRotatedAt, createdAt, updatedAt, reviewed, reviewedAt, disabled, disabledAt, disabledReason, members } ] },
   generatedAt }</pre>
         <p class="dk-note">Not paged. Only the key holder’s own account, and only to that key.</p>
       </div></details>
@@ -455,6 +462,7 @@
     <a href="/about">About</a>
     <a href="/arcade">Arcade</a>
     <a href="/communities">Communities</a>
+    <a href="/developers">Developers</a>
     <a href="/">Home</a>
     <a href="/guide">How to Buy</a>
     <a href="/market">Market Data</a>

@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in with Send for Developers — Just Send It</title>
+<meta name="description" content="Let people sign in to your app or game with their Send account: OpenID Connect with PKCE, only what each member ticks, never their email or wallets.">
+<meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
+<meta name="theme-color" content="#c6f000">
+<link rel="canonical" href="https://sendrh.com/developers">
+<link rel="manifest" href="/site.webmanifest">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Just Send It">
+<meta property="og:locale" content="en_US">
+<meta property="og:url" content="https://sendrh.com/developers">
+<meta property="og:title" content="Sign in with Send 🔑 — for app and game builders">
+<meta property="og:description" content="One Send account across every app built around Send: handle, Send ID, Send Power and Boost, shared only when the member ticks them. Standard OpenID Connect.">
+<meta property="og:image" content="https://sendrh.com/assets/logo-og.png">
+<meta property="og:image:type" content="image/png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="$Send — Just Send It logo">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:site" content="@sendrh_">
+<meta name="twitter:title" content="Sign in with Send 🔑 — for app and game builders">
+<meta name="twitter:description" content="One Send account across every app built around Send: handle, Send ID, Send Power and Boost, shared only when the member ticks them. Standard OpenID Connect.">
+<meta name="twitter:image" content="https://sendrh.com/assets/logo-og.png">
+<meta name="twitter:image:alt" content="$Send — Just Send It logo">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://sendrh.com/developers#webpage","url":"https://sendrh.com/developers","name":"Sign in with Send for Developers — Just Send It","description":"Let people sign in to your app or game with their Send account: OpenID Connect with PKCE, only what each member ticks, never their email or wallets.","inLanguage":"en","isPartOf":{"@type":"WebSite","@id":"https://sendrh.com/#website","name":"Just Send It","url":"https://sendrh.com/"},"breadcrumb":{"@id":"https://sendrh.com/developers#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://sendrh.com/developers#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://sendrh.com/"},{"@type":"ListItem","position":2,"name":"Developers","item":"https://sendrh.com/developers"}]}]}</script>
+<link rel="icon" href="assets/logo-128.png">
+<link rel="apple-touch-icon" sizes="180x180" href="assets/logo-180.png">
+<link rel="stylesheet" href="fonts/fonts.css">
+<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="cursor.css">
+<script src="cursor.js"></script>
+<script src="agegate.js"></script>
+<link rel="stylesheet" href="moderation.css">
+<link rel="stylesheet" href="tokentext.css">
+<link rel="stylesheet" href="developers.css">
+<link rel="stylesheet" href="responsive.css">
+<script src="/ga.js" defer></script>
+</head>
+<body>
+<a class="skip-link" href="#main">Skip to content</a>
+
+<nav class="nav is-compact" aria-label="Main">
+  <a class="nav-logo" href="/"><img src="assets/logo-mark-sm.png" alt="$Send home" width="42" height="42"><span>$Send</span></a>
+  <div class="nav-menu" id="nav-menu">
+    <span id="nav-search-slot"></span>
+    <a href="/about">About</a>
+    <a href="/arcade">Arcade</a>
+    <a href="/communities">Communities</a>
+    <a href="/guide">How&nbsp;to&nbsp;Buy</a>
+    <a href="/market">Market&nbsp;Data</a>
+    <a href="/newpairs">Scanner</a>
+    <a href="/wall">Send&nbsp;Wall</a>
+    <a href="/support">Support</a>
+    <a href="/swap">Swap</a>
+    <a href="/tokens">Tokens</a>
+    <a href="/watchlist">Watchlist</a>
+
+    <a href="/whitepaper">White&nbsp;Paper</a>
+
+  </div>
+  <span id="nav-notif"></span>
+  <span id="nav-auth" class="nav-persist"></span>
+  <button class="nav-toggle" type="button" id="nav-toggle" aria-expanded="false" aria-controls="nav-menu" aria-label="Open menu" data-tip="Shows or hides the page links and search"><span class="nav-toggle-bars" aria-hidden="true"></span></button>
+</nav>
+
+<header class="np-hero dv-hero">
+  <h1 class="section-title display green" style="margin-bottom:0.35rem;">Sign in with Send 🔑</h1>
+  <p class="section-sub" style="margin-bottom:0.5rem;">Let people sign in to your app or game with their Send account, and bring their handle, Send ID, Send Power and Send Boost with them: the same account in every app built around Send. Each member ticks what your app may see, and nothing else leaves.</p>
+  <p class="dv-hero-note">Run by this site’s own server, not by a blockchain. What your app receives is signed with published keys, so you can check it without asking us again.</p>
+  <div class="dv-cta">
+    <a class="btn btn-primary btn-sm" href="#dv-apps" data-tip="Jumps to Your apps, where a signed-in member registers an app and gets its client ID">Register an app</a>
+    <a class="btn btn-ghost btn-sm" href="#dv-example" data-tip="Jumps to a working sign-in in about thirty lines of browser code, no library">See the example</a>
+    <a class="btn btn-ghost btn-sm" href="#dv-button" data-tip="Jumps to the Sign in with Send button, as SVG files and HTML you can copy">Get the button</a>
+  </div>
+</header>
+
+<main id="main">
+  <div class="np-wrap dv-wrap">
+
+    <section class="card reveal dv-sec" aria-labelledby="dv-how-h">
+      <h2 class="ab-eng-h" id="dv-how-h">How it works</h2>
+      <ol class="ab-mini-list dv-steps">
+        <li><b>Register your app</b> below: its name, its homepage and the exact addresses members are sent back to. You get a client ID at once, and a client secret too if your app runs on a server.</li>
+        <li><b>Send people to Sign in with Send.</b> Your app opens <code>/oauth/authorize</code> with the scopes it wants, a <code>state</code> and a PKCE challenge. The member signs in here the way they always do, two-factor included, and sees your app’s name, its website and the address they will be sent back to, with one tick-box for each thing you asked for. Every box starts unticked. The first time a member lets your app in, they also confirm it’s them (their password, two-factor step or wallet), as for any security change here.</li>
+        <li><b>They come back with a one-time code.</b> Your app swaps it at <code>/oauth/token</code> for an ID token (a signed JWT) and an access token. Nothing reaches your app before they press Allow, and only what they ticked.</li>
+        <li><b>Keep it current.</b> Send Power, level and Boost move. <code>/oauth/userinfo</code> gives you today’s values, and when the member ticks it, a refresh token keeps them up to date for 30 days without a new sign-in.</li>
+      </ol>
+      <p class="dk-note">It is standard OAuth 2.0 (the authorization code flow with PKCE) with OpenID Connect on top, so an OpenID Connect library signs people in from the discovery address under <a href="#dv-endpoints-h">Endpoints</a>, as long as it accepts ID tokens signed with ES256, the only algorithm used here. It has been tried with openid-client 6 and 5, oidc-client-ts 3 and Auth.js (<code>@auth/core</code>). A library that expects RS256 unless told otherwise needs telling: in openid-client 5 and next-auth 4, set <code>id_token_signed_response_alg: 'ES256'</code> on the client (next-auth: <code>client: { id_token_signed_response_alg: 'ES256' }</code>); in Spring Security, give the decoder a JWS algorithm resolver that answers ES256.</p>
+    </section>
+
+    <section class="card reveal dv-sec" aria-labelledby="dv-privacy-h">
+      <h2 class="ab-eng-h" id="dv-privacy-h">The privacy promise</h2>
+      <ul class="ab-mini-list">
+        <li><b>Your app gets only what the member ticks.</b> Every box starts unticked, and an unticked box is not shared: not in the ID token, not from userinfo.</li>
+        <li><b>A private ID for each app.</b> The <code>sub</code> your app receives is different in every app, so two apps cannot match a member up by it. It is made at random the first time the member lets your app in and kept, so it stays the same for your app, revokes included, until the account or your app is deleted. The Send ID, which is the same everywhere, is shared only when the member ticks it, and its box says so. <code>auth_time</code> is the sign-in time floored to the hour (to ten minutes when you send <code>max_age</code>, which is weighed against that same floor; the exact second only of a fresh proof made for your request), so it cannot match a member up either.</li>
+        <li><b>Never shared with any app:</b> email, wallets, IP address and sign-in history. No scope asks for them. Holdings, OG tier and communities are not sent as such either, but the Send Boost is made of them: it grows with how much $SEND and $GWC a member’s wallets hold (and for how long), with their OG tier, with being in a live community and with Rocket Run, weekly and beta boosts. So an app given the Boost can estimate a member’s holdings from it and see when any of these change, and the member’s box says so.</li>
+        <li><b>Some of what members tick is public anyway.</b> A member’s exact Send Power and profile picture are shown next to their handle on their public Send Wall and on the leaderboards, so an app given either can find the handle and recognise them across apps, as the Send ID does. Their boxes say so.</li>
+        <li><b>What this site keeps:</b> your app’s registration; for each member who allowed it, what they ticked, when they first allowed it and when they last changed that, until they revoke it; the private ID your app knows them by; while your app is signed in, its tokens, each stored as a hash and deleted when it expires (a used refresh token is not kept: each one names its sign-in, so an old one presented again is still caught); and the signing keys, their private halves encrypted.</li>
+        <li><b>What it does not keep:</b> any record of when or how often anyone uses your app; your userinfo calls; IP addresses or devices, beyond the rate-limit counters the whole site keeps in memory for up to about an hour.</li>
+        <li><b>Nothing from anywhere else on the sign-in pages.</b> The pages under <code>/oauth/</code> load no analytics, no beacon and nothing from another site, cannot be put in a frame, and are never cached.</li>
+        <li><b>Members stay in charge.</b> Settings, under Apps you’ve signed in to, lists every app, what it can see and since when. Revoke ends its tokens at once. Changing the password, ending other sessions or turning two-factor off signs the member out of every app too, and the next sign-in asks again. Deleting the account revokes everything, and an account put in read-only mode is signed out of every app until it lifts.</li>
+        <li><b>Checkable without asking us again.</b> The ID token is signed (ES256) with a key published at <code>/.well-known/jwks.json</code>, so your server checks it on its own: a Send passport, in effect. A new sign-in needs this site to be up; a token you have already checked stays checked.</li>
+      </ul>
+    </section>
+
+    <section class="card reveal dv-sec" aria-labelledby="dv-scopes-h">
+      <h2 class="ab-eng-h" id="dv-scopes-h">What an app can ask for</h2>
+      <p class="dk-note">Ask for the scopes in <code>scope</code>, separated by spaces. A scope this site does not know (<code>email</code>, <code>profile</code> and the like) is left out rather than refused, and the token answer’s <code>scope</code> says what was granted. Ask for what you need: a short list is an easy one to tick.</p>
+      <table class="dk-endpoints dv-table" id="dv-scopes">
+        <thead><tr><th scope="col">Scope</th><th scope="col">Claims it adds</th><th scope="col">What the member is shown</th><th scope="col">Example</th></tr></thead>
+        <tbody>
+          <tr data-scope="openid"><td data-label="Scope"><code>openid</code> <span class="dv-req">always</span></td><td data-label="Claims"><code>sub</code></td><td data-label="Shown as">A private ID for them in your app alone: different in every app</td><td data-label="Example"><code>"q2C1vYw0LrX8nS4eKpQ7tZ3mB9dF6hJ1aW5cE0gU2yI"</code></td></tr>
+          <tr data-scope="send.handle"><td data-label="Scope"><code>send.handle</code></td><td data-label="Claims"><code>preferred_username</code>, <code>profile</code></td><td data-label="Shown as">Their @handle and the link to their public Send Wall</td><td data-label="Example"><code>"alice"</code>, <code>"https://sendrh.com/u/alice"</code></td></tr>
+          <tr data-scope="send.picture"><td data-label="Scope"><code>send.picture</code></td><td data-label="Claims"><code>picture</code></td><td data-label="Shown as">The address of their public profile picture (left out when they have none), with a note that it is next to their handle on their public Send Wall, so it finds the handle</td><td data-label="Example"><code>"https://sendrh.com/uploads/a1b2c3.webp"</code></td></tr>
+          <tr data-scope="send.id"><td data-label="Scope"><code>send.id</code></td><td data-label="Claims"><code>send_id</code></td><td data-label="Shown as">Their Send ID: the same number in every app they share it with, so apps can recognise them across each other</td><td data-label="Example"><code>12</code></td></tr>
+          <tr data-scope="send.power"><td data-label="Scope"><code>send.power</code></td><td data-label="Claims"><code>send_power</code>, <code>send_level</code>, <code>send_title</code></td><td data-label="Shown as">Their Send Power points, the level they make and its title, with a note that the exact points are public next to their handle on their Send Wall, so they find the handle</td><td data-label="Example"><code>15200</code>, <code>31</code>, <code>"Send Sergeant"</code></td></tr>
+          <tr data-scope="send.boost"><td data-label="Scope"><code>send.boost</code></td><td data-label="Claims"><code>send_boost</code></td><td data-label="Shown as">The total multiplier every point of theirs is paid at, as one number, with a note that it is made of their holdings, OG tier, communities and boosts, so an app can estimate their holdings from it</td><td data-label="Example"><code>3.5</code></td></tr>
+          <tr data-scope="send.verified"><td data-label="Scope"><code>send.verified</code></td><td data-label="Claims"><code>send_verified</code></td><td data-label="Shown as">Whether a wallet of theirs passed the holder check: not which wallet, not how much it holds</td><td data-label="Example"><code>true</code></td></tr>
+          <tr data-scope="offline_access"><td data-label="Scope"><code>offline_access</code></td><td data-label="Claims">none: a refresh token</td><td data-label="Shown as">Keeping the values above up to date for 30 days without a new sign-in</td><td data-label="Example"><code>"refresh_token"</code> in the token answer</td></tr>
+        </tbody>
+      </table>
+      <p class="dk-note">The same claims, with the same values, are in the ID token and in userinfo. The ID token holds them as they were when it was issued; userinfo holds them as they are now. The picture is served so that your own pages can show it: an <code>&lt;img&gt;</code> on your site loads it.</p>
+    </section>
+
+    <section class="card reveal dv-sec" aria-labelledby="dv-endpoints-h">
+      <h2 class="ab-eng-h" id="dv-endpoints-h">Endpoints</h2>
+      <p class="dk-note">The issuer is exactly <code>https://sendrh.com</code>. A library needs only the discovery address; the rest are listed in it.</p>
+      <table class="dk-endpoints dv-table dv-table-2" id="dv-endpoints">
+        <thead><tr><th scope="col">What</th><th scope="col">Address</th></tr></thead>
+        <tbody>
+          <tr><td data-label="What">Discovery</td><td data-label="Address"><code>GET https://sendrh.com/.well-known/openid-configuration</code></td></tr>
+          <tr><td data-label="What">Signing keys (JWKS)</td><td data-label="Address"><code>GET https://sendrh.com/.well-known/jwks.json</code></td></tr>
+          <tr><td data-label="What">Sign-in page</td><td data-label="Address"><code>GET https://sendrh.com/oauth/authorize</code></td></tr>
+          <tr><td data-label="What">Token</td><td data-label="Address"><code>POST https://sendrh.com/oauth/token</code></td></tr>
+          <tr><td data-label="What">Userinfo</td><td data-label="Address"><code>GET or POST https://sendrh.com/oauth/userinfo</code></td></tr>
+          <tr><td data-label="What">Revoke</td><td data-label="Address"><code>POST https://sendrh.com/oauth/revoke</code></td></tr>
+          <tr><td data-label="What">Introspection (your own tokens)</td><td data-label="Address"><code>POST https://sendrh.com/oauth/introspect</code></td></tr>
+          <tr><td data-label="What">Handles check (reviewed server apps)</td><td data-label="Address"><code>POST https://sendrh.com/oauth/handles</code></td></tr>
+        </tbody>
+      </table>
+      <h3 class="dv-h3">The rules</h3>
+      <ul class="ab-mini-list">
+        <li><code>response_type=code</code> only. PKCE with <code>code_challenge_method=S256</code> is required of every app; <code>plain</code> is refused. <code>state</code> is required (up to 2,048 characters) and comes back with the answer, together with <code>iss</code>. A <code>nonce</code> you send is put in the ID token.</li>
+        <li><code>redirect_uri</code> is matched exactly, character for character: case, a trailing slash and the query all count. Register it in plain ASCII, an international domain in its <code>xn--</code> form, exactly as your app sends it. A wrong address or an unknown app is shown an error page and sent nowhere.</li>
+        <li>A code works once, within 60 seconds, for the app, address and PKCE verifier it was made for. Using it a second time revokes every token issued from it.</li>
+        <li>An access token lasts an hour and an ID token ten minutes: stop using a token once its <code>expires_in</code> has passed, or when it is answered 401. A refresh token changes at every use: the one you sent stops working at once, and of that sign-in’s access tokens only the one just replaced keeps the rest of its hour. A used refresh token presented again revokes the whole chain, and the chain ends 30 days after the sign-in. One member keeps at most 20 sign-ins in one app: a 21st ends their oldest.</li>
+        <li>Send <code>/oauth/token</code> and <code>/oauth/revoke</code> as <code>application/x-www-form-urlencoded</code>. A server app authenticates with <code>client_secret_basic</code> or <code>client_secret_post</code>; a browser or mobile app sends its <code>client_id</code> alone.</li>
+        <li>Token, userinfo, revoke, discovery and the keys answer any origin (CORS, never with cookies), so a browser app can call them directly.</li>
+        <li><code>prompt=none</code> answers <code>login_required</code> or <code>consent_required</code> without showing anything (a member whose account cannot sign in to apps is answered as one who is signed out, and a member who has not allowed your app gets <code>consent_required</code> whatever <code>max_age</code> says); <code>prompt=consent</code> asks the member again; <code>prompt=login</code>, and a <code>max_age</code> the member’s sign-in is older than, ask for a fresh proof (or answer <code>login_required</code> with <code>prompt=none</code>). <code>max_age</code> is weighed against the sign-in floored to ten minutes, with a minute to spare, so one under about eleven minutes always asks for a fresh proof.</li>
+        <li>Until an admin has reviewed your app, an error is not sent to your address on its own: the member is shown it, with a link back to your address that carries the same <code>error</code> and <code>state</code>. That keeps this site from being a redirector anyone could aim. Once reviewed, errors (and <code>prompt=none</code>’s answers) come back at once.</li>
+        <li>Use a full-page redirect: once a member has allowed your app it comes straight back without showing a page. A pop-up works with a library that does not need <code>window.opener</code> (the pages under <code>/oauth/</code> cut it). A hidden iframe with <code>prompt=none</code> never sees a member’s sign-in here (the site’s cookie is not sent to other sites’ frames). Once your app is reviewed it always answers <code>login_required</code>; until then it gets no answer at all, because the error is a page shown to the member and pages here cannot be framed, so a library waits for its own timeout. To stay up to date in the background, ask for <code>offline_access</code> and use the refresh token (oidc-client-ts: <code>automaticSilentRenew</code> only with a refresh token).</li>
+        <li>Your server trusts only what it checked itself: an ID token whose signature, <code>iss</code> and <code>aud</code> (your client ID) it verified, or an access token whose userinfo answer (or introspection) names your client ID in <code>aud</code> and <code>client_id</code>. Never trust claims or a token a browser hands over without that check: another app’s token for the same member would pass.</li>
+        <li>Errors are the standard OAuth ones, as JSON <code>{ error, error_description }</code>: <code>invalid_request</code> (a missing <code>grant_type</code> included), <code>invalid_client</code> (401, with a <code>Basic</code> challenge when you sent Basic), <code>invalid_grant</code>, <code>invalid_scope</code>, <code>unsupported_grant_type</code>, <code>unauthorized_client</code> (403: the handles check, for an app that may not use it) and <code>slow_down</code> (429). At your redirect address: <code>access_denied</code> (the member pressed Cancel), <code>login_required</code>, <code>consent_required</code>, <code>invalid_request</code>, <code>invalid_scope</code>, <code>unsupported_response_type</code>, <code>request_not_supported</code> and <code>request_uri_not_supported</code>. Write your code against the <code>error</code> value; the description is for people.</li>
+        <li>Limits are per app, so a server calling from one address is not held back by it: 600 token requests a minute for one app (every request from a server app that proved its secret counts; for a browser app, only exchanges and refreshes that succeeded), 3,000 userinfo requests a minute for one app, 600 introspections and 120 handle checks. No one member can use up an app’s minute: each member has a share in each app, across all their tokens (30 token requests, 120 userinfo requests and, for a browser app, 30 introspections a minute), one sign-in chain refreshes at most 10 times a minute and 120 an hour, and one token reads userinfo 120 times a minute. Refused requests count against their address: 120 token requests or browser-app introspections a minute, and 4,000 userinfo requests with a token this site does not know (a token past its hour counts against its member’s share instead). Each address has a backstop of 3,000 token and 6,000 userinfo requests a minute, and 120 sign-in pages in ten minutes. Five apps per member, five redirect addresses per app.</li>
+        <li>The handles check, for reviewed server apps that keep members’ handles theirs in your app too: <code>POST /oauth/handles</code> with your client authentication and <code>{ "handles": ["alice", "@bob"] }</code> (up to 50) answers <code>{ handles: { alice: true, bob: false }, taken: ["alice"] }</code>: yes or no for each, whatever the capitals, and nothing more about anyone.</li>
+      </ul>
+    </section>
+
+    <section class="card reveal dv-sec" aria-labelledby="dv-example-h" id="dv-example">
+      <h2 class="ab-eng-h" id="dv-example-h">Example: a browser app, no library</h2>
+      <p class="dk-note">A public app (no secret, because a browser cannot keep one; PKCE is its proof). Register it as public with the address of your callback page, put your client ID in, and call <code>signInWithSend()</code> from your button.</p>
+<pre class="dk-pre dv-code" id="dv-ex-browser"><code>// Sign in with Send from a browser app: no library and no secret (PKCE is the proof)
+const ISSUER = 'https://sendrh.com';
+const CLIENT_ID = 'sapp_your_client_id';             // from Your apps, below
+const REDIRECT_URI = location.origin + '/callback';  // registered exactly as written
+const SCOPE = 'openid send.handle send.id send.power send.boost';
+const b64url = (bytes) =&gt; btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+const random = () =&gt; b64url(crypto.getRandomValues(new Uint8Array(32)));
+
+async function signInWithSend() {                    // call it from your button
+  const verifier = random(), state = random();
+  const challenge = b64url(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)));
+  sessionStorage.setItem('send-signin', JSON.stringify({ verifier, state }));
+  location.assign(ISSUER + '/oauth/authorize?' + new URLSearchParams({ response_type: 'code', client_id: CLIENT_ID,
+    redirect_uri: REDIRECT_URI, scope: SCOPE, state, code_challenge: challenge, code_challenge_method: 'S256' }));
+}
+
+async function finishSignIn() {                      // run it on the page at REDIRECT_URI
+  const q = new URLSearchParams(location.search), saved = JSON.parse(sessionStorage.getItem('send-signin') || '{}');
+  sessionStorage.removeItem('send-signin');
+  if (!saved.state || q.get('state') !== saved.state || q.get('iss') !== ISSUER) throw new Error('not the sign-in we started');
+  if (q.get('error')) throw new Error(q.get('error'));   // access_denied: they pressed Cancel
+  const res = await fetch(ISSUER + '/oauth/token', { method: 'POST', body: new URLSearchParams({ grant_type: 'authorization_code',
+    code: q.get('code'), redirect_uri: REDIRECT_URI, client_id: CLIENT_ID, code_verifier: saved.verifier }) });
+  const tokens = await res.json();
+  if (!res.ok) throw new Error(tokens.error);
+  const me = await fetch(ISSUER + '/oauth/userinfo', { headers: { Authorization: 'Bearer ' + tokens.access_token } });
+  return me.json();   // { sub, aud, client_id, preferred_username, profile, send_id, send_power, ... }: what they ticked
+}</code></pre>
+      <div class="dk-actions"><button class="btn btn-ghost btn-sm" type="button" data-dv-copy="dv-ex-browser" data-tip="Copies the browser example to your clipboard">Copy the example</button></div>
+      <p class="dk-note">The answer holds only the claims the member ticked: a box they left unticked is simply missing. Keep the access token in memory and ask userinfo again when you want fresh values; it lasts an hour.</p>
+
+      <h3 class="dv-h3">A server, with an OpenID Connect library</h3>
+      <p class="dk-note">A confidential app: register it as confidential and keep the secret on your server. Shown with <code>openid-client</code> 6 for Node; another OpenID Connect client works the same way from the discovery address once it accepts ES256 ID tokens (see How it works, above).</p>
+<pre class="dk-pre dv-code" id="dv-ex-server"><code>import * as client from 'openid-client';
+const config = await client.discovery(new URL('https://sendrh.com'), 'sapp_your_client_id', 'ssec_your_client_secret', undefined,
+  { execute: [client.enableNonRepudiationChecks] });   // so the ID token's signature is checked too, against the published keys
+
+// 1. your "Sign in with Send" route
+const verifier = client.randomPKCECodeVerifier(), state = client.randomState();
+req.session.sendSignIn = { verifier, state };          // wherever your app keeps a sign-in in progress
+res.redirect(client.buildAuthorizationUrl(config, { redirect_uri: 'https://your.app/callback', scope: 'openid send.handle send.id send.power',
+  code_challenge: await client.calculatePKCECodeChallenge(verifier), code_challenge_method: 'S256', state }).href);
+
+// 2. your callback route, at https://your.app/callback
+const { verifier: v, state: s } = req.session.sendSignIn;
+const tokens = await client.authorizationCodeGrant(config, new URL(req.url, 'https://your.app'), { pkceCodeVerifier: v, expectedState: s });
+const claims = tokens.claims();   // the ID token, checked: signature (ES256, the published keys), issuer, audience, expiry
+const fresh = await client.fetchUserInfo(config, tokens.access_token, claims.sub);   // today's Send Power, level and Boost</code></pre>
+      <div class="dk-actions"><button class="btn btn-ghost btn-sm" type="button" data-dv-copy="dv-ex-server" data-tip="Copies the server example to your clipboard">Copy the example</button></div>
+
+      <h3 class="dv-h3">Checking an ID token yourself</h3>
+      <p class="dk-note">No library needed: Node’s own crypto checks the signature against the published keys. This is all it takes to trust what an ID token says without asking this site.</p>
+<pre class="dk-pre dv-code" id="dv-ex-verify"><code>import { createPublicKey, verify } from 'node:crypto';
+const ISSUER = 'https://sendrh.com', CLIENT_ID = 'sapp_your_client_id';
+let jwks = null;   // keep it, and fetch it again when a token names a key you do not have
+
+async function checkIdToken(idToken, nonce) {
+  const [h, p, s] = idToken.split('.');
+  const head = JSON.parse(Buffer.from(h, 'base64url')), claims = JSON.parse(Buffer.from(p, 'base64url'));
+  if (head.alg !== 'ES256') throw new Error('unexpected algorithm');   // the only one: never accept "none"
+  if (!jwks || !jwks.keys.some((k) =&gt; k.kid === head.kid)) jwks = await (await fetch(ISSUER + '/.well-known/jwks.json')).json();
+  const jwk = jwks.keys.find((k) =&gt; k.kid === head.kid);
+  if (!jwk) throw new Error('unknown signing key');
+  const key = createPublicKey({ key: { kty: jwk.kty, crv: jwk.crv, x: jwk.x, y: jwk.y }, format: 'jwk' });
+  if (!verify('sha256', Buffer.from(h + '.' + p), { key, dsaEncoding: 'ieee-p1363' }, Buffer.from(s, 'base64url'))) throw new Error('bad signature');
+  const now = Math.floor(Date.now() / 1000);   // a minute of leeway for a clock that is a little out
+  if (claims.iss !== ISSUER || claims.aud !== CLIENT_ID || claims.exp + 60 &lt; now || claims.iat - 60 &gt; now) throw new Error('not for this app, or expired');
+  if (nonce !== undefined &amp;&amp; claims.nonce !== nonce) throw new Error('wrong nonce');
+  return claims;   // sub, and the claims the member ticked: preferred_username, send_id, send_power and the rest
+}</code></pre>
+      <div class="dk-actions"><button class="btn btn-ghost btn-sm" type="button" data-dv-copy="dv-ex-verify" data-tip="Copies the ID token check to your clipboard">Copy the check</button></div>
+    </section>
+
+    <section class="card reveal dv-sec" aria-labelledby="dv-button-h" id="dv-button">
+      <h2 class="ab-eng-h" id="dv-button-h">The Sign in with Send button</h2>
+      <p class="dk-note">Two colours, as SVG files or as HTML you paste in. The HTML version takes your page’s font size and is never less than 44 pixels tall. Point it at your own route that starts the sign-in, and keep the words “Sign in with Send” so members know what they are pressing.</p>
+      <div class="dv-btn-show">
+        <figure class="dv-btn-fig dv-btn-fig-dark"><img src="/assets/signin-with-send.svg" width="212" height="44" alt="The dark Sign in with Send button: a lime S in a circle, then the words, on near-black with a lime ring"><figcaption>Dark</figcaption></figure>
+        <figure class="dv-btn-fig dv-btn-fig-lime"><img src="/assets/signin-with-send-lime.svg" width="212" height="44" alt="The lime Sign in with Send button: a lime S on a black circle, then the words in black, on lime"><figcaption>Lime</figcaption></figure>
+      </div>
+      <div class="dk-actions">
+        <a class="btn btn-ghost btn-sm" href="/assets/signin-with-send.svg" download="signin-with-send.svg" data-tip="Saves the dark button as an SVG file">Download the dark SVG</a>
+        <a class="btn btn-ghost btn-sm" href="/assets/signin-with-send-lime.svg" download="signin-with-send-lime.svg" data-tip="Saves the lime button as an SVG file">Download the lime SVG</a>
+      </div>
+      <h3 class="dv-h3">As HTML, dark</h3>
+<pre class="dk-pre dv-code" id="dv-btn-dark"><code>&lt;a href="https://your.app/sign-in-with-send" style="display:inline-flex;align-items:center;gap:0.6em;min-height:44px;padding:0.4em 1.1em 0.4em 0.6em;box-sizing:border-box;border:2px solid #c6f000;border-radius:999px;background:#0c0e09;color:#f2f6ec;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-weight:700;line-height:1.2;text-decoration:none"&gt;&lt;svg width="1.5em" height="1.5em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"&gt;&lt;circle cx="12" cy="12" r="12" fill="#c6f000"/&gt;&lt;path d="M16.2 8.2C15.4 6.9 13.9 6.3 12.2 6.3 9.9 6.3 8.2 7.5 8.2 9.3c0 1.9 1.8 2.5 3.8 2.9 2.2.4 4 1.1 4 3.1 0 1.8-1.8 2.9-4.1 2.9-1.9 0-3.5-.8-4.3-2.2" fill="none" stroke="#0c0e09" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/&gt;&lt;/svg&gt;Sign in with Send&lt;/a&gt;</code></pre>
+      <div class="dk-actions"><button class="btn btn-ghost btn-sm" type="button" data-dv-copy="dv-btn-dark" data-tip="Copies the HTML for the dark button">Copy the dark HTML</button></div>
+      <h3 class="dv-h3">As HTML, lime</h3>
+<pre class="dk-pre dv-code" id="dv-btn-lime"><code>&lt;a href="https://your.app/sign-in-with-send" style="display:inline-flex;align-items:center;gap:0.6em;min-height:44px;padding:0.4em 1.1em 0.4em 0.6em;box-sizing:border-box;border:2px solid #020301;border-radius:999px;background:#c6f000;color:#020301;font-family:system-ui,-apple-system,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-weight:700;line-height:1.2;text-decoration:none"&gt;&lt;svg width="1.5em" height="1.5em" viewBox="0 0 24 24" aria-hidden="true" focusable="false"&gt;&lt;circle cx="12" cy="12" r="12" fill="#020301"/&gt;&lt;path d="M16.2 8.2C15.4 6.9 13.9 6.3 12.2 6.3 9.9 6.3 8.2 7.5 8.2 9.3c0 1.9 1.8 2.5 3.8 2.9 2.2.4 4 1.1 4 3.1 0 1.8-1.8 2.9-4.1 2.9-1.9 0-3.5-.8-4.3-2.2" fill="none" stroke="#c6f000" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/&gt;&lt;/svg&gt;Sign in with Send&lt;/a&gt;</code></pre>
+      <div class="dk-actions"><button class="btn btn-ghost btn-sm" type="button" data-dv-copy="dv-btn-lime" data-tip="Copies the HTML for the lime button">Copy the lime HTML</button></div>
+    </section>
+
+    <section class="card gold-card reveal dv-sec" aria-labelledby="dv-apps-h" id="dv-apps">
+      <h2 class="ab-eng-h" id="dv-apps-h">Your apps</h2>
+      <p class="dk-note">Any member can register up to five apps, free. An app works as soon as it is registered. Its sign-in page says “Not reviewed by Just Send It” until an admin has looked at it, and changing its name, homepage, description or addresses clears a review. Names, homepages and descriptions that pass for this site are refused: its names in any spelling, its address, its button’s and account’s words, staff words, and letters from other alphabets in a name. An admin can switch off an app that misleads people: its sign-ins and tokens stop at once, and it stays listed until the admin decides. Changing an app’s redirect addresses or homepage, making it a new secret and deleting it each ask you to confirm it’s you, as any security change here does. Adding a redirect address on a host the app did not have signs every member out of the app, and each is asked again at their next sign-in, because what they allowed covered where the app sent them then.</p>
+      <p class="modal-note" id="dv-apps-status" role="status" aria-live="polite"></p>
+      <div id="dv-apps-body"><p class="dk-note">Checking whether you are signed in.</p></div>
+    </section>
+
+  </div>
+</main>
+
+<footer>
+  <div class="disclaimer">🎉 Entertainment Purposes Only 🎉</div>
+  <p class="fine">
+    Burning tokens is permanent and is not an investment, a purchase, or advice. Data is best-effort from public on-chain sources — not a guarantee, not an audit. Not affiliated with Robinhood Markets, Inc.<br>
+    Powered by <a href="https://GenerationalWealthCoin.com" target="_blank" rel="noopener">Generational Wealth Coin $GWC</a> · <a class="foot-social" href="https://t.me/generationalwealthcoin" target="_blank" rel="noopener nofollow">Telegram 💬</a> · <a class="foot-social" href="https://x.com/sendrh_" target="_blank" rel="me noopener">X 🐦</a> 💸
+  </p>
+  <div class="nav-foot">
+    <a href="/about">About</a>
+    <a href="/arcade">Arcade</a>
+    <a href="/communities">Communities</a>
+    <a href="/developers" aria-current="page">Developers</a>
+    <a href="/">Home</a>
+    <a href="/guide">How to Buy</a>
+    <a href="/market">Market Data</a>
+    <a href="/profile">My Profile</a>
+    <a href="/newpairs">Scanner</a>
+    <a href="/wall">Send Wall</a>
+    <a href="/support">Support</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/tracker">Wallet Tracker</a>
+    <a href="/swap">Swap</a>
+    <a href="/tokens">Tokens</a>
+    <a href="/watchlist">Watchlist</a>
+    <a href="/whitepaper">White Paper</a>
+  </div>
+</footer>
+
+<script src="prefs.js"></script>
+<script src="app.js"></script>
+<script src="sfx.js"></script>
+<script src="eggs.js"></script>
+<script src="matrix.js"></script>
+<script src="tips.js"></script>
+<script src="livex.js"></script>
+<script src="tokentext.js"></script>
+<script src="nav.js"></script>
+<script src="wallet.js"></script>
+<script src="auth.js"></script>
+<script src="moderation.js"></script>
+<script src="search.js"></script>
+<script src="player.js"></script>
+<script src="notifications.js"></script>
+<script src="voicememo.js"></script>
+<script src="compose.js"></script>
+<script src="developers.js"></script>
+<script src="sendy.js"></script>
+<script src="onboard.js"></script>
+</body>
+</html>

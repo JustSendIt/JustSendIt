@@ -988,6 +988,7 @@ for (const col of [
   "ALTER TABLE api_keys ADD COLUMN consumed_wei TEXT",
   "CREATE INDEX IF NOT EXISTS idx_arcade_day ON arcade_rounds(day)",                                        // the hub counts today's flights every 8 s
   "CREATE INDEX IF NOT EXISTS idx_users_arcade_boost ON users(arcade_boost_until) WHERE arcade_boost > 1", // …and the pilots boosted right now
+  "CREATE INDEX IF NOT EXISTS idx_users_avatar_img ON users(avatar_img) WHERE avatar_img IS NOT NULL",   // /uploads asks whether a file is a member's picture (Sign in with Send's picture claim, served cross-origin)
 
   /* ── Multi-wallet, and the sybil ring that multi-wallet makes possible ──────────────────────────────
      An account may hold several wallets so that everything it owns counts toward one Send Power score.
@@ -11520,8 +11521,9 @@ const SENDY_SITE_MAP = `PAGES — point people to these by path:
 /communities — communities (holders-only walls, proposals) and Send Squads
 /arcade — the Arcade: the weekly competitions and boards
 /data — the Data API
+/developers — Sign in with Send, for people building apps and games around Send: their members sign in with their Send account and bring their handle, Send ID, Send Power and Send Boost, sharing only what each member ticks; register an app there
 /market — Market Data: chain and token figures with Robinhood Chain as the default view — DeFi TVL, DEX volume, liquidity, fees, stablecoins, market caps where a chain or token has one, the chain's own pulse (blocks, gas, pools created) — each figure with its source and when it was read (DefiLlama, L2BEAT, growthepie, GeckoTerminal, Dexscreener, the chain itself); a search bar; top chains and top tokens sortable by market cap, liquidity, TVL, volume and fees over a chosen time frame
-/profile — the account: link wallets, username, two-factor, delete the account
+/profile — the account: link wallets, username, two-factor, the apps you signed in to with Send (and Revoke), delete the account
 /support — the Support board: ask in public, answer others, vote answers up
 /whitepaper — the white paper · /terms — the Terms · /privacy — the Privacy Policy
 /u/<username> — one person's Send Wall
@@ -11554,7 +11556,7 @@ function sendyKnowledge() {
   if (sendyKnowledgeCache) return sendyKnowledgeCache;
   const parts = [SENDY_SITE_MAP];
   try { const r = fs.readFileSync(path.join(__dirname, 'README.md'), 'utf8'); const i = r.indexOf('\n## 5.'); parts.push('=== README — how the site works ===\n' + (i > 0 ? r.slice(0, i) : r)); } catch {}
-  for (const f of ['index', 'support', 'communities', 'newpairs', 'wall', 'watchlist', 'tracker', 'arcade', 'data', 'market', 'privacy', 'whitepaper']) {
+  for (const f of ['index', 'support', 'communities', 'newpairs', 'wall', 'watchlist', 'tracker', 'arcade', 'data', 'market', 'developers', 'privacy', 'whitepaper']) {
     try { parts.push('=== the page ' + ROUTES.cleanPath(f + '.html') + (f === 'whitepaper' ? ' — the white paper, in full' : '') + ' ===\n' + sendyHtmlToText(fs.readFileSync(path.join(__dirname, 'public', f + '.html'), 'utf8'))); } catch {}
   }
   // the Terms are long and legal: Sendy gets the section index and points people to the section, never paraphrasing what it cannot see
@@ -12323,9 +12325,11 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
     }
     if (!rateLimit('pend:' + userId, 10, 9e5)) { lockoutAlert(userId); res.writeHead(302, { Location: '/?err=locked', 'Set-Cookie': CLEAR_OAUTH_STATE }); return res.end(); }   // F013
     pendingLogins.set(pend, entry);
+    // begun from an app's "Sign in with Send": the second step is taken on that sign-in's own page (auth.js reads twofa=1 anywhere)
+    const resume2fa = gateReq ? OIDC.resumePath(gateReq) : null;
     res.writeHead(302, {
       'Set-Cookie': [`oauth_2fa=${pend}; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=300${cookieSecure()}`, CLEAR_OAUTH_STATE],
-      Location: '/?twofa=1',
+      Location: resume2fa ? resume2fa + '&twofa=1' : '/?twofa=1',
     });
     return res.end();
   }
@@ -12333,7 +12337,10 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
      exceptions: a brand-new account's own setup, and an account whose ONLY possible proof is this sign-in (a
      social login with no password, no two-factor and no wallet old enough to vouch). */
   const token = createSession(userId, ipIdxVal, !ident ? NEW_ACCOUNT_SUDO_MS : (onlyProofIsSignIn(userId, now()) ? SUDO_MS : 0));
-  res.writeHead(302, { 'Set-Cookie': [sessionCookie(token), CLEAR_OAUTH_STATE], Location: '/profile' });
+  /* Begun from an app's "Sign in with Send" page: back to that sign-in. Never a return address from the query — only the
+     request this browser was shown, by the id in its own HttpOnly cookie, and only while that request is still waiting. */
+  const resume = gateReq ? OIDC.resumePath(gateReq) : null;
+  res.writeHead(302, { 'Set-Cookie': [sessionCookie(token), CLEAR_OAUTH_STATE], Location: resume || '/profile' });
   res.end();
 }
 
@@ -13826,6 +13833,8 @@ function ownDataView(u) {
     notifications: db.prepare('SELECT id, kind, icon, text, href, created_at FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id),
     mutes: mutedNames(u.id),
     alerts: alertsOf(u.id),
+    signInApps: OIDC.grantsOf(u.id),   // Sign in with Send: the apps they allowed, what each can see and since when
+    appsRegistered: OIDC.appsOf(u.id),   // ...and the apps they registered as a developer (never a secret: only its hash is kept)
   };
 }
 let lbCache = { at: 0, top: null };   // leaderboard top-20 cache (identical for everyone → serve for LB_TTL)
@@ -15028,6 +15037,7 @@ function flagUser(userId, reason, costMult) {
   const mult = Number(costMult) > 1 ? Number(costMult) : 1;
   db.prepare('UPDATE users SET strikes=?, restrict_level=?, restrict_reason=?, restricted_until=?, flagged_at=?, redeem_base_send=?, redeem_dur=?, redeem_mult=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?')
     .run(strikes, level, String(reason).slice(0, 200), until, now(), baseSend, dur, mult, userId);
+  if (typeof oidcRevokeUser === 'function') oidcRevokeUser(userId);   // read-only accounts do not sign in to apps (Sign in with Send); the guard lets suites run this function on its own
   return true;
 }
 // enforce the redemption deal after an on-chain holdings read: hold the bought $SEND to term, or read-only returns doubled.
@@ -15043,12 +15053,14 @@ function checkProbation(userId, sendTok) {
     if ((u.restrict_level || 0) >= 3) { // a broken PERMANENT buy-out hold → back to permanent (buy-out again costs $1000)
       db.prepare('UPDATE users SET restricted_until=?, restrict_reason=?, redeem_dur=0, redeem_base_send=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?')
         .run(PERM_UNTIL, 'You sold your $SEND before the hold was up — your permanent read-only is back.', sendTok, userId);
+      if (typeof oidcRevokeUser === 'function') oidcRevokeUser(userId);   // read-only accounts do not sign in to apps: every app's tokens end now, not when it lifts
       notify(userId, '🔇', 'You sold your $SEND before the hold was up — your permanent read-only is back. Buy & hold $SEND again to lift it.', 'restriction');
       return;
     }
     const newDur = Math.max(DAY_MS, (u.redeem_dur || DAY_MS) * 2); // timed → returns doubled
     db.prepare('UPDATE users SET restricted_until=?, restrict_reason=?, redeem_dur=?, redeem_base_send=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?')
       .run(now() + newDur, 'You sold your $SEND before the hold was up — read-only is back, and the timer is doubled.', newDur, sendTok, userId);
+    if (typeof oidcRevokeUser === 'function') oidcRevokeUser(userId);   // read-only accounts do not sign in to apps: every app's tokens end now, not when it lifts
     notify(userId, '🔇', 'You sold your $SEND before the hold was up — read-only is back, and doubled. Buy & hold again to lift it.', 'restriction');
   }
 }
@@ -15898,6 +15910,44 @@ function healthCheck() {
   healthCache = { at: now(), val: out };
   return out;
 }
+/* ===== Sign in with Send: OAuth 2.0 + OpenID Connect for apps built around Send (lib/oidc.js) =====================
+   Owner, 2026-11-03: other people building apps around Send sign members in with their Send account and carry over the
+   handle, the Send ID, Send Power (level and title) and the Send Boost — "account consistency across everyone building
+   around Send" — without being data-farmed. The protocol, the consent page, the tables and the privacy rules are
+   lib/oidc.js's; this hands it the site's own pieces: the sessions (one sign-in system, never a second), "Confirm it's you"
+   (ownershipRefusal, asked on a member's first Allow for an app), the keyring (the signing keys are encrypted with it), the
+   claims' sources (levelForXp, titleFor, effectiveMult, the Send ID) and the site's rules (the restriction, the reserved
+   names, the rate-limit buckets). */
+const OIDC_LIB = require('./lib/oidc.js');
+const OIDC = OIDC_LIB.createOidc({
+  db, now, encField, decField, hashToken, parseCookies, getUser, rateLimit, clientIp, send, bad, readBody, blockSanctioned, isAdmin,
+  // how full a rate-limit bucket is, without counting this request (the token endpoint counts only what it refused)
+  rateHits: (key, windowMs) => { const b = buckets.get(key); return b && now() - b.t <= windowMs ? b.n : 0; },
+  ownershipRefusal: (me, b) => ownershipRefusal(me, b), verifyNeeds: (me) => verifyNeedsOf(me),
+  origin: () => SITE_ORIGIN, escHtml: (v) => escHtml(v), assetVer: (f) => assetVer(f), secHeaders: SEC_HEADERS,
+  levelForXp, titleFor, effectiveMult, restrictionOf, sendNoOf: (u) => sendNoOf(u),
+  nameKey: (v) => nameKey(v), reservedKeys: () => [...RESERVED_KEYS],
+  // the signing key is replaced every this many days (a new one is published a day before it signs); 0 = only by hand (/admin)
+  rotateDays: () => { const v = String(process.env.OIDC_KEY_ROTATE_DAYS == null ? '' : process.env.OIDC_KEY_ROTATE_DAYS).trim(); return v === '' ? 90 : Math.max(0, Number(v) || 0); },
+  log: (m) => console.log(m),
+});
+/* The first app (owner, 2026-11-03: one system, sendy.gg its first app): the game's server, a reviewed confidential client
+   owned by no member. CONNECT_SENDY_SECRET_HASH is the SHA-256 (64 hex) of the secret the game holds — the secret itself
+   never comes here; unset, the client is not seeded (and one seeded before signs nobody in). CONNECT_SENDY_REDIRECT is its
+   one redirect address. */
+try {
+  OIDC.seedFirstParty({ clientId: 'sendy.gg', name: 'Sendy\'s Metaverse', homepage: 'https://sendy.gg',
+    description: 'The Send game world: your handle, Send ID and Send Power, carried into the game.',
+    redirect: String(process.env.CONNECT_SENDY_REDIRECT || '').trim() || 'https://sendy.gg/api/sendrh/callback',
+    secretHash: String(process.env.CONNECT_SENDY_SECRET_HASH || '').trim() });
+} catch (e) { console.error('Sign in with Send: sendy.gg could not be set up', e && e.message); }
+// a member who loses access to apps loses it now, not at the next token use (which refuses them anyway)
+function oidcRevokeUser(userId) { try { OIDC.revokeUser(userId); } catch {} }
+/* A change to how the account is proved (a password change, "end other sessions", two-factor off): every app's grant ends
+   with the sessions it shut out — consents, codes and tokens — so an app let in through a session the member just ended
+   loses it too. The answer counts the apps. */
+function oidcRevokeAll(userId) { try { return OIDC.revokeAllGrants(userId); } catch (e) { console.error('Sign in with Send: revoking every app failed', e && e.message); return 0; } }
+
 const server = http.createServer(async (req, res) => {
   res._gzip = acceptsGzip(req.headers['accept-encoding']); // whether we may gzip this response (read by send/serveFile)
   res._enc = bestEnc(req.headers['accept-encoding']);      // best static-asset encoding (br | gzip | null)
@@ -15937,6 +15987,17 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(308, { Location: BASE_URL.replace(/\/+$/, '') + req.url, 'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS });
     return res.end();
   }
+  /* Sign in with Send (lib/oidc.js) answers its own paths before the same-origin write check below: an app's server or
+     browser posts to /oauth/token, /oauth/userinfo and /oauth/revoke from its own origin, carrying no cookie of ours, and
+     the consent page's POST to /oauth/authorize checks its Origin (or Referer) and its CSRF token itself. */
+  if (p.startsWith('/oauth/') || p.startsWith('/.well-known/')) {
+    try { if (await OIDC.handle(req, res, url)) return; }
+    catch (e) {
+      console.error('oidc', e && e.stack || e);
+      if (!res.headersSent) { res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC_HEADERS }); return res.end('{"error":"server_error"}'); }
+      try { res.destroy(); } catch {} return;
+    }
+  }
   // only API routes read the session — resolving it for every static asset cost 2 SELECTs × ~21 assets per page load
   const me = p.startsWith('/api/') ? getUser(req) : null;
 
@@ -15973,6 +16034,8 @@ const server = http.createServer(async (req, res) => {
      try to join, the ticket appears. */
   try {
     if (p.startsWith('/api/')) {
+      /* ---- Sign in with Send: a member's own apps, the apps they signed in to, the admin's list (lib/oidc.js) ---- */
+      if (p.startsWith('/api/oauth/') || p.startsWith('/api/admin/oauth/')) { if (await OIDC.api(req, res, p, me)) return; }
       /* ---- the participation gate: ask for the check, and watch it ---- */
       if (p === '/api/holder/state' && req.method === 'GET') {
         if (!me) return bad(res, 'sign in first', 401);
@@ -16583,7 +16646,8 @@ const server = http.createServer(async (req, res) => {
         const r = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid));
         burnProofsOff(me, 'you ended your other sessions, and one of them had started this window');   // a window those sessions opened goes with them
         const keyReset = resetDataKeySecret(me.id, 'you ended your other sessions');
-        return send(res, 200, { ok: true, endedOthers: r.changes, dataKeyReset: keyReset });
+        const appsSignedOut = oidcRevokeAll(me.id);   // Sign in with Send: every app let in through a session that just ended loses it too
+        return send(res, 200, { ok: true, endedOthers: r.changes, dataKeyReset: keyReset, appsSignedOut });
       }
       /* Change the account password. There is no reset — this site can send no email — so this is the only
          way a password ever changes, and it needs the old one plus whatever second factor is on. Every
@@ -16807,6 +16871,7 @@ const server = http.createServer(async (req, res) => {
         } else {
           const until = days ? now() + days * DAY_MS : PERM_UNTIL;
           db.prepare('UPDATE users SET restricted_until = ?, restrict_level = ?, restrict_reason = ?, redeem_dur = ? WHERE id = ?').run(until, days ? 1 : 3, reason, days ? days * DAY_MS : DAY_MS, uid);
+          oidcRevokeUser(uid);   // a restricted account cannot sign in to apps: what it is signed in to stops now
           notify(uid, '🔇', 'A moderator put your account in read-only mode' + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' indefinitely') + ': ' + reason + ' Questions: SendRH@Atomicmail.io', 'restriction');
         }
         db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = ? WHERE resolved_at IS NULL AND kind = 'user' AND target_id = ?").run(now(), me.id, b.lift ? 'lifted' : 'restricted', uid);
@@ -16858,6 +16923,7 @@ const server = http.createServer(async (req, res) => {
           const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
           for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'reports', 'tracker_cache', 'wallet_hist', 'burn_proofs'])
             try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
+          OIDC.forgetUser(uid);   // Sign in with Send: every app it allowed (consents, codes, tokens) and every app it registered, with everyone's sign-ins to them
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
              in, and its unused codes would be a supply of tickets nobody answers for — make an account, delete it,
              and the ten codes it was handed would otherwise live on. That includes a code a friend has redeemed but
@@ -16920,8 +16986,9 @@ const server = http.createServer(async (req, res) => {
         const dropped = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid)).changes;
         burnProofsOff(me, 'the password was changed, and another session had started this window');
         resetDataKeySecret(me.id, 'your password was changed');
-        notify(me.id, '🔑', 'Your password was changed' + (dropped ? ', and ' + dropped + ' other signed-in ' + (dropped === 1 ? 'session was' : 'sessions were') + ' ended.' : '.'), 'wallet');
-        return send(res, 200, { ok: true, endedOthers: dropped });
+        const appsSignedOut = oidcRevokeAll(me.id);   // Sign in with Send: and every app's sign-in, which a session holding the old password could have made
+        notify(me.id, '🔑', 'Your password was changed' + (dropped ? ', and ' + dropped + ' other signed-in ' + (dropped === 1 ? 'session was' : 'sessions were') + ' ended' : '') + (appsSignedOut ? (dropped ? '; ' : ', and ') + appsSignedOut + (appsSignedOut === 1 ? ' app you had signed in to with Send was' : ' apps you had signed in to with Send were') + ' signed out.' : '.'), 'wallet');
+        return send(res, 200, { ok: true, endedOthers: dropped, appsSignedOut });
       }
       // Unlink ALL linked wallets from the account (the nav "Disconnect wallet"). Guarded so it can't lock you out or
       // strand wallet-2FA. Reversible — the user can re-link by signing again. Holder streak resets (we can no longer
@@ -17054,8 +17121,9 @@ const server = http.createServer(async (req, res) => {
         setTwofaWallet(me.id, null);   // the wallets stay linked and keep counting for Send Power; none of them is a key any more
         sudoOthersOff(me);
         resetDataKeySecret(me.id, 'two-factor was turned off');
-        notify(me.id, '🔓', 'Two-factor was turned OFF on your account. Not you? Turn it back on and end other sessions in Settings → Security.', 'alert');   // F091
-        return send(res, 200, { ok: true });
+        const appsSignedOut = oidcRevokeAll(me.id);   // Sign in with Send: every app's sign-in ends with the factor that guarded it
+        notify(me.id, '🔓', 'Two-factor was turned OFF on your account' + (appsSignedOut ? ', and every app you had signed in to with Send was signed out' : '') + '. Not you? Turn it back on and end other sessions in Settings → Security.', 'alert');   // F091
+        return send(res, 200, { ok: true, appsSignedOut });
       }
       /* Change WHICH linked wallet is the second factor, without turning 2FA off and on again (which would
          mean a window with no protection at all). Proving the CURRENT factor is required, so someone holding
@@ -20326,7 +20394,10 @@ const server = http.createServer(async (req, res) => {
       const f = path.normalize(p.replace('/uploads/', ''));
       if (f.includes('..') || f.includes('/') || f.endsWith('.part')) return bad(res, 'nope', 400); // never serve in-progress temp uploads
       // uploaded media is content-addressed by a random name → its bytes never change → cache it forever (immutable, no revalidation)
-      return serveFile(req, res, path.join(UPLOAD_DIR, f), { 'Cache-Control': 'public, max-age=86400' });   // F119: a day, not a year — a takedown must reach the CDN edge in hours, not months
+      /* a member's current profile picture is what Sign in with Send's picture claim points at, so an app's own page may show
+         it (Cross-Origin-Resource-Policy: cross-origin); every other upload stays same-origin, as SEC_HEADERS has it */
+      const corp = OIDC.isMemberPicture(f) ? { 'Cross-Origin-Resource-Policy': 'cross-origin' } : {};
+      return serveFile(req, res, path.join(UPLOAD_DIR, f), { 'Cache-Control': 'public, max-age=86400', ...corp });   // F119: a day, not a year — a takedown must reach the CDN edge in hours, not months
     }
     /* ===== /t/<sendId> — the ticket share page ========================================================
        The ONE page on this site built entirely per-request rather than served from disk, and it exists for a
@@ -20443,7 +20514,7 @@ const server = http.createServer(async (req, res) => {
       return res.end();
     }
 
-    /* The admin page and its scripts (admin.js, admincodes.js, adminrestore.js, adminanalytics.js) are the admin account's alone (ADMIN_USER_IDS): anyone else gets the same 404 as a
+    /* The admin page and its scripts (admin.js, admincodes.js, adminrestore.js, adminanalytics.js, adminapps.js) are the admin account's alone (ADMIN_USER_IDS): anyone else gets the same 404 as a
        page that does not exist — for every method and every spelling that reaches the file (case on a case-insensitive
        disk, //, /./, %2e), so the test is on the file the path RESOLVES to, before anything else serves it. Neither
        may be kept by the edge (private, no-store): a cached copy would reach everyone; a cached 404 would lock the
@@ -20452,7 +20523,7 @@ const server = http.createServer(async (req, res) => {
       // its address is /admin now (2026-10-15); /admin.html, /Admin, /admin/ and the rest are the same page to this gate
       const fpLc = path.normalize(path.join(PUBLIC_DIR, p)).toLowerCase().replace(/[\\/]+$/, ''), base = PUBLIC_DIR.toLowerCase() + path.sep;
       const isPage = fpLc === base + 'admin' || fpLc === base + 'admin.html';
-      const adminScript = ['admin.js', 'admincodes.js', 'adminrestore.js', 'adminanalytics.js'].find((n) => fpLc === base + n);
+      const adminScript = ['admin.js', 'admincodes.js', 'adminrestore.js', 'adminanalytics.js', 'adminapps.js'].find((n) => fpLc === base + n);
       if (isPage || adminScript) {
         if (!isAdmin(getUser(req)) || (req.method !== 'GET' && req.method !== 'HEAD')) return notFoundPage(res, { 'Cache-Control': 'private, no-store' });
         if (isPage && p !== '/admin') { res.writeHead(301, { Location: '/admin' + url.search, 'Cache-Control': 'private, no-store', 'Vary': 'Cookie', ...SEC_HEADERS }); return res.end(); }
@@ -20866,6 +20937,7 @@ const BACKUP_SCRUB = [
   'DELETE FROM arcade_guest_rounds WHERE user_id IS NULL', 'UPDATE arcade_guest_rounds SET ip = NULL, net = NULL',
   'DELETE FROM email_misses', 'DELETE FROM visit_keys', 'DELETE FROM visit_seen', 'DELETE FROM dh_moves',
   'DELETE FROM sessions', 'DELETE FROM wallet_challenges', 'DELETE FROM nonces', 'DELETE FROM burn_proofs',
+  'DELETE FROM oauth_codes', 'DELETE FROM oauth_tokens',   // Sign in with Send: live codes and tokens are not kept in a copy (an app signs its members in again after a restore)
   // Sendy's questions he could not answer and his answers nobody rated go after 90 days on the live site (lib/sendybrain.js prune)
   'DELETE FROM sendy_misses', 'DELETE FROM sendy_qa WHERE up = 0 AND down = 0',
   /* Market Data's bulk public history (lib/marketdata.js) is read again from its sources after a restore, so a copy does not carry it —

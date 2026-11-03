@@ -1,0 +1,72 @@
+/* ===== Sign in with Send: the sign-in, consent and error pages under /oauth/ (lib/oidc.js renders them) =====
+   One card in the middle of the page, on the site's own surfaces and buttons. Every size rides the text floor; every
+   control is at least 44px tall; long names and addresses wrap rather than push the page sideways (320px included). */
+.oa-page { min-height: 100vh; }
+.oa-main { display: flex; justify-content: center; align-items: flex-start; padding: 1.5rem 16px 3rem; box-sizing: border-box; width: 100%; }
+.oa-card {
+  width: 100%; max-width: 40rem; box-sizing: border-box; min-width: 0;
+  background: var(--ink-2); border: 1px solid var(--edge-ctl); border-radius: 18px;
+  padding: clamp(1rem, 4vw, 2rem); overflow-wrap: anywhere;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+}
+.oa-brand { display: flex; align-items: center; gap: 0.6rem; margin: 0 0 1rem; color: var(--green-bright); font-size: max(var(--text-floor), 1.35rem); }
+.oa-brand img { flex: 0 0 auto; }
+.oa-h1 { font-size: max(var(--text-floor), 1.45rem); line-height: 1.3; margin: 0 0 1rem; color: var(--text); }
+.oa-app-name { color: var(--green-bright); }
+.oa-h2 { display: block; font-size: max(var(--text-floor), 1.1rem); line-height: 1.35; margin: 1.25rem 0 0.4rem; color: var(--text); font-weight: 800; padding: 0; }
+.oa-lead { font-size: max(var(--text-floor), 1rem); color: var(--text); margin: 0.8rem 0; }
+.oa-note { font-size: max(var(--text-floor), 0.9rem); color: var(--text-dim); margin: 0.8rem 0; }
+.oa-foot { margin-top: 1.4rem; padding-top: 1rem; border-top: 1px solid var(--ink-4); }
+.oa-card a:not(.btn) { color: var(--green-bright); text-decoration: underline; }
+.oa-card code { font-size: max(var(--text-floor), 0.95rem); overflow-wrap: anywhere; color: var(--text); }
+
+/* the app, as the member should judge it */
+.oa-facts { border: 1px solid var(--ink-5); border-radius: 14px; padding: 0.8rem 1rem; margin: 0 0 1rem; background: var(--ink-3); }
+.oa-review { margin: 0 0 0.6rem; font-size: max(var(--text-floor), 0.95rem); font-weight: 700; }
+.oa-review-no { color: var(--gold); }
+.oa-review-yes { color: var(--green-bright); }
+.oa-dl { margin: 0; display: grid; gap: 0.5rem; }
+.oa-dl > div { display: grid; grid-template-columns: minmax(0, 11.5rem) minmax(0, 1fr); gap: 0.25rem 0.75rem; }
+.oa-dl dt { color: var(--text-dim); font-size: max(var(--text-floor), 0.9rem); }
+.oa-dl dd { margin: 0; font-size: max(var(--text-floor), 0.95rem); color: var(--text); min-width: 0; }
+@media (max-width: 520px) { .oa-dl > div { grid-template-columns: minmax(0, 1fr); } }
+
+.oa-who { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin: 0 0 0.5rem; }
+.oa-who p { margin: 0; font-size: max(var(--text-floor), 1rem); }
+.oa-always { margin: 0 0 0.5rem; font-size: max(var(--text-floor), 1rem); }
+
+/* one box per scope the app asked for: the whole row is the target */
+.oa-scopes { border: 0; margin: 0; padding: 0; min-width: 0; }
+.oa-scope {
+  display: flex; gap: 0.75rem; align-items: flex-start; box-sizing: border-box; min-height: 44px;
+  padding: 0.65rem 0.8rem; margin: 0.5rem 0; border: 1px solid var(--edge-ctl); border-radius: 12px; cursor: pointer;
+  background: var(--ink-2);
+}
+.oa-scope:hover { border-color: var(--green); }
+.oa-scope:has(input:checked) { border-color: var(--green-bright); background: color-mix(in srgb, var(--green) 10%, var(--ink-2)); }
+.oa-scope:has(input:focus-visible) { outline: 3px solid var(--focus); outline-offset: 2px; }
+.oa-scope input { flex: 0 0 auto; width: 24px; height: 24px; margin: 0.1rem 0 0; accent-color: var(--green-bright); cursor: pointer; }
+.oa-scope-text { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
+.oa-scope-text b { font-size: max(var(--text-floor), 1rem); color: var(--text); }
+.oa-scope-sub { font-size: max(var(--text-floor), 0.9rem); color: var(--text-dim); }
+.oa-tickall { margin-top: 0.25rem; }
+.oa-never, .oa-keep { font-size: max(var(--text-floor), 0.95rem); color: var(--text-dim); margin: 1rem 0 0; }
+.oa-never b, .oa-keep b { color: var(--text); }
+
+.oa-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.25rem; align-items: stretch; }
+.oa-actions .btn { min-height: 44px; flex: 1 1 10rem; }
+.oa-inline { display: flex; flex: 1 1 10rem; margin: 0; }
+.oa-inline .btn { width: 100%; }
+
+/* "Confirm it's you" on a first Allow (and when an app asks for a fresh sign-in): the site's own step, in plain fields */
+.oa-confirm { border: 1px solid var(--gold); border-radius: 14px; margin: 1.25rem 0 0; padding: 0.4rem 1rem 0.8rem; min-width: 0; background: var(--ink-3); }
+.oa-confirm .oa-h2 { margin-top: 0.6rem; }
+.oa-confirm-lead { margin-top: 0.2rem; }
+.oa-err { margin: 0.6rem 0; font-size: max(var(--text-floor), 0.95rem); font-weight: 700; color: var(--gold); }
+.oa-field { display: flex; flex-direction: column; gap: 0.35rem; margin: 0.8rem 0; min-width: 0; }
+.oa-field-label { font-size: max(var(--text-floor), 0.95rem); color: var(--text); }
+.oa-input { box-sizing: border-box; width: 100%; max-width: 24rem; min-height: 44px; padding: 0.55rem 0.75rem; border-radius: 10px; border: 1px solid var(--edge-ctl);
+  background: var(--ink-2); color: var(--text); font: inherit; font-size: max(var(--text-floor), 1rem); }
+.oa-input:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.oa-field .btn { min-height: 44px; align-self: flex-start; max-width: 100%; }
+.oa-wallet-status { margin: 0; }
