@@ -289,7 +289,7 @@
       }
      ],
      "notes": [
-      "CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Binance Coin”, CoinGecko “BNB” — their prices are 0.1% apart on this read (a coin under another name counts only within 3% of CoinGecko’s price, and only as the one coin with the symbol $BNB that CoinLore lists within 10% of it)"
+      "CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Binance Coin”, CoinGecko “BNB” — their prices are 0.1% apart on this read (a coin under another name counts only within 3% of CoinGecko’s price, and only as the one coin with the symbol $BNB within 10% of it among the first 2,000 of the 14,993 coins CoinLore lists, as its daily walk last read them)"
      ],
      "mapping": {
       "status": "confirmed"

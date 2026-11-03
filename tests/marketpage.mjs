@@ -19,7 +19,9 @@
       On 2026-11-03 (the owner's "Yes and do that for all chains": a coin CoinLore lists under another name matches by symbol and
       price) BNB Chain's check in chains-*.json, and heatmap.json's checks, its check definition and the note that counts them, were
       brought to lib's answer on the same samples (BNB as CoinLore's "Binance Coin", agreed; on the map also CRO and PI), and each
-      CoinLore source got its match and name — nothing else in those files was changed.
+      CoinLore source got its match and name — nothing else in those files was changed. After review the same day, those notes say
+      among which coins it was the only one with the symbol within 10% (the walk's first 2,000; on the map CoinLore's 100 largest),
+      as lib now words it, and the map's check definition says "among those 100".
    3. market.js's number words, lifted between its @lift markers and run in a vm.
    4. A fake of the /api/market/* routes, served from those fixtures, with the site's CSP: run here against its own
       contract (sorting with nulls last both ways, wash volume left out of "highest volume", the windows, 404s), and
@@ -2057,6 +2059,8 @@ async function runSuite() {
     check('  ...every chain\'s market cap carries its check — { status (agreed, differs, single, none), sources [{ src, v, price, supply, at }], notes, mapping, coin } — the figure shown the first source\'s (CoinGecko\'s when it has one), never an average, never a relay counted as a second source',
       !badChk.length && mc('ethereum').check.status === 'agreed' && mc('arbitrum').check.status === 'differs' && /both price \$ARB the same/.test(mc('arbitrum').check.notes[0])
       && mc('bsc').check.status === 'agreed' && mc('bsc').check.sources[1].match === 'symbol' && mc('bsc').check.sources[1].name === 'Binance Coin' && /CoinLore calls it “Binance Coin”, CoinGecko “BNB”/.test(mc('bsc').check.notes[0]) && mc('ethereum').check.sources[1].match === 'name'
+      && /only as the one coin with the symbol \$BNB within 10% of it among the first 2,000 of the 14,993 coins CoinLore lists, as its daily walk last read them\)$/.test(mc('bsc').check.notes[0])
+      && ['24h', '7d', '30d', 'custom'].every((w) => !/that CoinLore lists within 10%/.test(JSON.stringify(FIX('chains-' + w + '.json'))))
       && mc('fantom').v === null && /lists no circulating supply/.test(mc('fantom').why) && mc('fantom').check.status === 'none' && mc('morph').label === 'BGB (gas token), market cap' && mc('stable').check.coin.name === 'Stable'
       && mc('robinhood').check.status === 'none' && mc('robinhood').check.mapping.note === 'no token of its own to check', badChk.slice(0, 4).join(' | '));
     const rh = FIX('chain-robinhood.json');
@@ -2174,6 +2178,8 @@ async function runSuite() {
     check('  ...and its traps as measured: BlackRock\'s BUIDL is exactly 0% (a figure of 0, the legend\'s "0%", never "no change"), BNB is matched by symbol and price and says so (CoinLore lists it as "Binance Coin"), HYPE\'s sources differ by their circulating supplies, a coin outside CoinLore\'s first 100 says so',
       buidl && buidl.change24h.v === 0 && !('why' in buidl.change24h) && MM.bucketOf(buidl.change24h.v) === 'flat'
       && HMR.find((r) => r.id === 'binancecoin').check.status === 'agreed' && HMR.find((r) => r.id === 'binancecoin').check.sources[1].match === 'symbol' && /CoinLore calls it “Binance Coin”, CoinGecko “BNB”/.test(HMR.find((r) => r.id === 'binancecoin').check.notes.join(' '))
+      && ['binancecoin', 'crypto-com-chain', 'pi-network'].every((id) => HMR.find((r) => r.id === id).check.notes.some((n) => /within 10% of it among CoinLore’s 100 largest coins, the part of its list this map reads\)$/.test(n))) && !/that CoinLore lists within 10%/.test(JSON.stringify(HM))
+      && HM.definitions.check === MM.DEFINITIONS.check
       && HMR.find((r) => r.id === 'hyperliquid').check.status === 'differs' && /circulating supply/.test(HMR.find((r) => r.id === 'hyperliquid').check.notes[0])
       && /CoinLore’s 100 largest coins include none with the symbol \$LTC/.test(HMR.find((r) => r.id === 'litecoin').check.notes.join(' ')));
 
