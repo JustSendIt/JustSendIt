@@ -115,8 +115,9 @@ const vendorFail = { mcaps: false, gtAll: false, gtMulti: false, noList: false, 
 /* rows the fake's GeckoTerminal multi answer leaves out (as GeckoTerminal does for a token it has no entry for — TSLAon, mGLO): the RWA
    section drops AMC and AAPL, so TSLA, whose own pools the research read, is among the 12 RWAs with the most liquidity */
 const gtMultiLeaveOut = new Set();
-// vendorMode.mcap: DefiLlama's chains and relay as measured 2026-10-28 (the market-cap section); otherwise the 2026-10-26 answers
-const vendorMode = { mcap: false };
+/* vendorMode.mcap: DefiLlama's chains and relay as measured 2026-10-28 (the market-cap section); otherwise the 2026-10-26 answers.
+   vendorMode.loreRows: CoinLore rows by id that a /ticker/ read answers in place of the walk's (a later read of the same coin) */
+const vendorMode = { mcap: false, loreRows: null };
 // hold.rhPage2: a promise Robinhood Chain's second pools page waits on (a run caught partway through); asked: it was asked for
 const hold = { rhPage2: null, asked: false };
 const w256 = (hex) => String(hex).replace(/^0x/, '').padStart(64, '0');
@@ -157,7 +158,7 @@ const vendor = http.createServer((req, res) => {
     if (p === '/cg/asset_platforms') { hit('cg-platforms'); cgSeen.push({ key: req.headers['x-cg-demo-api-key'] || null, q: 'asset_platforms' }); return vendorFail.platforms ? send(429, { error: 'slow down' }) : send(200, MC.platforms); }
     // CoinLore: its walk's pages (start=N), and a /ticker/ read answered from the same rows
     if (p === '/lore/tickers/') { hit('lore-walk'); const st = Number(u.searchParams.get('start') || 0); if (vendorFail.lore || (vendorFail.loreFrom != null && st >= vendorFail.loreFrom)) return send(429, { error: 'slow down' }); return send(200, { data: MC.walk.pages[st] || [], info: MC.walk.info }); }
-    if (p === '/lore/ticker/') { hit('lore-ticker'); if (vendorFail.lore) return send(429, { error: 'slow down' }); const want = String(u.searchParams.get('id') || '').split(','); const byId = new Map(loreRows.map((x) => [String(x.id), x])); return send(200, want.map((i) => byId.get(i)).filter(Boolean)); }
+    if (p === '/lore/ticker/') { hit('lore-ticker'); if (vendorFail.lore) return send(429, { error: 'slow down' }); const want = String(u.searchParams.get('id') || '').split(','); const byId = new Map(loreRows.map((x) => [String(x.id), x])); return send(200, want.map((i) => (vendorMode.loreRows && vendorMode.loreRows[i]) || byId.get(i)).filter(Boolean)); }
     // the bubble map's CoinGecko (its top 100, its stablecoins category, /global) and CoinLore (its first 100)
     if (p === '/hcg/coins/markets') { const stab = u.searchParams.get('category') === 'stablecoins'; hit(stab ? 'hcg-stables' : 'hcg-top'); if (hmVendor.down) return send(503, { error: 'down' }); return send(200, stab ? HMX.stables : hmVendor.top || HMX.top); }
     if (p === '/hcg/global') { hit('hcg-global'); return hmVendor.down ? send(503, { error: 'down' }) : send(200, HMX.global); }
@@ -1494,21 +1495,62 @@ try {
     beamM.coin && beamM.coin.id === '136107' && beamM.rejected.length === 1 && beamM.rejected[0].id === '33386' && loreRaw('33386').price_usd === '0.006579' && loreRaw('136107').price_usd === '0.003362' && cgRaw('beam-2').current_price === 0.0033395, brief(beamM));
   const twoM = CM.matchCoin(cgM.get('beam-2'), walkM, { priceTol: 1 });
   check('  ...two coins that both pass are neither: with the price test widened to 100% both of CoinLore\'s Beams pass, and no figure is taken from either', twoM.coin === null && /^CoinLore lists two coins that could be it/.test(twoM.why), twoM.why);
-  const blastM = CM.matchCoin(cgM.get('blast'), walkM), bnbM = CM.matchCoin(cgM.get('binancecoin'), walkM), bmtM = CM.bySymbol(walkM).get('BMT') || [];
+  const blastM = CM.matchCoin(cgM.get('blast'), walkM), bmtM = CM.bySymbol(walkM).get('BMT') || [];
   const blastL = walkM.find((c) => c.symbol === 'BLAST');
-  check('  ...a same-name coin at another price is a different coin (CoinLore\'s "Blast", written $0.000003 — $0.0000028 by its own market cap ÷ supply, the price compared — against CoinGecko\'s $0.00003657); a coin under another name is not taken (CoinLore\'s "Binance Coin" is not CoinGecko\'s "BNB"); a coin seen on two pages of the walk (Bubblemaps — the list shifted while it was read) is one coin',
-    blastM.coin === null && /priced \$0\.0000028 against CoinGecko’s \$0\.000037 for \$BLAST — a different coin, not used/.test(blastM.why) && blastL.price === 0.000003 && Math.abs(blastL.priceFull - 2.81e-6) < 0.01e-6 && bnbM.coin === null && /only under another name \(“Binance Coin”, not CoinGecko’s “BNB”\)/.test(bnbM.why)
-    && loreRows.filter((x) => String(x.id) === '151131').length === 2 && bmtM.length === 1, brief([blastM.why, bnbM.why, bmtM.length]));
+  check('  ...a same-name coin at another price is a different coin (CoinLore\'s "Blast", written $0.000003 — $0.0000028 by its own market cap ÷ supply, the price compared — against CoinGecko\'s $0.00003657), and no other $BLAST makes up for it; a coin seen on two pages of the walk (Bubblemaps — the list shifted while it was read) is one coin',
+    blastM.coin === null && blastM.why === 'CoinLore’s “Blast” is priced $0.0000028 against CoinGecko’s $0.000037 for $BLAST — a different coin, not used' && blastL.price === 0.000003 && Math.abs(blastL.priceFull - 2.81e-6) < 0.01e-6
+    && loreRows.filter((x) => String(x.id) === '151131').length === 2 && bmtM.length === 1, brief([blastM.why, bmtM.length]));
+  /* under another name (owner, 2026-11-03, asked whether coins CoinLore lists by symbol only — BNB as "Binance Coin" — should match:
+     "Yes and do that for all chains"): when no same-name coin matches, a coin with CoinGecko's symbol counts when its price on the
+     same read is within 3% and it is the only coin with that symbol within 10% — and the check says it was matched that way */
+  const bnbM = CM.matchCoin(cgM.get('binancecoin'), walkM), thetaM = CM.matchCoin(cgM.get('theta-token'), walkM), bnbX = xc('binancecoin'), thetaX = xc('theta-token');
+  check('under another name, by symbol and price: CoinLore\'s "Binance Coin" ($749.84) is CoinGecko\'s BNB ($749.14, 0.09% apart) and its "Theta Token" CoinGecko\'s "Theta Network" (0.08%) — each the only coin with its symbol within 10%, within 3% — and the check says so: match "symbol", CoinLore\'s own name, and a note naming both and how far apart the prices are on that read',
+    bnbM.coin && bnbM.coin.id === '2710' && bnbM.by === 'symbol' && thetaM.coin && thetaM.coin.id === '32360' && thetaM.by === 'symbol' && loreRaw('2710').name === 'Binance Coin' && cgRaw('binancecoin').name === 'BNB' && !CM.sameName(loreRaw('32360').name, cgRaw('theta-token').name)
+    && bnbX.check.status === 'agreed' && bnbX.v === cgRaw('binancecoin').market_cap && bnbX.check.sources[1].src === 'coinlore' && bnbX.check.sources[1].match === 'symbol' && bnbX.check.sources[1].name === 'Binance Coin' && bnbX.check.sources[1].v === Number(loreRaw('2710').market_cap_usd)
+    && bnbX.check.notes[0] === 'CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Binance Coin”, CoinGecko “BNB” — their prices are 0.1% apart on this read (a coin under another name counts only within 3% of CoinGecko’s price, and only as the one coin with the symbol $BNB that CoinLore lists within 10% of it)'
+    && thetaX.check.sources[1].match === 'symbol' && /CoinLore calls it “Theta Token”, CoinGecko “Theta Network”/.test(thetaX.check.notes.join(' ')) && CM.TOL.symPrice === 0.03 && CM.TOL.price === 0.10, brief([bnbM.by, bnbX.check]));
+  const ethBy = CM.matchCoin(cgM.get('ethereum'), walkM), kcsBy = CM.matchCoin(cgM.get('kucoin-shares'), walkM), ethS = xc('ethereum').check, kcsS = xc('kucoin-shares').check;
+  check('  ...a name match works as it did and says it is one: ETH and KCS (CoinLore\'s "KuCoin Shares", 2.2% apart) match by name — match "name", CoinLore\'s name beside it — with no symbol note',
+    ethBy.by === 'name' && ethBy.coin.id === '80' && kcsBy.by === 'name' && kcsBy.coin.id === '2750' && ethS.sources[1].match === 'name' && ethS.sources[1].name === 'Ethereum' && kcsS.sources[1].match === 'name' && kcsS.sources[1].name === 'KuCoin Shares'
+    && ![ethS, kcsS].some((c) => c.notes.some((n) => /matched by its symbol and price/.test(n))) && JSON.stringify(Object.keys(ethS.sources[0])) === '["src","v","price","supply","at"]', brief([ethS.sources, kcsS.notes]));
+  // an ELON-style trap: CoinGecko's Krown Network (measured, $0.00006666) given the ticker MODE — that one field changed — against the
+  // walk, where CoinLore's "Mode" ($0.0000976 by its own market cap ÷ supply) is another name at another price
+  const krownAsMode = Object.assign({}, cgM.get('krown-network'), { symbol: 'MODE' }), elonM = CM.matchCoin(krownAsMode, walkM, { seen: SEEN });
+  check('  ...a different coin that only shares the ticker is refused with the note it always had (an ELON-style trap: CoinGecko\'s Krown Network given the ticker MODE against CoinLore\'s "Mode", 46% off) — no coin, no match by symbol',
+    elonM.coin === null && elonM.by === null && elonM.why === 'CoinLore lists $MODE only under another name (“Mode”, not CoinGecko’s “Krown Network”), so it is not taken as the same coin' && CM.learnLore([krownAsMode], walkM, { seen: SEEN }).misses['krown-network'] === elonM.why, elonM.why);
+  /* two coins with the symbol within 10%, on one read (2026-10-30): CoinGecko's BNB ($683.93) against CoinLore's "Binance Coin" ($685.39)
+     and its "Wrapped BNB" ($724.56) listed under the symbol BNB — that one field changed, as a list that gave a wrapped coin its base ticker would */
+  const cgBnb30 = CM.cgCoin(HMX.top.find((x) => x.id === 'binancecoin'), NOW_M), loreBnb30 = HMX.lore.data.find((x) => String(x.id) === '2710'), wbnb30 = HMX.lore.data.find((x) => x.symbol === 'WBNB');
+  const two30 = [CM.loreCoin(loreBnb30, NOW_M), CM.loreCoin(Object.assign({}, wbnb30, { symbol: 'BNB' }), NOW_M)], one30 = CM.matchCoin(cgBnb30, two30.slice(0, 1)), amb30 = CM.matchCoin(cgBnb30, two30);
+  check('  ...two coins with the symbol within 10% are neither, and it says so: on the 2026-10-30 read CoinLore\'s "Binance Coin" alone matches CoinGecko\'s BNB by symbol and price (0.2% apart), and with its "Wrapped BNB" listed as BNB too (5.9% off) neither is taken',
+    one30.coin && one30.coin.id === '2710' && one30.by === 'symbol' && amb30.coin === null && amb30.by === null && !CM.learnLore([cgBnb30], two30).ids.binancecoin
+    && amb30.why === 'CoinLore lists $BNB only under another name (“Binance Coin”, “Wrapped BNB”, not CoinGecko’s “BNB”), and more than one coin with the symbol $BNB is priced within 10% of CoinGecko’s $683.93 (“Binance Coin” at $685.39, “Wrapped BNB” at $724.56) — none of them is used', amb30.why);
+  // the same coin read two days apart: CoinLore's Binance Coin of 2026-10-30 ($685.39) against CoinGecko's BNB of 2026-10-28 ($749.14)
+  const lateM = CM.matchCoin(cgM.get('binancecoin'), [CM.loreCoin(loreBnb30, NOW_M)]);
+  check('  ...and a coin under another name must keep within 3%: CoinLore\'s Binance Coin 8.5% off CoinGecko\'s BNB (inside the 10% a name match allows) is not taken, and the note says by how much',
+    lateM.coin === null && lateM.why === 'CoinLore lists $BNB only under another name (“Binance Coin”, not CoinGecko’s “BNB”), priced $685.39 against CoinGecko’s $749.14 (8.5% apart) — a coin under another name is taken by its symbol and price only within 3%, so it is not taken as the same coin', lateM.why);
+  // beside a same-name coin at another price: CoinLore's onbeam row named by its own nameid "onbeam" (that one field changed) next to the older "BEAM"
+  const onbeam = CM.loreCoin(Object.assign({}, loreRaw('136107'), { name: loreRaw('136107').nameid }), NOW_M), beamB = CM.matchCoin(cgM.get('beam-2'), [CM.loreCoin(loreRaw('33386'), NOW_M), onbeam]);
+  const beamBx = CM.crossCheck({ sym: 'BEAM', cg: cgM.get('beam-2'), lore: beamB.coin, loreAlso: beamB.rejected, now: NOW_M });
+  check('  ...the same rule when the coin under CoinGecko\'s name is a different one: with onbeam named "onbeam" (its own nameid) beside the older "BEAM" at $0.0066, onbeam is taken by symbol and price (0.67% apart), said so, and the older BEAM is left out and named',
+    loreRaw('136107').nameid === 'onbeam' && beamB.coin && beamB.coin.id === '136107' && beamB.by === 'symbol' && beamB.rejected.length === 1 && beamB.rejected[0].id === '33386' && beamBx.check.sources[1].match === 'symbol' && beamBx.check.sources[1].name === 'onbeam'
+    && beamBx.check.notes.includes('CoinLore also lists a “BEAM” priced $0.0066 — another coin, not counted') && /^CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “onbeam”, CoinGecko “Beam” — their prices are 0\.7% apart on this read/.test(beamBx.check.notes[0]), brief(beamBx.check));
+  /* CoinLore's $LTC (2026-11-03): the walk said "no coin with the symbol $LTC among the first 2,000" — its coin id 1, with Litecoin's 84M
+     total and max supply (CoinGecko's litecoin: max_supply 84,000,000), reads "x", symbol X, at $0.000045, circulating supply "0?" */
+  const ltcRow = FIX('mcap-lore-ltc.json')[0], ltcRaw = HMX.top.find((x) => x.id === 'litecoin'), ltcCg = CM.cgCoin(ltcRaw, NOW_M), ltcL = CM.loreCoin(ltcRow, NOW_M), ltcM = CM.matchCoin(ltcCg, [...walkM, ltcL], { seen: SEEN });
+  check('the walk\'s "no $LTC among the first 2,000 coins" is what CoinLore lists: its coin id 1 — Litecoin\'s 84M supply — reads "x", symbol $X, at $0.000045 with a circulating supply of "0?", so no coin is $LTC; it is never taken (another symbol, name and price), and "0?" is no supply',
+    ltcRow.id === '1' && ltcRow.symbol === 'X' && ltcRow.name === 'x' && ltcRow.tsupply === '84000000' && ltcRow.msupply === '84000000' && ltcRaw.max_supply === 84000000 && ltcRow.csupply === '0?' && ltcL.supply === null && ltcL.symbol === 'X'
+    && ltcM.coin === null && ltcM.why === 'no coin with the symbol $LTC among the first 2,000 coins of CoinLore’s list, the part its daily walk reads (it lists 14,993)', ltcM.why);
   const zerosM = ['fantom', 'mixin', 'pulsechain', 'krown-network'].map(xc);
   check('CoinGecko\'s 0 is no market cap: Fantom, Mixin, PulseChain and Krown Network come with 0 and no circulating supply — each null with why in words, never $0',
     ['fantom', 'mixin', 'pulsechain', 'krown-network'].every((id) => cgRaw(id).market_cap === 0 && cgRaw(id).circulating_supply === 0) && zerosM.every((r) => r.v === null && r.check.status === 'none' && /it lists no circulating supply/.test(r.why))
     && zerosM[0].why === 'CoinGecko gives no market cap for $FTM — it lists no circulating supply; no coin with the symbol $FTM among the first 2,000 coins of CoinLore’s list, the part its daily walk reads (it lists 14,993)', brief(zerosM.map((r) => r.why)));
-  const ethM = xc('ethereum'), arbM = xc('arbitrum'), kcsM = xc('kucoin-shares'), bnbX = xc('binancecoin');
-  check('agreed, differs, single — from the numbers, the figure shown always CoinGecko\'s: ETH within 10% (CoinGecko $285B, CoinLore $286B); ARB 21% apart at the same price, each counting its own circulating supply; KCS 38% apart with prices 2.2% apart; BNB CoinGecko\'s alone',
+  const ethM = xc('ethereum'), arbM = xc('arbitrum'), kcsM = xc('kucoin-shares'), blastX = xc('blast');
+  check('agreed, differs, single — from the numbers, the figure shown always CoinGecko\'s: ETH within 10% (CoinGecko $285B, CoinLore $286B); ARB 21% apart at the same price, each counting its own circulating supply; KCS 38% apart with prices 2.2% apart; Blast CoinGecko\'s alone (its CoinLore namesake is another coin)',
     ethM.check.status === 'agreed' && ethM.v === cgRaw('ethereum').market_cap && ethM.src === 'coingecko' && ethM.check.sources.map((x) => x.src).join() === 'coingecko,coinlore' && ethM.check.sources[1].v === Number(loreRaw('80').market_cap_usd) && ethM.check.sources[1].price === Number(loreRaw('80').price_usd)
     && arbM.check.status === 'differs' && arbM.v === cgRaw('arbitrum').market_cap && arbM.check.notes[0] === 'CoinGecko $1.15B, CoinLore $904M (21% apart): both price $ARB the same (about $0.17); they count a different circulating supply (CoinGecko 6.89B, CoinLore 5.4B)'
     && kcsM.check.status === 'differs' && kcsM.check.notes[0] === 'CoinGecko $1.06B, CoinLore $659M (38% apart): their prices for $KCS differ by 2.2% (CoinGecko $7.6, CoinLore $7.43), and they count a different circulating supply (CoinGecko 140M, CoinLore 88.7M)'
-    && bnbX.check.status === 'single' && bnbX.v === cgRaw('binancecoin').market_cap && bnbX.check.sources.length === 1, brief([ethM.check, arbM.check.notes, kcsM.check.notes]));
+    && blastX.check.status === 'single' && blastX.v === cgRaw('blast').market_cap && blastX.check.sources.length === 1, brief([ethM.check, arbM.check.notes, kcsM.check.notes]));
   const selfM = MC.cg.map((x) => [x.id, CM.selfChecks(CM.cgCoin(x, NOW_M), NOW_M)]).filter(([, n]) => n.length);
   const ecash = CM.loreCoin(loreRaw('51539'), NOW_M), usdgGt = F.gtP1.data.find((p) => (INC.get(p.relationships.base_token.data.id) || {}).attributes && INC.get(p.relationships.base_token.data.id).attributes.address === USDG).attributes;
   const ecashN = CM.selfChecks(ecash, NOW_M, 'CoinLore'), usdgN = CM.selfChecks({ mcap: Number(usdgGt.market_cap_usd), fdv: Number(usdgGt.fdv_usd), price: Number(usdgGt.base_token_price_usd), supply: null }, NOW, 'GeckoTerminal');
@@ -1531,6 +1573,9 @@ try {
   const lrFull = CM.learnLore(cgM, walkM, { seen: SEEN }), lrEnd = CM.learnLore(cgM, walkM, { seen: Object.assign({}, SEEN, { ended: true }) });
   const othCg = MC.others.cg.map((x) => CM.cgCoin(x, NOW_M)), othLore = Object.values(MC.others.pages).flat().map((x) => CM.loreCoin(x, NOW_M));
   const lrOth = CM.learnLore([cgM.get('iota'), ...othCg], [...walkM, ...othLore], { seen: SEEN });
+  check('the daily walk keeps CoinLore\'s own name beside a symbol match\'s id ({ lore, by: "symbol", name }: BNB and THETA); a name match is kept as it was ({ lore }, with the same-name coins it left out)',
+    JSON.stringify(lrFull.ids.binancecoin) === JSON.stringify({ lore: '2710', by: 'symbol', name: 'Binance Coin' }) && JSON.stringify(lrFull.ids['theta-token']) === JSON.stringify({ lore: '32360', by: 'symbol', name: 'Theta Token' })
+    && JSON.stringify(lrFull.ids.ethereum) === JSON.stringify({ lore: '80' }) && JSON.stringify(lrFull.ids['beam-2']) === JSON.stringify({ lore: '136107', rejected: [{ id: '33386', name: 'BEAM', price: 0.006579 }] }) && Object.keys(lrFull.ids).length === 22, brief([lrFull.ids.binancecoin, lrFull.ids['beam-2']]));
   check('a token the walk found no CoinLore coin for is said by what the walk read: "no coin with the symbol $FTM among the first 2,000 coins of CoinLore’s list … (it lists 14,993)", never "CoinLore does not list"; "lists no coin with the symbol" only from a walk that reached the end of its list',
     Object.values(lrFull.misses).length > 5 && !Object.values(lrFull.misses).some((m) => /does not list|lists no coin/.test(m)) && lrFull.misses.fantom === 'no coin with the symbol $FTM among the first 2,000 coins of CoinLore’s list, the part its daily walk reads (it lists 14,993)'
     && lrEnd.misses.fantom === 'CoinLore lists no coin with the symbol $FTM' && canon(lrEnd.ids) === canon(lrFull.ids), brief(lrFull.misses));
@@ -1581,12 +1626,16 @@ try {
   const ascM = mdM.chains({ sort: 'mcap', dir: 'asc', limit: 200 }).body.rows;
   check('the first chains run reads CoinGecko and DefiLlama\'s relay, and says CoinLore\'s coins are not matched yet (one source, said); the daily references then read CoinGecko\'s asset platforms and walk CoinLore\'s list — 20 pages at most, every page 1.1 s after the one before',
     m1.ok && /market caps of 32 tokens: 32 read from CoinGecko/.test(m1.note) && /CoinLore's coins have not been matched yet/.test(m1.note) && preEth.mcap.check.status === 'single' && /not been matched yet/.test(preEth.mcap.check.notes.join(' '))
-    && mrM.ok && new RegExp('^' + MC.platforms.length + ' CoinGecko asset platforms; CoinLore: 20 of 32 chain tokens matched over 20 pages').test(mrM.note)
+    && mrM.ok && new RegExp('^' + MC.platforms.length + ' CoinGecko asset platforms; CoinLore: 22 of 32 chain tokens matched over 20 pages').test(mrM.note)
     && walkCalls.length === 20 && walkCalls.length <= MD.MCAP.LORE_WALK_MAX && walkSleeps.length === walkCalls.length - 1 && walkSleeps.every((ms) => ms >= 1100) && MD.MCAP.LORE_GAP_MS >= 1100
-    && learnedM.ids['beam-2'].lore === '136107' && learnedM.ids['beam-2'].rejected[0].id === '33386' && /a different coin/.test(learnedM.misses.blast), brief([m1.note, mrM.note, walkCalls.length, walkSleeps.slice(0, 3)]));
-  check('  ...and the next chains run reads the matched coins again in one CoinLore call (50 ids at most a call), matched again on that read: ETH agrees, ARB differs and says why, BNB has one source',
-    m2.ok && tickCalls.length === 1 && decodeURIComponent(tickCalls[0].split('id=')[1]).split(',').length === 20 && /checked against CoinLore: \d+ agree, \d+ differ, \d+ one source, 4 none/.test(m2.note)
-    && rowM('ethereum').mcap.check.status === 'agreed' && rowM('arbitrum').mcap.check.status === 'differs' && /both price \$ARB the same/.test(rowM('arbitrum').mcap.check.notes[0]) && rowM('bsc').mcap.check.status === 'single', m2.note);
+    && learnedM.ids['beam-2'].lore === '136107' && learnedM.ids['beam-2'].rejected[0].id === '33386' && /a different coin/.test(learnedM.misses.blast)
+    && JSON.stringify(learnedM.ids.binancecoin) === JSON.stringify({ lore: '2710', by: 'symbol', name: 'Binance Coin' }), brief([m1.note, mrM.note, walkCalls.length, walkSleeps.slice(0, 3)]));
+  const bscR = rowM('bsc').mcap;
+  check('  ...and the next chains run reads the matched coins again in one CoinLore call (50 ids at most a call), matched again on that read: ETH agrees, ARB differs and says why, BNB agrees by symbol and price (CoinLore\'s "Binance Coin", said in the check and counted in the run\'s note)',
+    m2.ok && tickCalls.length === 1 && decodeURIComponent(tickCalls[0].split('id=')[1]).split(',').length === 22 && /checked against CoinLore: \d+ agree, \d+ differ, \d+ one source, 4 none \(2 CoinLore coins matched by symbol and price, under another name\)/.test(m2.note)
+    && rowM('ethereum').mcap.check.status === 'agreed' && rowM('arbitrum').mcap.check.status === 'differs' && /both price \$ARB the same/.test(rowM('arbitrum').mcap.check.notes[0])
+    && bscR.check.status === 'agreed' && bscR.v === cgRaw('binancecoin').market_cap && bscR.check.sources[1].match === 'symbol' && bscR.check.sources[1].name === 'Binance Coin' && bscR.check.sources[1].at === NOW_M + 6 * 60e3
+    && /^CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Binance Coin”, CoinGecko “BNB” — their prices are 0\.1% apart on this read/.test(bscR.check.notes[0]) && rowM('ethereum').mcap.check.sources[1].match === 'name', brief([m2.note, bscR.check]));
   const ethR = rowM('ethereum').mcap;
   check('  ...every chain\'s market cap carries its check: { status, sources [{ src, v, price, supply, at }], notes, mapping { status, note? }, coin } — CoinGecko\'s figure shown, with its own price, supply and update time beside CoinLore\'s',
     rowsM.length === MC.chains.length && rowsM.every((r) => r.mcap.check && ['agreed', 'differs', 'single', 'none'].includes(r.mcap.check.status) && Array.isArray(r.mcap.check.sources) && Array.isArray(r.mcap.check.notes) && r.mcap.check.mapping && r.mcap.check.mapping.status)
@@ -1612,13 +1661,24 @@ try {
   const cgAsks = log.slice(logM0).filter((l) => /^GET \/cg\//.test(l));
   check('  ...CoinGecko was asked three times in all (its coins on each chains run, its platforms once), never twice within two minutes; CoinLore 21 times (the walk, then one read)',
     cgAsks.length === 3 && cgAsks.filter((l) => /asset_platforms/.test(l)).length === 1 && log.slice(logM0).filter((l) => /^GET \/lore\//.test(l)).length === 21, cgAsks.join(' | '));
+  const apiBsc = apiM.body.data.find((r) => r.key === 'bsc').mcap, snapBsc = await mdM.apiResource('chain-snapshots', { key: 'bsc' }, { limit: 1 }), cdBsc = mdM.chain({ key: 'bsc' }).body.stats.mcap;
+  check('  ...a match by symbol and price is said the same way in the chain detail and the Send API (chains and chain-snapshots): CoinLore\'s source carries match "symbol" and its own name, "Binance Coin", beside the note',
+    JSON.stringify(apiBsc) === JSON.stringify(bscR) && JSON.stringify(cdBsc) === JSON.stringify(bscR) && snapBsc.body.data[0].mcap_check.sources[1].match === 'symbol' && snapBsc.body.data[0].mcap_check.sources[1].name === 'Binance Coin'
+    && /CoinLore calls it “Binance Coin”/.test(snapBsc.body.data[0].mcap_check.notes[0]), brief(snapBsc.body.data[0] && snapBsc.body.data[0].mcap_check));
   // a learned coin whose price no longer agrees is dropped for that read (here the state names the older BEAM for beam-2, as a bad walk would)
   learnedM.ids['beam-2'] = { lore: '33386' };
   dbM.prepare("UPDATE mkt_state SET value = ? WHERE name = 'coinlore_ids'").run(JSON.stringify(learnedM));
+  // …and on the same read CoinLore answers for its Binance Coin with its row of 2026-10-30 ($685.39): 8.5% off CoinGecko's $749.14, outside the 3%
+  vendorMode.loreRows = { 2710: loreBnb30 };
   clockM = NOW_M + 9 * 60e3; await mdM.runJob('chains');
-  const beamBad = mdM.chains({ limit: 200 }).body.rows.find((r) => r.key === 'beam').mcap;
+  vendorMode.loreRows = null;
+  const rows9 = mdM.chains({ limit: 200 }).body.rows, beamBad = rows9.find((r) => r.key === 'beam').mcap, bscLate = rows9.find((r) => r.key === 'bsc').mcap;
+  const learned9 = JSON.parse(dbM.prepare("SELECT value FROM mkt_state WHERE name = 'coinlore_ids'").get().value);
   check('  ...the price test runs again on every read: a learned CoinLore coin whose price stops agreeing (the older BEAM\'s $0.006579 against beam-2\'s $0.0033395) is dropped for that read, said, and the figure is CoinGecko\'s alone',
     beamBad.check.status === 'single' && beamBad.v === cgRaw('beam-2').market_cap && /priced \$0\.0066 against CoinGecko’s \$0\.0033 for \$BEAM — a different coin, not used \(on this read\)/.test(beamBad.check.notes.join(' ')), brief(beamBad.check));
+  check('  ...and a coin matched by symbol and price must keep within 3% on EVERY read, not only when the walk learned it: CoinLore\'s Binance Coin read at $685.39 (8.5% off — inside the 10% a name match keeps) is dropped for that read, said by how much, and the walk\'s match stays for the next read',
+    bscLate.check.status === 'single' && bscLate.v === cgRaw('binancecoin').market_cap && bscLate.check.sources.length === 1 && learned9.ids.binancecoin.lore === '2710'
+    && bscLate.check.notes.includes('CoinLore lists $BNB only under another name (“Binance Coin”, not CoinGecko’s “BNB”), priced $685.39 against CoinGecko’s $749.14 (8.5% apart) — a coin under another name is taken by its symbol and price only within 3%, so it is not taken as the same coin (on this read)'), brief(bscLate.check));
   const cdFtm = mdM.chain({ key: 'fantom' }).body;
   check('  ...the chain detail names the source its stat names even when no figure came of it: Fantom\'s market cap is CoinGecko\'s "no market cap" (v null), and CoinGecko is among its sources, linked',
     cdFtm.stats.mcap.src === 'coingecko' && cdFtm.stats.mcap.v === null && /CoinGecko gives no market cap/.test(cdFtm.stats.mcap.why) && cdFtm.sources.some((x) => x.id === 'coingecko' && x.url === 'https://www.coingecko.com'), brief([cdFtm.stats.mcap, cdFtm.sources]));
@@ -1659,7 +1719,7 @@ try {
   const rN4 = await mdN.runJob('mcapRefs'); const learnedN4 = loreN(), startsN4 = walkStarts(walkN3);
   check('  ...the next UTC day it goes on from page 20 — one page — and is whole: every token matched as a full walk matches it, the misses worded by what it read',
     rN4.ok && startsN4.join() === '1900' && learnedN4.complete === true && learnedN4.walk === null && learnedN4.pages === 20 && learnedN4.dayCalls === 1 && canon(learnedN4.ids) === canon(lrFull.ids)
-    && learnedN4.misses.fantom === 'no coin with the symbol $FTM among the first 2,000 coins of CoinLore’s list, the part its daily walk reads (it lists 14,993)' && /20 of 32 chain tokens matched over 20 pages \([^)]*this walk going on from page 20\)/.test(rN4.note), brief([rN4.note, startsN4]));
+    && learnedN4.misses.fantom === 'no coin with the symbol $FTM among the first 2,000 coins of CoinLore’s list, the part its daily walk reads (it lists 14,993)' && /22 of 32 chain tokens matched over 20 pages \([^)]*this walk going on from page 20\)/.test(rN4.note), brief([rN4.note, startsN4]));
   // the platforms read steps aside when the chains run is due within 3 minutes (it reads CoinGecko first)
   dbN.prepare("DELETE FROM mkt_state WHERE name = 'cg_platforms'").run(); clockN = Date.parse('2026-10-29T00:50:00Z');
   mdN.start({ jobs: ['chains'], staggerMs: 1000 }); const cgP0 = hits['cg-platforms'] || 0, rN5 = await mdN.runJob('mcapRefs'); mdN.stop();
@@ -1680,8 +1740,8 @@ try {
   for (let i = 1; i <= 30; i++) { clockQ = NOW_M + 864e5 + (4 + 10 * i) * 60e3; const w0 = log.length; const r = await mdQ.runJob('mcapRefs'); tries.push({ ok: r.ok, starts: walkStarts(w0), note: r.note }); }
   const day2Calls = walkStarts(wQ).length; vendorFail.loreFrom = null;
   check('a walk cut short the next day (CoinLore refusing from page 4) keeps every match of the day before — ' + Object.keys(day1.ids).length + ' tokens — and its reasons for the rest; the chains run after it checks as many against CoinLore as before (never "not listed" for a page it did not read)',
-    !rQ1.ok && Object.keys(day1.ids).length === 20 && canon(day2.ids) === canon(day1.ids) && canon(day2.misses) === canon(day1.misses) && day2.walk.next === 300 && st2 === st1
-    && /20 of 32 chain tokens matched over 3 pages \(\d+ coins\), \d+ of them kept from the last whole walk, the walk stopped at page 4: rate-limited and goes on from there/.test(rQ1.note), brief([rQ1.note, st1, st2]));
+    !rQ1.ok && Object.keys(day1.ids).length === 22 && canon(day2.ids) === canon(day1.ids) && canon(day2.misses) === canon(day1.misses) && day2.walk.next === 300 && st2 === st1
+    && /22 of 32 chain tokens matched over 3 pages \(\d+ coins\), \d+ of them kept from the last whole walk, the walk stopped at page 4: rate-limited and goes on from there/.test(rQ1.note), brief([rQ1.note, st1, st2]));
   check('  ...and tried every 10 minutes for 5 hours while CoinLore keeps refusing, each try goes on from page 4 (never from page 1) and the day\'s walk stops at 20 pages, saying so',
     day2Calls === MD.MCAP.LORE_WALK_MAX && tries.every((t) => t.starts.every((x) => x === 300)) && tries.filter((t) => t.starts.length).length === 16 && tries.slice(16).every((t) => !t.ok && !t.starts.length && /today's 20 walk pages are spent; the walk goes on from page 4 after 00:00 UTC/.test(t.note))
     && canon(loreQ().ids) === canon(day1.ids), brief([day2Calls, tries.slice(14, 18)]));
@@ -1700,6 +1760,14 @@ try {
   dbO.prepare("INSERT INTO mkt_state (name, value, at) VALUES ('cg_platforms', ?, ?)").run(JSON.stringify({ list: [] }), NOW_M);
   const walkO = log.length, rO = await mdO.runJob('mcapRefs'); dbO.close();
   check('  ...and the walk stops as soon as every chain token is matched (Bitcoin, Ethereum and Solana are all on its first page)', rO.ok && log.slice(walkO).filter((l) => /^GET \/lore\/tickers\//.test(l)).length === 1 && /3 of 3 chain tokens matched over 1 pages/.test(rO.note), rO.note);
+  // …but not when one of them is matched by its symbol and price: BNB ("Binance Coin") is on that first page too, and a second $BNB
+  // within 10% could be on any page after it — the walk reads on to its 20 pages, and BNB is still the only one
+  const dbO2 = freshDb('o2'), mdO2 = MD.createMarketData({ db: dbO2, now: () => NOW_M + 3 * 60e3, outboundTake: take, urls: URLS, sleep: fakeSleep }); mdO2.migrate();
+  for (const id of ['bitcoin', 'ethereum', 'solana', 'binancecoin']) { const g = cgRaw(id); dbO2.prepare("INSERT INTO mkt_chain_snap (chain, name, at, tvl, native_token, src, mcap_check) VALUES (?, ?, ?, 1, ?, '{}', ?)").run(id, g.name, NOW_M, id, JSON.stringify({ coin: { id, symbol: g.symbol.toUpperCase(), name: g.name, price: g.current_price }, status: 'single', sources: [], notes: [], mapping: { status: 'unchecked' } })); }
+  dbO2.prepare("INSERT INTO mkt_state (name, value, at) VALUES ('cg_platforms', ?, ?)").run(JSON.stringify({ list: [] }), NOW_M);
+  const walkO2 = log.length, rO2 = await mdO2.runJob('mcapRefs'), learnedO2 = JSON.parse(dbO2.prepare("SELECT value FROM mkt_state WHERE name = 'coinlore_ids'").get().value); dbO2.close();
+  check('  ...but a token matched only by its symbol and price never stops it early: with BNB ("Binance Coin", on the same first page) among them the walk reads all 20 pages — a second $BNB within 10% could be on any of them — and BNB is still the one match',
+    rO2.ok && log.slice(walkO2).filter((l) => /^GET \/lore\/tickers\//.test(l)).length === 20 && /4 of 4 chain tokens matched over 20 pages/.test(rO2.note) && learnedO2.ids.binancecoin.by === 'symbol' && learnedO2.complete === true && MC.walk.pages['0'].some((x) => String(x.id) === '2710'), rO2.note);
   const dbP = freshDb('p'), mdP = MD.createMarketData({ db: dbP, now: () => NOW_M, outboundTake: take, urls: Object.assign({}, URLS, { coinlore: '' }), sleep: fakeSleep }); mdP.migrate();
   const loreP = log.length, rP = await mdP.runJob('chains'), rP2 = await mdP.runJob('mcapRefs');
   const ethP = mdP.chains({ limit: 200 }).body.rows.find((r) => r.key === 'ethereum'); dbP.close();
@@ -1780,7 +1848,8 @@ try {
     R1.length === 100 && btcH.id === 'bitcoin' && Math.abs(btcH.dominance.v - (btcH.mcap.v / A1.total.v) * 100) < 1e-9 && Math.abs(btcH.dominance.v - 59.597) < 0.01 && btcH.dominance.at === Math.min(btcH.mcap.at, st1.global.readAt) && btcH.dominance.at < st1.global.readAt && /^share of CoinGecko's total, \$2\.59T, in percent$/.test(btcH.dominance.label)
     && R1.every((r) => r.dominance.v == null || Math.abs(r.dominance.v - (r.mcap.v / A1.total.v) * 100) < 1e-9 * Math.max(1, r.dominance.v)) && R1.filter((r) => r.stable === true).length === 17 && R1.find((r) => r.id === 'tether').stable === true && btcH.stable === false
     && buidl.change24h.v === 0 && !('why' in buidl.change24h) && MM.bucketOf(buidl.change24h.v) === 'flat' && JSON.stringify(R1.map((r) => r.check.status)) === JSON.stringify(direct)
-    && /only under another name \(“Binance Coin”/.test(R1.find((r) => r.id === 'binancecoin').check.notes.join(' ')) && R1.find((r) => r.id === 'hyperliquid').check.status === 'differs'
+    && R1.find((r) => r.id === 'binancecoin').check.sources[1].match === 'symbol' && /CoinLore calls it “Binance Coin”, CoinGecko “BNB”/.test(R1.find((r) => r.id === 'binancecoin').check.notes.join(' '))
+    && /CoinLore calls it “Crypto\.com Chain”, CoinGecko “Cronos”/.test(R1.find((r) => r.id === 'crypto-com-chain').check.notes.join(' ')) && R1.find((r) => r.id === 'hyperliquid').check.status === 'differs'
     && /CM\.matchCoin\(/.test(MMSRC) && /CM\.crossCheck\(/.test(MMSRC) && !/0\.1\b|function (matchCoin|crossCheck|sameName|normName)/.test(MMSRC) && A1.legend.length === 10 && A1.counts.drawn === 100 && A1.reads.coins.ok && A1.reads.coinlore.ok,
     brief({ btc: btcH.dominance, statuses: R1.map((r) => r.check.status).join('').slice(0, 40) }));
   // the next run, 10 minutes on: the top 100 and CoinLore only (the total is due every 30 minutes, the stablecoins every 6 hours)
@@ -1827,7 +1896,13 @@ try {
   const shib = rowOf('shiba-inu'), pepe = rowOf('pepe'), lpShib = pl.list.find((c) => c.symbol === 'SHIB'), nB1 = { agreed: 0, differs: 0, single: 0 }; B1.rows.forEach((r) => nB1[r.check.status]++);
   check('  ...CoinLore writes prices to 6 decimal places, so SHIB is "0.000005" and PEPE "0.000004" — 10.9% and 10.5% from CoinGecko\'s $0.00000451 and $0.00000447 by rounding alone; compared at CoinLore\'s own market cap ÷ circulating supply ($0.00000452, $0.00000448), which rounds to its written price, they are the same coins and their market caps agree ($2.66B / $2.65B, $1.88B / $1.88B) — never "a different coin"; the price CoinLore wrote is kept as its price',
     loreOf('SHIB').price_usd === '0.000005' && loreOf('PEPE').price_usd === '0.000004' && shib.check.status === 'agreed' && pepe.check.status === 'agreed' && !shib.check.notes.concat(pepe.check.notes).some((n) => /different coin/.test(n))
-    && shib.check.sources[1].src === 'coinlore' && shib.check.sources[1].price === 0.000005 && Math.abs(lpShib.priceFull - 4.51985e-6) < 1e-10 && lpShib.price === 0.000005 && nB1.agreed === 33 && nB1.differs === 32 && nB1.single === 35, brief({ shib: shib.check, pepe: pepe.check.status, nB1 }));
+    && shib.check.sources[1].src === 'coinlore' && shib.check.sources[1].price === 0.000005 && Math.abs(lpShib.priceFull - 4.51985e-6) < 1e-10 && lpShib.price === 0.000005 && nB1.agreed === 34 && nB1.differs === 34 && nB1.single === 32, brief({ shib: shib.check, pepe: pepe.check.status, nB1 }));
+  // the map's matches by symbol and price on the same answers: BNB ("Binance Coin"), CRO ("Crypto.com Chain"), PI ("Pi") — each said
+  const symRows = B1.rows.filter((r) => r.check.sources.some((x) => x.src === 'coinlore' && x.match === 'symbol'));
+  check('  ...and the map takes a coin under another name by its symbol and price the same way (lib/chainmcap.js\'s rule, not a copy): BNB as CoinLore\'s "Binance Coin" (0.2% apart, agreed), CRO as "Crypto.com Chain" and PI as "Pi" (their market caps differ, said first) — each with its note, PI\'s gap "less than 0.05%", never "0%"',
+    symRows.map((r) => r.id).join() === 'binancecoin,crypto-com-chain,pi-network' && rowOf('binancecoin').check.status === 'agreed' && rowOf('crypto-com-chain').check.status === 'differs' && /^CoinGecko \$2\.56B, CoinLore \$474M/.test(rowOf('crypto-com-chain').check.notes[0])
+    && /CoinLore calls it “Crypto\.com Chain”, CoinGecko “Cronos” — their prices are 1\.4% apart on this read/.test(rowOf('crypto-com-chain').check.notes[1]) && /CoinLore calls it “Pi”, CoinGecko “Pi Network” — their prices are less than 0\.05% apart on this read/.test(rowOf('pi-network').check.notes[1])
+    && !B1.rows.some((r) => r.check.notes.some((n) => /prices are 0% apart/.test(n))), brief(symRows.map((r) => [r.id, r.check.notes])));
   check('  ...the unrounded price is taken only where the written one lost its digits and CoinLore\'s own figures round to it: "1.00" (3 digits) and "77209.47" keep their own; a quotient more than one unit of the last written digit away, a number rather than CoinLore\'s string, or no supply gives none; "0.000000" (a price under half a millionth) takes the quotient when it rounds to it',
     CM.lorePriceFull('1.00', 1002780000, 1e9) === null && CM.lorePriceFull('77209.47', 1.54e12, 19.9e6) === null && CM.lorePriceFull('0.000005', 2e10, 1e15) === null && CM.lorePriceFull(0.000005, 4.52e9, 1e15) === null
     && CM.lorePriceFull('0.000005', 4.52e9, null) === null && Math.abs(CM.lorePriceFull('0.000005', 4.52e9, 1e15) - 4.52e-6) < 1e-15 && Math.abs(CM.lorePriceFull('0.000000', 3e8, 1e15) - 3e-7) < 1e-15 && CM.lorePriceFull('0.000000', 3e9, 1e15) === null
@@ -1843,7 +1918,7 @@ try {
   const loreNote = (b) => b.notes.find((n) => /CoinLore/.test(n)) || '';
   check('  ...the answer\'s note on the check counts the rows it covers — "' + loreNote(A1).slice(0, 60) + '…" — and when CoinLore was not compared it says so and why; never "every market cap is checked" while some have one source',
     /^Each market cap is looked up in CoinLore's 100 largest coins: \d+ of these 100 were found there and compared \(\d+ agree, \d+ differ by more than 10%\); \d+ have one source — the chip on each coin says which\.$/.test(loreNote(A1))
-    && MM.checkNote(B1.rows, B1.lore) === 'Each market cap is looked up in CoinLore\'s 100 largest coins: 65 of these 100 were found there and compared (33 agree, 32 differ by more than 10%); 35 have one source — the chip on each coin says which.'
+    && MM.checkNote(B1.rows, B1.lore) === 'Each market cap is looked up in CoinLore\'s 100 largest coins: 68 of these 100 were found there and compared (34 agree, 34 differ by more than 10%); 32 have one source — the chip on each coin says which.'
     && /^No market cap here is checked against CoinLore just now: CoinLore's last good read \(.+\) is more than 15 minutes from CoinGecko's/.test(MM.checkNote(BO.rows, BO.lore)) && !A1.notes.concat(A4.notes).some((n) => /Every market cap is checked/.test(n)), loreNote(A1));
   // the route's cuts and the Send API's resource
   const c50 = mdH.heatmap({ limit: '50', stables: '0' }).body, c5 = mdH.heatmap({ limit: '5' }).body, cx = mdH.heatmap({ limit: 'abc', stables: '7' }).body, cs0 = mdH.heatmap({ stables: '0' }).body;

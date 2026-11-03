@@ -56,7 +56,9 @@
        "v": 286285159124.83,
        "price": 2339.42,
        "supply": 122374665.72,
-       "at": 1793201760000
+       "at": 1793201760000,
+       "match": "name",
+       "name": "Ethereum"
       }
      ],
      "notes": [],
@@ -199,7 +201,9 @@
        "v": 54999754341.7,
        "price": 101.26,
        "supply": 543155320.58,
-       "at": 1793201760000
+       "at": 1793201760000,
+       "match": "name",
+       "name": "Solana"
       }
      ],
      "notes": [],
@@ -265,7 +269,7 @@
     "at": 1793201390000,
     "label": "BNB (gas token), market cap",
     "check": {
-     "status": "single",
+     "status": "agreed",
      "sources": [
       {
        "src": "coingecko",
@@ -273,10 +277,19 @@
        "price": 749.14,
        "supply": 131511532.76,
        "at": 1793201390000
+      },
+      {
+       "src": "coinlore",
+       "v": 104367844178.3,
+       "price": 749.84,
+       "supply": 139186427.32,
+       "at": 1793201760000,
+       "match": "symbol",
+       "name": "Binance Coin"
       }
      ],
      "notes": [
-      "CoinLore lists $BNB only under another name (“Binance Coin”, not CoinGecko’s “BNB”), so it is not taken as the same coin"
+      "CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Binance Coin”, CoinGecko “BNB” — their prices are 0.1% apart on this read (a coin under another name counts only within 3% of CoinGecko’s price, and only as the one coin with the symbol $BNB that CoinLore lists within 10% of it)"
      ],
      "mapping": {
       "status": "confirmed"
@@ -354,7 +367,9 @@
        "v": 31380978735.48,
        "price": 0.331491,
        "supply": 94666134895.32,
-       "at": 1793201760000
+       "at": 1793201760000,
+       "match": "name",
+       "name": "TRON"
       }
      ],
      "notes": [],
@@ -434,7 +449,9 @@
        "v": 1612095807720.1,
        "price": 80722.44,
        "supply": 19970852,
-       "at": 1793201760000
+       "at": 1793201760000,
+       "match": "name",
+       "name": "Bitcoin"
       }
      ],
      "notes": [],
@@ -514,7 +531,9 @@
        "v": 26741845215.87,
        "price": 80.08,
        "supply": 333928180,
-       "at": 1793201760000
+       "at": 1793201760000,
+       "match": "name",
+       "name": "Hyperliquid"
       }
      ],
      "notes": [
@@ -597,7 +616,9 @@
        "v": 903771439.44,
        "price": 0.167253,
        "supply": 5403630609,
-       "at": 1793201760000
+       "at": 1793201760000,
+       "match": "name",
+       "name": "Arbitrum"
       }
      ],
      "notes": [
@@ -819,7 +840,9 @@
        "v": 3752964557.52,
        "price": 8.89,
        "supply": 422275285.49,
-       "at": 1793201760000
+       "at": 1793201760000,
+       "match": "name",
+       "name": "Avalanche"
       }
      ],
      "notes": [],
@@ -899,7 +922,9 @@
        "v": 197797888.07,
        "price": 0.111208,
        "supply": 1778634390,
-       "at": 1793201760000
+       "at": 1793201760000,
+       "match": "name",
+       "name": "Optimism"
       }
      ],
      "notes": [

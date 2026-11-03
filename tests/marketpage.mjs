@@ -16,6 +16,10 @@
       the daily references and a chains run again — on the CoinGecko, DefiLlama, CoinLore and asset-platform answers measured on
       2026-10-28 (owner: "make sure you are showing the right market caps for all of the chains pulled from multiple sources and
       cross verified"); chains-24h.json also carries Fantom, Morph and Stable as the live site served them that day, with theirs.
+      On 2026-11-03 (the owner's "Yes and do that for all chains": a coin CoinLore lists under another name matches by symbol and
+      price) BNB Chain's check in chains-*.json, and heatmap.json's checks, its check definition and the note that counts them, were
+      brought to lib's answer on the same samples (BNB as CoinLore's "Binance Coin", agreed; on the map also CRO and PI), and each
+      CoinLore source got its match and name — nothing else in those files was changed.
    3. market.js's number words, lifted between its @lift markers and run in a vm.
    4. A fake of the /api/market/* routes, served from those fixtures, with the site's CSP: run here against its own
       contract (sorting with nulls last both ways, wash volume left out of "highest volume", the windows, 404s), and
@@ -1418,14 +1422,15 @@ async function browserWalk() {
       await until('document.querySelectorAll("#mkt-list .mkt-row").length > 5');
       await ev('document.querySelector("#mkt-ctl-chains [data-sort=\\"mcap\\"]").click(), true');
       await until('document.querySelectorAll("#mkt-list .mkt-chk").length > 3');
-      const lst = await ev('({ chips: [...document.querySelectorAll("#mkt-list .mkt-chk")].map((e) => e.textContent), cap: document.getElementById("mkt-cap").textContent, text: document.getElementById("mkt-list").textContent, fantom: ((document.querySelector("#mkt-list [data-chain=\\"fantom\\"]") || {}).textContent || "") })');
+      const lst = await ev('({ chips: [...document.querySelectorAll("#mkt-list .mkt-chk")].map((e) => e.textContent), cap: document.getElementById("mkt-cap").textContent, text: document.getElementById("mkt-list").textContent, fantom: ((document.querySelector("#mkt-list [data-chain=\\"fantom\\"]") || {}).textContent || ""), bsc: (() => { const k = document.querySelector("#mkt-list [data-chain=\\"bsc\\"] .mkt-chk"); return { chip: k ? k.textContent : "", title: k ? k.getAttribute("title") : "" }; })() })');
       await go('/market', 320);
       await until('document.querySelectorAll("#mkt-list .mkt-row").length > 5');
       await ev('document.querySelector("#mkt-ctl-chains [data-sort=\\"mcap\\"]").click(), true');
       await until('document.querySelectorAll("#mkt-list .mkt-chk").length > 3');
       const l320 = await ev(LAYOUT);
-      check('ranked by market cap, each row carries its check in words — "✓ 2 sources agree", "⚠ Sources differ", "1 source" — the caption says the figure is CoinGecko\'s, checked against CoinLore, Fantom is "Not available" with why, never $0, and at 320 px the chips fit their rows',
-        ['✓ 2 sources agree', '⚠ Sources differ', '1 source'].every((t) => lst.chips.includes(t)) && /Market cap of the chain’s own token: CoinGecko’s figure, checked against CoinLore\./.test(lst.cap)
+      check('ranked by market cap, each row carries its check in words — "✓ 2 sources agree", "⚠ Sources differ", "1 source", and BNB Chain\'s "✓ 2 sources agree · by symbol and price" with CoinLore\'s "Binance Coin" in its title — the caption says the figure is CoinGecko\'s, checked against CoinLore, Fantom is "Not available" with why, never $0, and at 320 px the chips fit their rows',
+        ['✓ 2 sources agree', '⚠ Sources differ', '1 source', '✓ 2 sources agree · by symbol and price'].every((t) => lst.chips.includes(t)) && /Market cap of the chain’s own token: CoinGecko’s figure, checked against CoinLore\./.test(lst.cap)
+        && lst.bsc.chip === '✓ 2 sources agree · by symbol and price' && /— CoinLore’s coin is matched by its symbol and price, not its name: CoinLore calls it “Binance Coin”$/.test(lst.bsc.title) && lst.chips.filter((t) => /by symbol/.test(t)).length === 1
         && /Not available/.test(lst.fantom) && /lists no circulating supply/.test(lst.fantom) && !/\$0(?![.\d])/.test(lst.text) && l320.sw <= l320.iw && !l320.out.length && !l320.small.length, JSON.stringify({ lst, l320 }).slice(0, 600));
       const fits = [];
       for (const w of [320, 1280]) {
@@ -1439,6 +1444,17 @@ async function browserWalk() {
         fits.every((x) => x.d && x.l.sw <= x.l.iw && !x.l.out.length && !x.l.small.length) && d0.rows.length === 2 && /^CoinGecko\$1\.15B\$0\.1668/.test(d0.rows[0]) && /^CoinLore\$904M/.test(d0.rows[1]) && /6\.89B/.test(d0.rows[0]) && /5\.4B/.test(d0.rows[1])
         && /both price \$ARB the same/.test(d0.notes.join(' ')) && d0.chip === '⚠ Sources differ' && !/CoinGecko names the same token for this chain/.test(d0.text)
         && /The chain’s token: Checked for its gas token only — CoinGecko names \$ETH \(ethereum\), the chain’s gas token, as its native coin; that does not check \$ARB \(arbitrum\), the token whose market cap is shown\./.test(d0.text) && /never an average/.test(d0.text) && /As of/.test(d0.text), JSON.stringify(fits.map((x) => ({ w: x.w, d: x.d && { rows: x.d.rows, chip: x.d.chip }, l: x.l }))).slice(0, 700));
+      const bscFits = [];
+      for (const w of [320, 1280]) {
+        await go('/market?chain=bsc', w);
+        await until('!!document.getElementById("mkt-mc-h")');
+        const d = await ev('(() => { const c = document.querySelector(".mkt-mcap"); return c ? { rows: [...c.querySelectorAll("tbody tr")].map((t) => t.textContent), line: (c.querySelector(".mkt-chkline") || {}).textContent || "", notes: [...c.querySelectorAll(".mkt-chknotes li")].map((l) => l.textContent), chip: (document.querySelector(".mkt-stat .mkt-chk") || {}).textContent || "" } : null; })()');
+        bscFits.push({ w, d, l: await ev(LAYOUT) });
+      }
+      const b0 = bscFits[0].d || {};
+      check('  ...and BNB Chain\'s view says its CoinLore coin was matched by symbol and price, with CoinLore\'s own name, in the chip, the check\'s line, CoinLore\'s row and the note — at 320 and 1280 px, nothing outside the column, nothing under the text floor',
+        bscFits.every((x) => x.d && x.l.sw <= x.l.iw && !x.l.out.length && !x.l.small.length) && b0.chip === '✓ 2 sources agree · by symbol and price' && b0.rows.length === 2 && /^CoinLore \(matched by symbol and price: CoinLore calls it “Binance Coin”\)\$104/.test(b0.rows[1])
+        && /CoinGecko and CoinLore give market caps within 10% of each other\. CoinLore’s coin is matched by its symbol and price, not its name: CoinLore calls it “Binance Coin”\./.test(b0.line) && /CoinLore calls it “Binance Coin”, CoinGecko “BNB”/.test(b0.notes[0]), JSON.stringify(bscFits.map((x) => ({ w: x.w, d: x.d, l: x.l }))).slice(0, 800));
       await go('/market?chain=fantom', 390);
       await until('!!document.getElementById("mkt-mc-h")');
       const fd = await ev('({ card: (document.querySelector(".mkt-mcap") || {}).textContent || "", stat: [...document.querySelectorAll(".mkt-stat")].map((s) => s.textContent).find((t) => /Native token market cap/.test(t)) || "" })');
@@ -1553,6 +1569,12 @@ async function browserWalk() {
         /^ETH Ethereum✓ 2 sources agree/.test(card.text) && /Price\$2,207CoinGecko · /.test(card.text) && /Dominance10\.4%share of CoinGecko's total, \$2\.59T, in percent · CoinGecko · /.test(card.text) && /24 h price change▼ −6\.32%CoinGecko · /.test(card.text) && /Rank#2/.test(card.text)
         && card.href === 'https://www.coingecko.com/en/coins/ethereum' && card.rel === 'noopener' && /View on CoinGecko ↗/.test(card.text) && /Not advice, never a tip to buy\./.test(card.text) && card.on.join() === 'ethereum' && card.focus === 'mkt-mapc-h' && card.after && cardL.sw <= cardL.iw && !cardL.out.length && !cardL.small.length,
         JSON.stringify({ card, cardL }).slice(0, 600));
+      // BNB, which CoinLore lists as "Binance Coin": matched by its symbol and price, and its card and chip say so
+      await settle(); await press('document.querySelector("#mkt-map [data-coin=binancecoin] circle")'); await until('/^BNB/.test(document.getElementById("mkt-map-card").textContent)');
+      const bnbCard = await ev('(() => { const c = document.getElementById("mkt-map-card"), k = c.querySelector(".mkt-chk"); return { text: c.textContent, chip: k ? k.textContent : "", title: k ? k.getAttribute("title") : "", notes: [...c.querySelectorAll(".mkt-chknotes li")].map((l) => l.textContent) }; })()');
+      check('  ...a coin CoinLore lists under another name (BNB as "Binance Coin") says in its card that it was matched by symbol and price: the chip "✓ 2 sources agree · by symbol and price", its title naming CoinLore\'s "Binance Coin", and the note with both names and the gap',
+        bnbCard.chip === '✓ 2 sources agree · by symbol and price' && /CoinLore’s coin is matched by its symbol and price, not its name: CoinLore calls it “Binance Coin”/.test(bnbCard.title)
+        && bnbCard.notes.some((n) => /^CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Binance Coin”, CoinGecko “BNB” — their prices are 0\.2% apart on this read/.test(n)), JSON.stringify(bnbCard).slice(0, 600));
       // the keyboard's way in: the list, a row's button, Enter, then Escape
       await openMapList();
       const list = await ev('({ rows: document.querySelectorAll("#mkt-map-table tbody tr").length, btns: [...document.querySelectorAll("#mkt-map-table [data-map-coin]")].filter((b) => b.tagName === "BUTTON" && (b.dataset.tip || "").length >= 8 && b.getBoundingClientRect().height >= 43.5).length, head: [...document.querySelectorAll("#mkt-map-table thead th")].map((t) => t.textContent).join("|"), first: document.querySelector("#mkt-map-table tbody tr").textContent })');
@@ -1894,6 +1916,10 @@ async function runSuite() {
       && /data-l="As of"/.test(code) && /“As of” is when each source’s figure is from: CoinGecko’s own update time, DefiLlama’s on its relay, CoinLore’s when this site read it\./.test(code) && !/data-l="Read"/.test(code)
       && /gas: 'Checked for its gas token only'/.test(code) && /m\.status === 'confirmed' && m\.by === 'gas' \? MAP_WORD\.gas/.test(code)
       && /data-l="Circulating supply"/.test(code) && /never an average of the two/.test(code) && /coinlore: 'CoinLore'/.test(code) && /\.mkt-chk \{[^}]*font-size: max\(var\(--text-floor\), 0\.72rem\)/.test(CSS) && /\.mkt-chk\.is-warn \{/.test(CSS));
+    check('  ...a CoinLore coin matched by its symbol and price under another name (owner, 2026-11-03) says so where its figure is: the chip ("· by symbol and price") and its title with CoinLore\'s own name, the check\'s line and its row in the chain view — from the source\'s match: \'symbol\', never guessed from the notes',
+      /const symMatchOf = \(c\) => \(c && Array\.isArray\(c\.sources\) \? c\.sources\.find\(\(x\) => x && x\.src === 'coinlore' && x\.match === 'symbol'\)/.test(code) && /const SYM_CHIP = ' · by symbol and price';/.test(code)
+      && /const symWords = \(x\) => 'CoinLore’s coin is matched by its symbol and price, not its name: CoinLore calls it “' \+ \(x\.name \|\| 'no name'\) \+ '”';/.test(code) && /esc\(CHK\[c\.status\]\[0\] \+ \(s \? SYM_CHIP : ''\)\)/.test(code)
+      && /x\.src === 'coinlore' && x\.match === 'symbol' \? ' <span class="mkt-s">\(matched by symbol and price: CoinLore calls it “' \+ esc\(x\.name \|\| 'no name'\) \+ '”\)<\/span>'/.test(code) && /\(sm \? ' ' \+ esc\(symWords\(sm\)\) \+ '\.' : ''\)/.test(code));
     check('the charts are drawn by market.js in SVG (no library): at the box\'s own pixel size, an axis, a hover and arrow-key readout, a table of every value',
       /createElementNS\(NS, tag\)/.test(code) && /const W = Math\.max\(200, Math\.floor\(box\.clientWidth \|\| 300\)\);/.test(code) && /viewBox: '0 0 ' \+ W \+ ' ' \+ H/.test(code) && /class: 'mkt-ax'/.test(code)
       && /box\.addEventListener\('pointermove'/.test(code) && /e\.key === 'ArrowLeft'/.test(code) && /Every value as a table/.test(code) && !/<script[^>]+src="(https?:|\/\/)|d3(\.min)?\.js|plotly|echarts|chart\.umd|chartjs/i.test(H));
@@ -2020,7 +2046,7 @@ async function runSuite() {
     const isChk = (f, where) => {
       const c = f && f.check;
       const ok = c && CHK_ST.includes(c.status) && Array.isArray(c.sources) && Array.isArray(c.notes) && c.notes.every((n) => typeof n === 'string' && n.length > 8) && c.mapping && ['confirmed', 'differs', 'unchecked'].includes(c.mapping.status)
-        && c.sources.every((x) => ['coingecko', 'coinlore', 'defillama'].includes(x.src) && x.v > 0 && x.at > 1.7e12 && 'price' in x && 'supply' in x)
+        && c.sources.every((x) => ['coingecko', 'coinlore', 'defillama'].includes(x.src) && x.v > 0 && x.at > 1.7e12 && 'price' in x && 'supply' in x && (x.src !== 'coinlore' || (['name', 'symbol'].includes(x.match) && typeof x.name === 'string' && x.name.length > 0)))
         && (c.status === 'agreed' || c.status === 'differs' ? c.sources.length === 2 && c.sources.filter((x) => x.src !== 'defillama').length === 2 : c.status === 'single' ? c.sources.length === 1 : c.sources.length === 0)
         && (c.status === 'differs' ? /^CoinGecko .* apart\): /.test(c.notes[0]) : true) && (f.v == null ? c.status === 'none' || f.why : f.v === c.sources[0].v);
       if (!ok) badChk.push(where + '=' + JSON.stringify(c).slice(0, 120));
@@ -2029,7 +2055,8 @@ async function runSuite() {
     for (const k of ['robinhood', 'base']) isChk(FIX('chain-' + k + '.json').stats.mcap, 'chain-' + k);
     const c24 = FIX('chains-24h.json').rows, mc = (k) => (c24.find((r) => r.key === k) || {}).mcap || {};
     check('  ...every chain\'s market cap carries its check — { status (agreed, differs, single, none), sources [{ src, v, price, supply, at }], notes, mapping, coin } — the figure shown the first source\'s (CoinGecko\'s when it has one), never an average, never a relay counted as a second source',
-      !badChk.length && mc('ethereum').check.status === 'agreed' && mc('arbitrum').check.status === 'differs' && /both price \$ARB the same/.test(mc('arbitrum').check.notes[0]) && mc('bsc').check.status === 'single'
+      !badChk.length && mc('ethereum').check.status === 'agreed' && mc('arbitrum').check.status === 'differs' && /both price \$ARB the same/.test(mc('arbitrum').check.notes[0])
+      && mc('bsc').check.status === 'agreed' && mc('bsc').check.sources[1].match === 'symbol' && mc('bsc').check.sources[1].name === 'Binance Coin' && /CoinLore calls it “Binance Coin”, CoinGecko “BNB”/.test(mc('bsc').check.notes[0]) && mc('ethereum').check.sources[1].match === 'name'
       && mc('fantom').v === null && /lists no circulating supply/.test(mc('fantom').why) && mc('fantom').check.status === 'none' && mc('morph').label === 'BGB (gas token), market cap' && mc('stable').check.coin.name === 'Stable'
       && mc('robinhood').check.status === 'none' && mc('robinhood').check.mapping.note === 'no token of its own to check', badChk.slice(0, 4).join(' | '));
     const rh = FIX('chain-robinhood.json');
@@ -2144,9 +2171,10 @@ async function runSuite() {
       && hmDom && Math.abs(HMR[0].dominance.v - 59.597) < 0.01 && HMR.filter((r) => r.stable === true).length === 17 && HMR.every((r) => typeof r.stable === 'boolean') && HMR.every((r) => ['agreed', 'differs', 'single'].includes(r.check.status) && Array.isArray(r.check.sources) && Array.isArray(r.check.notes))
       && JSON.stringify(HM.legend.map((b) => b.key)) === JSON.stringify(MM.BUCKETS.map((b) => b.key)) && Object.values(HM.reads).every((x) => x.ok === true && x.at > 1.7e12) && Object.keys(HM.reads).join() === 'coins,global,stables,coinlore'
       && HM.notes[0] === 'Not advice, never a tip to buy. Do your own research.' && HM.sources.map((x) => x.id).join() === 'coingecko,coinlore' && HM.counts.drawn === 100 && HM.counts.down + HM.counts.up + HM.counts.flat + HM.counts.none === 100, hmBad.slice(0, 5).join(' | '));
-    check('  ...and its traps as measured: BlackRock\'s BUIDL is exactly 0% (a figure of 0, the legend\'s "0%", never "no change"), BNB is CoinGecko\'s alone (CoinLore lists it only as "Binance Coin"), HYPE\'s sources differ by their circulating supplies, a coin outside CoinLore\'s first 100 says so',
+    check('  ...and its traps as measured: BlackRock\'s BUIDL is exactly 0% (a figure of 0, the legend\'s "0%", never "no change"), BNB is matched by symbol and price and says so (CoinLore lists it as "Binance Coin"), HYPE\'s sources differ by their circulating supplies, a coin outside CoinLore\'s first 100 says so',
       buidl && buidl.change24h.v === 0 && !('why' in buidl.change24h) && MM.bucketOf(buidl.change24h.v) === 'flat'
-      && /only under another name \(“Binance Coin”/.test(HMR.find((r) => r.id === 'binancecoin').check.notes.join(' ')) && HMR.find((r) => r.id === 'hyperliquid').check.status === 'differs' && /circulating supply/.test(HMR.find((r) => r.id === 'hyperliquid').check.notes[0])
+      && HMR.find((r) => r.id === 'binancecoin').check.status === 'agreed' && HMR.find((r) => r.id === 'binancecoin').check.sources[1].match === 'symbol' && /CoinLore calls it “Binance Coin”, CoinGecko “BNB”/.test(HMR.find((r) => r.id === 'binancecoin').check.notes.join(' '))
+      && HMR.find((r) => r.id === 'hyperliquid').check.status === 'differs' && /circulating supply/.test(HMR.find((r) => r.id === 'hyperliquid').check.notes[0])
       && /CoinLore’s 100 largest coins include none with the symbol \$LTC/.test(HMR.find((r) => r.id === 'litecoin').check.notes.join(' ')));
 
     /* ═══ 3. the number words, run ═══ */
