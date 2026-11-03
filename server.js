@@ -12323,9 +12323,11 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
     }
     if (!rateLimit('pend:' + userId, 10, 9e5)) { lockoutAlert(userId); res.writeHead(302, { Location: '/?err=locked', 'Set-Cookie': CLEAR_OAUTH_STATE }); return res.end(); }   // F013
     pendingLogins.set(pend, entry);
+    // begun from an app's "Sign in with Send": the second step is taken on that sign-in's own page (auth.js reads twofa=1 anywhere)
+    const resume2fa = gateReq ? OIDC.resumePath(gateReq) : null;
     res.writeHead(302, {
       'Set-Cookie': [`oauth_2fa=${pend}; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age=300${cookieSecure()}`, CLEAR_OAUTH_STATE],
-      Location: '/?twofa=1',
+      Location: resume2fa ? resume2fa + '&twofa=1' : '/?twofa=1',
     });
     return res.end();
   }
@@ -12333,7 +12335,10 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
      exceptions: a brand-new account's own setup, and an account whose ONLY possible proof is this sign-in (a
      social login with no password, no two-factor and no wallet old enough to vouch). */
   const token = createSession(userId, ipIdxVal, !ident ? NEW_ACCOUNT_SUDO_MS : (onlyProofIsSignIn(userId, now()) ? SUDO_MS : 0));
-  res.writeHead(302, { 'Set-Cookie': [sessionCookie(token), CLEAR_OAUTH_STATE], Location: '/profile' });
+  /* Begun from an app's "Sign in with Send" page: back to that sign-in. Never a return address from the query — only the
+     request this browser was shown, by the id in its own HttpOnly cookie, and only while that request is still waiting. */
+  const resume = gateReq ? OIDC.resumePath(gateReq) : null;
+  res.writeHead(302, { 'Set-Cookie': [sessionCookie(token), CLEAR_OAUTH_STATE], Location: resume || '/profile' });
   res.end();
 }
 
@@ -13826,6 +13831,8 @@ function ownDataView(u) {
     notifications: db.prepare('SELECT id, kind, icon, text, href, created_at FROM notifications WHERE user_id = ? ORDER BY id DESC LIMIT 500').all(u.id),
     mutes: mutedNames(u.id),
     alerts: alertsOf(u.id),
+    signInApps: OIDC.grantsOf(u.id),   // Sign in with Send: the apps they allowed, what each can see and since when
+    appsRegistered: OIDC.appsOf(u.id),   // ...and the apps they registered as a developer (never a secret: only its hash is kept)
   };
 }
 let lbCache = { at: 0, top: null };   // leaderboard top-20 cache (identical for everyone → serve for LB_TTL)
@@ -15028,6 +15035,7 @@ function flagUser(userId, reason, costMult) {
   const mult = Number(costMult) > 1 ? Number(costMult) : 1;
   db.prepare('UPDATE users SET strikes=?, restrict_level=?, restrict_reason=?, restricted_until=?, flagged_at=?, redeem_base_send=?, redeem_dur=?, redeem_mult=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?')
     .run(strikes, level, String(reason).slice(0, 200), until, now(), baseSend, dur, mult, userId);
+  if (typeof oidcRevokeUser === 'function') oidcRevokeUser(userId);   // read-only accounts do not sign in to apps (Sign in with Send); the guard lets suites run this function on its own
   return true;
 }
 // enforce the redemption deal after an on-chain holdings read: hold the bought $SEND to term, or read-only returns doubled.
@@ -15898,6 +15906,27 @@ function healthCheck() {
   healthCache = { at: now(), val: out };
   return out;
 }
+/* ===== Sign in with Send: OAuth 2.0 + OpenID Connect for apps built around Send (lib/oidc.js) =====================
+   Owner, 2026-11-03: other people building apps around Send sign members in with their Send account and carry over the
+   handle, the Send ID, Send Power (level and title) and the Send Boost — "account consistency across everyone building
+   around Send" — without being data-farmed. The protocol, the consent page, the tables and the privacy rules are
+   lib/oidc.js's; this hands it the site's own pieces: the sessions (one sign-in system, never a second), the keyring (the
+   signing keys are encrypted with it, and the pairwise subject secret is derived from it and never stored), the claims'
+   sources (levelForXp, titleFor, effectiveMult, the Send ID) and the site's rules (the restriction, the reserved names). */
+const OIDC_LIB = require('./lib/oidc.js');
+const OIDC = OIDC_LIB.createOidc({
+  db, now, encField, decField, hashToken, parseCookies, getUser, rateLimit, clientIp, send, bad, readBody, blockSanctioned, isAdmin,
+  origin: () => SITE_ORIGIN, escHtml: (v) => escHtml(v), assetVer: (f) => assetVer(f), secHeaders: SEC_HEADERS,
+  pairwiseSecret: () => KEYS.derive('oidc-pairwise-sub'),
+  levelForXp, titleFor, effectiveMult, restrictionOf, sendNoOf: (u) => sendNoOf(u),
+  nameKey: (v) => nameKey(v), reservedKeys: () => [...RESERVED_KEYS],
+  // the signing key is replaced every this many days (a new one is published a day before it signs); 0 = only by hand (/admin)
+  rotateDays: () => { const v = String(process.env.OIDC_KEY_ROTATE_DAYS == null ? '' : process.env.OIDC_KEY_ROTATE_DAYS).trim(); return v === '' ? 90 : Math.max(0, Number(v) || 0); },
+  log: (m) => console.log(m),
+});
+// a member who loses access to apps loses it now, not at the next token use (which refuses them anyway)
+function oidcRevokeUser(userId) { try { OIDC.revokeUser(userId); } catch {} }
+
 const server = http.createServer(async (req, res) => {
   res._gzip = acceptsGzip(req.headers['accept-encoding']); // whether we may gzip this response (read by send/serveFile)
   res._enc = bestEnc(req.headers['accept-encoding']);      // best static-asset encoding (br | gzip | null)
@@ -15937,6 +15966,17 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(308, { Location: BASE_URL.replace(/\/+$/, '') + req.url, 'Cache-Control': 'public, max-age=86400', ...SEC_HEADERS });
     return res.end();
   }
+  /* Sign in with Send (lib/oidc.js) answers its own paths before the same-origin write check below: an app's server or
+     browser posts to /oauth/token, /oauth/userinfo and /oauth/revoke from its own origin, carrying no cookie of ours, and
+     the consent page's POST to /oauth/authorize checks its Origin (or Referer) and its CSRF token itself. */
+  if (p.startsWith('/oauth/') || p.startsWith('/.well-known/')) {
+    try { if (await OIDC.handle(req, res, url)) return; }
+    catch (e) {
+      console.error('oidc', e && e.stack || e);
+      if (!res.headersSent) { res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC_HEADERS }); return res.end('{"error":"server_error"}'); }
+      try { res.destroy(); } catch {} return;
+    }
+  }
   // only API routes read the session — resolving it for every static asset cost 2 SELECTs × ~21 assets per page load
   const me = p.startsWith('/api/') ? getUser(req) : null;
 
@@ -15973,6 +16013,8 @@ const server = http.createServer(async (req, res) => {
      try to join, the ticket appears. */
   try {
     if (p.startsWith('/api/')) {
+      /* ---- Sign in with Send: a member's own apps, the apps they signed in to, the admin's list (lib/oidc.js) ---- */
+      if (p.startsWith('/api/oauth/') || p.startsWith('/api/admin/oauth/')) { if (await OIDC.api(req, res, p, me)) return; }
       /* ---- the participation gate: ask for the check, and watch it ---- */
       if (p === '/api/holder/state' && req.method === 'GET') {
         if (!me) return bad(res, 'sign in first', 401);
@@ -16807,6 +16849,7 @@ const server = http.createServer(async (req, res) => {
         } else {
           const until = days ? now() + days * DAY_MS : PERM_UNTIL;
           db.prepare('UPDATE users SET restricted_until = ?, restrict_level = ?, restrict_reason = ?, redeem_dur = ? WHERE id = ?').run(until, days ? 1 : 3, reason, days ? days * DAY_MS : DAY_MS, uid);
+          oidcRevokeUser(uid);   // a restricted account cannot sign in to apps: what it is signed in to stops now
           notify(uid, '🔇', 'A moderator put your account in read-only mode' + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' indefinitely') + ': ' + reason + ' Questions: SendRH@Atomicmail.io', 'restriction');
         }
         db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = ? WHERE resolved_at IS NULL AND kind = 'user' AND target_id = ?").run(now(), me.id, b.lift ? 'lifted' : 'restricted', uid);
@@ -16858,6 +16901,7 @@ const server = http.createServer(async (req, res) => {
           const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
           for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'reports', 'tracker_cache', 'wallet_hist', 'burn_proofs'])
             try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
+          OIDC.forgetUser(uid);   // Sign in with Send: every app it allowed (consents, codes, tokens) and every app it registered, with everyone's sign-ins to them
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
              in, and its unused codes would be a supply of tickets nobody answers for — make an account, delete it,
              and the ten codes it was handed would otherwise live on. That includes a code a friend has redeemed but
@@ -20866,6 +20910,7 @@ const BACKUP_SCRUB = [
   'DELETE FROM arcade_guest_rounds WHERE user_id IS NULL', 'UPDATE arcade_guest_rounds SET ip = NULL, net = NULL',
   'DELETE FROM email_misses', 'DELETE FROM visit_keys', 'DELETE FROM visit_seen', 'DELETE FROM dh_moves',
   'DELETE FROM sessions', 'DELETE FROM wallet_challenges', 'DELETE FROM nonces', 'DELETE FROM burn_proofs',
+  'DELETE FROM oauth_codes', 'DELETE FROM oauth_tokens',   // Sign in with Send: live codes and tokens are not kept in a copy (an app signs its members in again after a restore)
   // Sendy's questions he could not answer and his answers nobody rated go after 90 days on the live site (lib/sendybrain.js prune)
   'DELETE FROM sendy_misses', 'DELETE FROM sendy_qa WHERE up = 0 AND down = 0',
   /* Market Data's bulk public history (lib/marketdata.js) is read again from its sources after a restore, so a copy does not carry it —

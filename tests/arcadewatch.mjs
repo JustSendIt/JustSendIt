@@ -16,7 +16,9 @@ const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
 const made = [];
 const GROWTH = 0.06;
-const ymd = () => new Date().toISOString().slice(0, 10);
+// the day exactly as the server writes it (server.js ymd(): UTC, no zero padding — '2026-11-3'), or a planted round lands
+// on another "day" on the 1st to the 9th of every month and /start opens a new flight instead of finding it
+const ymd = () => { const d = new Date(); return d.getUTCFullYear() + '-' + (d.getUTCMonth() + 1) + '-' + d.getUTCDate(); };
 function mkUser() {
   const name = '__aw_' + randomBytes(3).toString('hex');
   db.prepare('INSERT INTO users (username, created_at, avatar, holder_verified_at, holder_state) VALUES (?,?,?,?,?)').run(name, Date.now(), '🧪', Date.now(), 'ok');
