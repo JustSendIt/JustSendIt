@@ -60,7 +60,9 @@
       "v": 1541938982456.2,
       "price": 77209.47,
       "supply": 19970852,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Bitcoin"
      }
     ],
     "notes": []
@@ -117,7 +119,9 @@
       "v": 271140907884.77,
       "price": 2215.66,
       "supply": 122374665.72,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Ethereum"
      }
     ],
     "notes": []
@@ -174,7 +178,9 @@
       "v": 183754682083.84,
       "price": 1,
       "supply": 183245941051.28,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Tether"
      }
     ],
     "notes": []
@@ -217,7 +223,7 @@
    },
    "stable": false,
    "check": {
-    "status": "single",
+    "status": "agreed",
     "sources": [
      {
       "src": "coingecko",
@@ -225,10 +231,19 @@
       "price": 683.93,
       "supply": 131511447.4,
       "at": 1793320136000
+     },
+     {
+      "src": "coinlore",
+      "v": 95397527255.34,
+      "price": 685.39,
+      "supply": 139186427.32,
+      "at": 1793320440000,
+      "match": "symbol",
+      "name": "Binance Coin"
      }
     ],
     "notes": [
-     "CoinLore lists $BNB only under another name (“Binance Coin”, not CoinGecko’s “BNB”), so it is not taken as the same coin"
+     "CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Binance Coin”, CoinGecko “BNB” — their prices are 0.2% apart on this read (a coin under another name counts only within 3% of CoinGecko’s price, and only as the one coin with the symbol $BNB within 10% of it among CoinLore’s 100 largest coins, the part of its list this map reads)"
     ]
    }
   },
@@ -283,7 +298,9 @@
       "v": 72911729443.82,
       "price": 1.22,
       "supply": 59777241479,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "XRP"
      }
     ],
     "notes": []
@@ -340,7 +357,9 @@
       "v": 74082405751.33,
       "price": 1,
       "supply": 73979327162.3,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "USD Coin"
      }
     ],
     "notes": []
@@ -397,7 +416,9 @@
       "v": 50709885934.07,
       "price": 93.36,
       "supply": 543155320.58,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Solana"
      }
     ],
     "notes": []
@@ -454,7 +475,9 @@
       "v": 33793343647.23,
       "price": 0.356974,
       "supply": 94666134895.32,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "TRON"
      }
     ],
     "notes": []
@@ -563,7 +586,9 @@
       "v": 29794360228.29,
       "price": 89.22,
       "supply": 333928180,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Hyperliquid"
      }
     ],
     "notes": [
@@ -622,7 +647,9 @@
       "v": 19530900954.75,
       "price": 1203.65,
       "supply": 16226349.42,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Zcash"
      }
     ],
     "notes": []
@@ -679,7 +706,9 @@
       "v": 12322012157.92,
       "price": 0.073275,
       "supply": 168160693127,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Dogecoin"
      }
     ],
     "notes": []
@@ -736,7 +765,9 @@
       "v": 11088738118.01,
       "price": 601.12,
       "supply": 18446744.07,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Monero"
      }
     ],
     "notes": []
@@ -949,7 +980,9 @@
       "v": 7046471754.89,
       "price": 10.39,
       "supply": 678099970.45,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "ChainLink"
      }
     ],
     "notes": [
@@ -1008,7 +1041,9 @@
       "v": 6618829959.41,
       "price": 0.184881,
       "supply": 35800453490.39,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Cardano"
      }
     ],
     "notes": []
@@ -1065,7 +1100,9 @@
       "v": 5171537219.44,
       "price": 0.159661,
       "supply": 32390746763,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Stellar"
      }
     ],
     "notes": []
@@ -1122,7 +1159,9 @@
       "v": 5358825453.66,
       "price": 268.26,
       "supply": 19975981,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Bitcoin Cash"
      }
     ],
     "notes": []
@@ -1179,7 +1218,9 @@
       "v": 5001183254.95,
       "price": 4,
       "supply": 1249836992,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "NEAR Protocol"
      }
     ],
     "notes": []
@@ -1288,7 +1329,9 @@
       "v": 5332231652.64,
       "price": 0.993821,
       "supply": 5365382702.66,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Dai"
      }
     ],
     "notes": [
@@ -1347,7 +1390,9 @@
       "v": 14072192791.35,
       "price": 0.999733,
       "supply": 14075952011.93,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Ethena USDe"
      }
     ],
     "notes": [
@@ -1458,7 +1503,9 @@
       "v": 4017915878.26,
       "price": 6.37,
       "supply": 630330527.71,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Uniswap"
      }
     ],
     "notes": []
@@ -1619,7 +1666,9 @@
       "v": 3418442768.69,
       "price": 8.1,
       "supply": 422275285.49,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Avalanche"
      }
     ],
     "notes": []
@@ -1676,7 +1725,9 @@
       "v": 3016227981.63,
       "price": 0.845158,
       "supply": 3568833706.32,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Sui"
      }
     ],
     "notes": [
@@ -1735,7 +1786,9 @@
       "v": 1504884663.08,
       "price": 4006.91,
       "supply": 375572.25,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Tether Gold"
      }
     ],
     "notes": [
@@ -1846,7 +1899,9 @@
       "v": 676023653.7,
       "price": 1,
       "supply": 674958184.73,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Global Dollar"
      }
     ],
     "notes": [
@@ -1905,7 +1960,9 @@
       "v": 2859410376.09,
       "price": 0.06745,
       "supply": 42392926538.33,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Hedera Hashgraph"
      }
     ],
     "notes": []
@@ -1962,7 +2019,9 @@
       "v": 1392149902.61,
       "price": 1,
       "supply": 1391584924.02,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "PayPal USD"
      }
     ],
     "notes": [
@@ -2021,7 +2080,9 @@
       "v": 2663303061.77,
       "price": 0.000005,
       "supply": 589245888455640,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Shiba Inu"
      }
     ],
     "notes": []
@@ -2078,7 +2139,9 @@
       "v": 730981876.53,
       "price": 1,
       "supply": 729950821.46,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Ripple USD"
      }
     ],
     "notes": [
@@ -2137,7 +2200,9 @@
       "v": 2250317638.84,
       "price": 226.73,
       "supply": 9925059.07,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Bittensor"
      }
     ],
     "notes": [
@@ -2196,7 +2261,9 @@
       "v": 2139736384.2,
       "price": 177.24,
       "supply": 12072738,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Quant"
      }
     ],
     "notes": [
@@ -2241,7 +2308,7 @@
    },
    "stable": false,
    "check": {
-    "status": "single",
+    "status": "differs",
     "sources": [
      {
       "src": "coingecko",
@@ -2249,10 +2316,20 @@
       "price": 0.050365,
       "supply": 50747715964.75968,
       "at": 1793320136000
+     },
+     {
+      "src": "coinlore",
+      "v": 473844435.28,
+      "price": 0.051056,
+      "supply": 9280821918,
+      "at": 1793320440000,
+      "match": "symbol",
+      "name": "Crypto.com Chain"
      }
     ],
     "notes": [
-     "CoinLore lists $CRO only under another name (“Crypto.com Chain”, not CoinGecko’s “Cronos”), so it is not taken as the same coin"
+     "CoinGecko $2.56B, CoinLore $474M (81% apart): both price $CRO the same (about $0.05); they count a different circulating supply (CoinGecko 50.7B, CoinLore 9.28B)",
+     "CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Crypto.com Chain”, CoinGecko “Cronos” — their prices are 1.4% apart on this read (a coin under another name counts only within 3% of CoinGecko’s price, and only as the one coin with the symbol $CRO within 10% of it among CoinLore’s 100 largest coins, the part of its list this map reads)"
     ]
    }
   },
@@ -2515,7 +2592,9 @@
       "v": 2243122411.76,
       "price": 106.82,
       "supply": 21000000,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "OKB"
      }
     ],
     "notes": []
@@ -2572,7 +2651,9 @@
       "v": 1164596015.63,
       "price": 0.16905,
       "supply": 6889062500,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Ethena"
      }
     ],
     "notes": [
@@ -2683,7 +2764,9 @@
       "v": 1884287404.55,
       "price": 0.000004,
       "supply": 420689899653540,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Pepe"
      }
     ],
     "notes": []
@@ -2740,7 +2823,9 @@
       "v": 1875359317.38,
       "price": 0.9955,
       "supply": 1883836582.86,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Falcon USD"
      }
     ],
     "notes": []
@@ -2849,7 +2934,9 @@
       "v": 1779462103.36,
       "price": 117.11,
       "supply": 15194338.96,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Aave"
      }
     ],
     "notes": []
@@ -2906,7 +2993,9 @@
       "v": 1165678030.38,
       "price": 4011.58,
       "supply": 290578.46,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "PAX Gold"
      }
     ],
     "notes": [
@@ -2965,7 +3054,9 @@
       "v": 1171534585.85,
       "price": 0.370844,
       "supply": 3159107529,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Ondo"
      }
     ],
     "notes": [
@@ -3076,7 +3167,9 @@
       "v": 1149683854.75,
       "price": 0.677201,
       "supply": 1697700000,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Aster"
      }
     ],
     "notes": [
@@ -3135,7 +3228,9 @@
       "v": 1241905626.07,
       "price": 0.050456,
       "supply": 24613427094,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "World Liberty Financial"
      }
     ],
     "notes": [
@@ -3298,7 +3393,9 @@
       "v": 1513737617.44,
       "price": 0.465344,
       "supply": 3252944055.74,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Mantle"
      }
     ],
     "notes": []
@@ -3407,7 +3504,9 @@
       "v": 1344290004.89,
       "price": 0.883084,
       "supply": 1522267060,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Polkadot"
      }
     ],
     "notes": [
@@ -3466,7 +3565,9 @@
       "v": 521698601.81,
       "price": 0.998319,
       "supply": 522577112,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "USDD"
      }
     ],
     "notes": [
@@ -3525,7 +3626,9 @@
       "v": 703960834.16,
       "price": 2.08,
       "supply": 338801056.2,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Morpho"
      }
     ],
     "notes": [
@@ -3584,7 +3687,9 @@
       "v": 753527124.48,
       "price": 0.367887,
       "supply": 2048258860.19,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Worldcoin"
      }
     ],
     "notes": [
@@ -3643,7 +3748,9 @@
       "v": 1654190099.65,
       "price": 0.9965,
       "supply": 1660000100,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "BFUSD"
      }
     ],
     "notes": [
@@ -3702,7 +3809,9 @@
       "v": 1241835179.14,
       "price": 2.31,
       "supply": 538095694.53,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Internet Computer (IOU)"
      }
     ],
     "notes": []
@@ -3811,7 +3920,9 @@
       "v": 1279146593.69,
       "price": 1.84,
       "supply": 696293683.84,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Bitget Token"
      }
     ],
     "notes": []
@@ -3868,7 +3979,9 @@
       "v": 1383096550,
       "price": 0.139707,
       "supply": 9900000000,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "JUST"
      }
     ],
     "notes": [
@@ -3927,7 +4040,9 @@
       "v": 1057997128,
       "price": 6.89,
       "supply": 153612154.9,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Ethereum Classic"
      }
     ],
     "notes": []
@@ -3984,7 +4099,9 @@
       "v": 817234527.51,
       "price": 22.3,
       "supply": 36641603.72,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Venice Token"
      }
     ],
     "notes": [
@@ -4043,7 +4160,9 @@
       "v": 815436758.41,
       "price": 0.150905,
       "supply": 5403630609,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Arbitrum"
      }
     ],
     "notes": [
@@ -4102,7 +4221,9 @@
       "v": 611639714.94,
       "price": 6.89,
       "supply": 88745681,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "KuCoin Shares"
      }
     ],
     "notes": [
@@ -4213,7 +4334,9 @@
       "v": 895532622.54,
       "price": 0.03351,
       "supply": 26724465341.78,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Kaspa"
      }
     ],
     "notes": []
@@ -4360,7 +4483,7 @@
    },
    "stable": false,
    "check": {
-    "status": "single",
+    "status": "differs",
     "sources": [
      {
       "src": "coingecko",
@@ -4368,10 +4491,20 @@
       "price": 0.075957,
       "supply": 11310058431.299307,
       "at": 1793320136000
+     },
+     {
+      "src": "coinlore",
+      "v": 622330306.12,
+      "price": 0.075926,
+      "supply": 8196534000.77,
+      "at": 1793320440000,
+      "match": "symbol",
+      "name": "Pi"
      }
     ],
     "notes": [
-     "CoinLore lists $PI only under another name (“Pi”, not CoinGecko’s “Pi Network”), so it is not taken as the same coin"
+     "CoinGecko $859M, CoinLore $622M (28% apart): both price $PI the same (about $0.076); they count a different circulating supply (CoinGecko 11.3B, CoinLore 8.2B)",
+     "CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Pi”, CoinGecko “Pi Network” — their prices are less than 0.05% apart on this read (a coin under another name counts only within 3% of CoinGecko’s price, and only as the one coin with the symbol $PI within 10% of it among CoinLore’s 100 largest coins, the part of its list this map reads)"
     ]
    }
   },
@@ -4426,7 +4559,9 @@
       "v": 796554470.79,
       "price": 0.09071,
       "supply": 8781330292.1,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Algorand"
      }
     ],
     "notes": []
@@ -4535,7 +4670,9 @@
       "v": 681898172.48,
       "price": 1.45,
       "supply": 469401760,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Cosmos"
      }
     ],
     "notes": [
@@ -4594,7 +4731,9 @@
       "v": 500213100.28,
       "price": 0.774149,
       "supply": 646145839.57,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Nexo"
      }
     ],
     "notes": [
@@ -4653,7 +4792,9 @@
       "v": 768064695.83,
       "price": 1.48,
       "supply": 518128769.06,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Render"
      }
     ],
     "notes": []
@@ -4710,7 +4851,9 @@
       "v": 689830181.79,
       "price": 7.06,
       "supply": 97727220.33,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Injective Protocol"
      }
     ],
     "notes": []
@@ -4767,7 +4910,9 @@
       "v": 352341773.49,
       "price": 0.998747,
       "supply": 352783922.45,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "GHO"
      }
     ],
     "notes": [
@@ -4878,7 +5023,9 @@
       "v": 543929094.52,
       "price": 0.788078,
       "supply": 690197224,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Filecoin"
      }
     ],
     "notes": [
@@ -4989,7 +5136,9 @@
       "v": 642110116.97,
       "price": 1.86,
       "supply": 345649336.6,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "PancakeSwap"
      }
     ],
     "notes": []
@@ -5098,7 +5247,9 @@
       "v": 590279931.93,
       "price": 46.13,
       "supply": 12795810,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Dash"
      }
     ],
     "notes": []
@@ -5207,7 +5358,9 @@
       "v": 367999604.37,
       "price": 1.49,
       "supply": 247671611.11,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "LayerZero"
      }
     ],
     "notes": [
@@ -5422,7 +5575,9 @@
       "v": 509293644.93,
       "price": 0.069334,
       "supply": 7345534875.42,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Beldex"
      }
     ],
     "notes": []
@@ -5531,7 +5686,9 @@
       "v": 416898834.5,
       "price": 0.593912,
       "supply": 701954161.22,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Aptos"
      }
     ],
     "notes": [
@@ -5590,7 +5747,9 @@
       "v": 440128016.05,
       "price": 0.005941,
       "supply": 74081028757.78,
-      "at": 1793320440000
+      "at": 1793320440000,
+      "match": "name",
+      "name": "Flare"
      }
     ],
     "notes": [
@@ -5684,13 +5843,13 @@
   "dominance": "The coin's market cap as a share of CoinGecko's total market cap of every coin it lists, in percent (59.6 means 59.6%; its /global read, every 30 minutes, which the label names). Worked out by this site from CoinGecko's two figures, and as old as the older of them (its at); none when the market cap is not CoinGecko's own, or the total and the coins were read more than 2 hours apart.",
   "volume24h": "CoinGecko's trading volume over the last 24 hours, every market it tracks.",
   "stable": "true when CoinGecko files the coin in its stablecoins category (read every 6 hours); null until that list has been read.",
-  "check": "The market cap checked against CoinLore's 100 largest coins, by the chain market caps' rules (lib/chainmcap.js): its coin counts when its symbol, name and price (within 10%) are CoinGecko's on the same read — for a coin under $0.0001, whose price CoinLore rounds to 6 decimal places, CoinLore's own market cap ÷ circulating supply is the price compared; \"agreed\" within 10%, \"differs\" (the notes say why from the numbers), \"single\" (one source; the notes say why).",
+  "check": "The market cap checked against CoinLore's 100 largest coins, by the chain market caps' rules (lib/chainmcap.js): its coin counts when its symbol, name and price (within 10%) are CoinGecko's on the same read, or — under another name (CoinLore calls BNB \"Binance Coin\") — when its symbol and a price within 3% are and no other coin with that symbol among those 100 is priced within 10%, which the check says, with CoinLore's name; for a coin under $0.0001, whose price CoinLore rounds to 6 decimal places, CoinLore's own market cap ÷ circulating supply is the price compared; \"agreed\" within 10%, \"differs\" (the notes say why from the numbers), \"single\" (one source; the notes say why).",
   "total": "CoinGecko's total market cap of every coin it lists — not only the 100 drawn."
  },
  "notes": [
   "Not advice, never a tip to buy. Do your own research.",
   "The 100 largest coins by market cap on CoinGecko, on every chain, read every 10 minutes; CoinGecko's total market cap every 30 minutes; its stablecoins category every 6 hours.",
-  "Each market cap is looked up in CoinLore's 100 largest coins: 65 of these 100 were found there and compared (33 agree, 32 differ by more than 10%); 35 have one source — the chip on each coin says which."
+  "Each market cap is looked up in CoinLore's 100 largest coins: 68 of these 100 were found there and compared (34 agree, 34 differ by more than 10%); 32 have one source — the chip on each coin says which."
  ],
  "sources": [
   {

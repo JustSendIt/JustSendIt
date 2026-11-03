@@ -117,8 +117,17 @@
     single: ['1 source', 'is-one', 'Only one source gave a market cap for this token, so nothing checks it'],
   };
   const chkOf = (f) => { const c = f && f.check; return c && CHK[c.status] ? c : null; };
+  /* a CoinLore coin matched by its symbol and price under another name (lib/chainmcap.js: within 3%, the only one with that symbol
+     within 10%): its chip, the chip's title, the check's line and its row say so, with CoinLore's own name, so a reader can judge it */
+  const symMatchOf = (c) => (c && Array.isArray(c.sources) ? c.sources.find((x) => x && x.src === 'coinlore' && x.match === 'symbol') || null : null);
+  const SYM_CHIP = ' · by symbol and price';
+  const symWords = (x) => 'CoinLore’s coin is matched by its symbol and price, not its name: CoinLore calls it “' + (x.name || 'no name') + '”';
   // where: what a 'differs' title points to for the reason — the chain's view by default; '' where the reason is beside the chip
-  const mcapChip = (f, where) => { const c = chkOf(f); return c ? '<span class="mkt-chk ' + CHK[c.status][1] + '" title="' + esc(CHK[c.status][2] + (c.status === 'differs' ? (where == null ? ' — the chain’s view says why' : where) : '')) + '">' + esc(CHK[c.status][0]) + '</span>' : ''; };
+  const mcapChip = (f, where) => {
+    const c = chkOf(f); if (!c) return '';
+    const s = symMatchOf(c);
+    return '<span class="mkt-chk ' + CHK[c.status][1] + '" title="' + esc(CHK[c.status][2] + (s ? ' — ' + symWords(s) : '') + (c.status === 'differs' ? (where == null ? ' — the chain’s view says why' : where) : '')) + '">' + esc(CHK[c.status][0] + (s ? SYM_CHIP : '')) + '</span>';
+  };
   const whyOf = (f) => (f && f.why ? esc(f.why) : 'The source gave no figure for this');
 
   /* ---------- the chains this page knows by name before the list arrives ---------- */
@@ -1155,12 +1164,14 @@
     if (!c || !c.status || (c.status === 'none' && !(c.notes || []).length && !(c.coin && c.coin.id))) return '';
     const srcs = Array.isArray(c.sources) ? c.sources : [];
     const cellOf = (x, fmt) => (x != null && isFinite(x) ? esc(fmt(Number(x))) : '<span class="mkt-na">not given</span>');
-    const rows = srcs.map((x) => '<tr><th scope="row" data-l="Source">' + esc(srcName(x.src)) + (x.relay ? ' <span class="mkt-s">(CoinGecko’s figure, relayed)</span>' : '') + '</th>' +
+    const rows = srcs.map((x) => '<tr><th scope="row" data-l="Source">' + esc(srcName(x.src)) + (x.relay ? ' <span class="mkt-s">(CoinGecko’s figure, relayed)</span>' : '')
+      + (x.src === 'coinlore' && x.match === 'symbol' ? ' <span class="mkt-s">(matched by symbol and price: CoinLore calls it “' + esc(x.name || 'no name') + '”)</span>' : '') + '</th>' +
       '<td data-l="Market cap">' + cellOf(x.v, usd) + '</td><td data-l="Price">' + cellOf(x.price, usd) + '</td><td data-l="Circulating supply">' + cellOf(x.supply, count) + '</td>' +
       '<td data-l="As of">' + (x.at ? agoEl(x.at) : 'time not recorded') + '</td></tr>').join('');
     const sym = c.coin && c.coin.symbol ? '<span class="mkt-sym">' + esc('$' + c.coin.symbol) + '</span> ' : '';
     const coin = c.coin && c.coin.id ? (c.coin.name ? esc(c.coin.name) + ' ' : '') + sym + '<span class="mkt-s">(CoinGecko id <code>' + esc(c.coin.id) + '</code>)</span>' : '';
-    const status = c.status === 'none' ? '<p class="mkt-s">' + (f.why ? esc(f.why) : 'No source gave a market cap for this token.') + '</p>' : '<p class="mkt-chkline">' + mcapChip(f) + ' <span class="mkt-s">' + esc(CHK[c.status][2]) + '.</span></p>';
+    const sm = symMatchOf(c);
+    const status = c.status === 'none' ? '<p class="mkt-s">' + (f.why ? esc(f.why) : 'No source gave a market cap for this token.') + '</p>' : '<p class="mkt-chkline">' + mcapChip(f) + ' <span class="mkt-s">' + esc(CHK[c.status][2]) + '.' + (sm ? ' ' + esc(symWords(sm)) + '.' : '') + '</span></p>';
     const notes = (c.notes || []).length ? '<ul class="mkt-chknotes">' + c.notes.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>' : '';
     const m = c.mapping || {};
     const mapping = '<p class="mkt-s"><b>The chain’s token:</b> ' + esc((m.status === 'confirmed' && m.by === 'gas' ? MAP_WORD.gas : MAP_WORD[m.status]) || 'Not checked') + (m.note ? ' — ' + esc(m.note) : '') + '.</p>';
@@ -1581,7 +1592,7 @@
     const line = powers.length ? '<p class="mkt-rwa-line"><b>' + heldN + ' of ' + powers.length + '</b> powers held' + (bl && typeof bl === 'object' && val(bl.count) != null ? ' · <b>' + (bl.complete ? '' : 'at least ') + esc(count(val(bl.count))) + '</b> wallets blocked from moving these tokens' : '') + '</p>' + (sofar ? '<p class="mkt-note">' + sofar + '</p>' : '')
       : '<p class="mkt-empty">' + esc(cap1(String(c.powersWhy || 'No powers are listed for it.'))) + '</p>';
     return rwaSec('mkt-rw6-h', '🔐 Powers its issuer keeps', j.rolesAt ? (partial ? 'From Robinhood’s registry on the chain, read so far · ' : 'From Robinhood’s registry on the chain · ') + srcLine({ src: 'rpc', at: j.rolesAt }) : '',
-      '<p class="mkt-rwa-powers">' + esc(c.note || 'Powers a regulated issuer keeps, shown as such, not as a verdict: for a regulated issuer they are expected — they are still powers over your tokens. The Scanner’s health score does not count them.') + '</p>' + line +
+      '<p class="mkt-rwa-powers">' + esc(c.note || 'Powers a regulated issuer keeps, shown as such, not as a verdict: for a regulated issuer they are expected — they are still powers over your tokens. The Scanner shows no health score for a token counted as an RWA here.') + '</p>' + line +
       '<details class="mkt-tbl mkt-rwa-fold"><summary>Its code, its beacon' + (bl && typeof bl === 'object' ? ' and the wallets it has blocked' : '') + '</summary><div class="mkt-rwa-fold-b">' + kv + depH + '</div></details>' +
       (table ? '<details class="mkt-tbl mkt-rwa-fold"><summary>Every power and who holds it (' + powers.length + ')</summary><div class="mkt-rwa-fold-b">' + table + log + '</div></details>' : ''));
   }

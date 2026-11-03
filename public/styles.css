@@ -6308,10 +6308,19 @@ li > .tkd-rwa-src, p > .tkd-rwa-src { display: inline; margin-top: 0; }
 .tkd-rwa-fine { margin: 0; font-size: max(var(--text-floor), 0.8rem); line-height: 1.45; color: var(--text-dim); }
 .tkd-card--rwa .tkd-note, .tkd-card--rwa .tkd-line, .tkd-card--rwa .tkd-gaps, .tkd-card--rwa .np-addr-link { overflow-wrap: anywhere; }
 .tkd-rwa-full { overflow-wrap: anywhere; word-break: break-all; }
-/* beside the verdict and the Swap button: the token is a real-world asset (its issuer's powers, which the score does not count), or a lookalike of one */
+/* beside the verdict and where the Swap button is: the token is a real-world asset (counted on evidence: no score, its issuer's powers; listed but not confirmed yet: powers the score does not count), or a lookalike of one */
 .tkd-verdict-rwa { grid-column: 1 / -1; margin: 0.35rem 0 0; font-size: max(var(--text-floor), 0.82rem); line-height: 1.45; color: var(--text); overflow-wrap: anywhere; }
 .tkd-verdict-rwa.tkd-warn { color: var(--gold); }
 .tkd-rwa-swapnote { margin: 0.5rem 0 0; font-size: max(var(--text-floor), 0.8rem); line-height: 1.45; overflow-wrap: anywhere; }
+/* a real-world asset counted on evidence has no health score (owner, 2026-11-03): a 🏛️ where the ring would be, a neutral chip and row
+   edge (no tier colour), the line that says why, and where the Swap button would be, why there is none */
+.np-t-rwa { --tri: var(--text-dim); }
+.np-verdict.np-t-rwa { flex: 0 1 auto; min-width: 0; max-width: 100%; white-space: normal; border-radius: 0.9rem; }   /* its words are longer than a tier's: on a narrow row they wrap inside the chip */
+.np-row[data-level="rwa"], .np-slide[data-level="rwa"] { --rowtri: var(--ink-4); }
+.np-gauge--none { border: 4px solid var(--ink-4); border-radius: 50%; box-sizing: border-box; }
+.np-gauge-rwa { font-size: max(var(--text-floor), 1.15rem); line-height: 1; }
+.tkd-rwa-noswap { margin: 0.5rem 0 0; font-size: max(var(--text-floor), 0.8rem); line-height: 1.45; overflow-wrap: anywhere; }
+.np-runner-noscore { color: var(--text-dim); }
 
 /* ===== The tour with Sendy, right after sign-up (owner, 2026-10-24; public/onboard.js) =====
    Sendy flies from thing to thing, the thing is lit (a cut-out in a dim layer), and a card beside him says what it is; on a
