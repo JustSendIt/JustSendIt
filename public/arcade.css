@@ -211,6 +211,14 @@ a.arc-rider-name:hover, a.arc-rider-name:focus-visible { text-decoration: underl
   font-size: max(var(--text-floor), 0.94rem); line-height: 1.55;
 }
 .sgg-lede b { color: var(--text); }
+/* the featured game (owner, 2026-11-03: "Make Sendy.gg the first Game promoted on the arcade page"): the card opens the
+   page, and its heading carries one gold label that says so */
+.sgg-badge {
+  display: inline-block; vertical-align: middle; margin-left: 0.35rem; padding: 0.15rem 0.7rem; border-radius: 999px;
+  border: 1.5px solid var(--gold); color: var(--gold); background: color-mix(in srgb, var(--gold) 12%, transparent);
+  font-family: var(--font-mono, ui-monospace, Menlo, monospace); font-weight: 600; font-size: max(var(--text-floor), 0.8rem);
+  letter-spacing: 0.06em; text-transform: uppercase; line-height: 1.5; white-space: nowrap; text-shadow: none;
+}
 .sgg-preview { margin: 0 0 1.1rem; }
 .sgg-shot {
   display: block; width: 100%; height: auto; aspect-ratio: 16 / 9; border-radius: 14px;

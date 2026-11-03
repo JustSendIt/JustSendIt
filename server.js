@@ -11549,7 +11549,7 @@ const SENDY_SITE_MAP = `PAGES — point people to these by path:
 /watchlist — the tokens you saved with the ☆
 /tracker — the wallet tracker: holdings, trades, cost basis and PNL read from the chain
 /communities — communities (holders-only walls, proposals) and Send Squads
-/arcade — the Arcade: the weekly competitions and boards
+/arcade — the Arcade: first, its featured game, Send: Diamond Forge (Sendy’s free 3D game, previewed here and played on its own site, sendy.gg, with play money); then Rocket Run, the Just Spin It slot machine, and the weekly competitions and boards
 /data — the Data API
 /developers — Sign in with Send, for people building apps and games around Send: their members sign in with their Send account and bring their handle, Send ID, Send Power and Send Boost, sharing only what each member ticks; register an app there
 /market — Market Data: chain and token figures with Robinhood Chain as the default view — DeFi TVL, DEX volume, liquidity, fees, stablecoins, market caps where a chain or token has one, the chain's own pulse (blocks, gas, pools created) — each figure with its source and when it was read (DefiLlama, L2BEAT, growthepie, GeckoTerminal, Dexscreener, the chain itself); a search bar; top chains and top tokens sortable by market cap, liquidity, TVL, volume and fees over a chosen time frame
