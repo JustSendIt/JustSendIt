@@ -163,7 +163,7 @@ try {
     /an ID for you that is different in every app/.test(P11) && /Only what you tick/.test(P11) && /An app never receives your email, your wallets, your IP address or your sign-in history, and it is never sent your holdings, your OG tier or your communities as such \(your Send Boost is made of them, as above\)/.test(P11)
     && /so an app given it can estimate your holdings from it/.test(P11) && /an app given it can find your handle by it/.test(P11)
     && /stored only as hashes and deleted soon after they expire/.test(P11) && /Backups are written without them/.test(P11) && /Apart from when the live codes and tokens were issued, we keep no record of when or how often you use an app/.test(P11) && /for up to about an hour/.test(P11) && /A refresh token the app has already used is not kept/.test(P11)
-    && /Changing your password, ending your other sessions or turning two-factor off ends every app’s sign-in too/.test(P11) && /The private ID that app knows you by/.test(P11) && /rounded down to the hour/.test(P11) && /you also confirm it’s you/.test(P11)
+    && /Changing your password, ending your other sessions or turning two-factor off ends every app’s sign-in too/.test(P11) && /The private ID that app knows you by/.test(P11) && /never later than your last sign-in here and never read off it/.test(P11) && !/rounded down to the hour/.test(P11) && /an app given yours can narrow down who you are and may find your handle/.test(P11) && /and what you allowed each one is forgotten, as when you revoke it/.test(P11) && /you also confirm it’s you/.test(P11)
     && /Settings → Apps you’ve signed in to/.test(P11) && /deleting your account revokes every app, deletes the private IDs apps knew you by, and deletes any app you registered/.test(P11) && /This site’s own server runs it/.test(P11));
   check('  ...with its cookie (jsi_oidc), the two kinds of record in the table of what is stored, and the version moved to 2026-11-03',
     /<tr><td><code>jsi_oidc<\/code><\/td><td>Set only when an app sends you to Sign in with Send while you are signed out/.test(PRIV) && /<tr><td>Apps you sign in to with your Send account:/.test(PRIV)
@@ -184,7 +184,7 @@ try {
     && !/any OpenID Connect (library|client)/.test(DEV) && !/any OIDC library/.test(README));
   check('  ...that until an app is reviewed a hidden-iframe prompt=none gets no answer at all (the library times out), that tokens are dropped after expires_in, and what a refresh does to the tokens it replaces',
     /until then it gets no answer at all/.test(RULES) && /automaticSilentRenew/.test(RULES) && /stop using a token once its <code>expires_in<\/code> has passed/.test(RULES) && /the one you sent stops working at once/.test(RULES)
-    && /One member keeps at most 20 sign-ins in one app/.test(RULES) && /up to 2,048 characters/.test(RULES) && /weighed against the sign-in floored to ten minutes/.test(RULES) && /No one member can use up an app’s minute/.test(RULES)
+    && /One member keeps at most 20 live sign-ins in one app/.test(RULES) && /up to 2,048 characters/.test(RULES) && /weighed against the last sign-in or proof floored to ten minutes/.test(RULES) && /No one member can use up an app’s minute/.test(RULES)
     && /Changing an app’s redirect addresses or homepage, making it a new secret and deleting it each ask you to confirm it’s you/.test(DEV) && /an <code>&lt;img&gt;<\/code> on your site loads it/.test(DEV));
 
   /* ═══ 2. the server ═══ */
@@ -479,9 +479,25 @@ async function walk({ dev, member, admin, disc, EX, SNIP, EXV }) {
     const devView = (await get('/api/oauth/apps', { cookie: dev.cookie })).j.apps.find((a) => a.clientId === kart.client_id);
     check('Mark reviewed, then Switch off (two presses) with a reason: both stored, and the developer sees the reason with their app',
       reviewed.reviewed_at && reviewed.reviewed_by === ADMIN_ID && /Tap again/.test(armedA) && off.disabled_at && off.disabled_reason === 'testing the switch' && devView.disabled && devView.disabledReason === 'testing the switch', JSON.stringify(off));
+    // the hosts a switched-off app had, and those of one since deleted: each listed with a described Lift, which frees it
+    page = '/admin blocked hosts';
+    db.prepare('INSERT OR IGNORE INTO oauth_blocked_hosts (host, client_id, blocked_at) VALUES (?,?,?)').run('kart-probe.example', kart.client_id, Date.now());
+    db.prepare('INSERT OR IGNORE INTO oauth_blocked_hosts (host, client_id, blocked_at) VALUES (?,?,?)').run('gone-probe.example', 'sapp_' + 'f'.repeat(24), Date.now());
+    const looksB = [];
+    for (const w of [390, 1280]) {
+      await size(w);
+      const shownB = await open(BASE + '/admin', '!!document.querySelector(\'#adm-apps [data-app="' + kart.client_id + '"] [data-host-lift="kart-probe.example"]\') && !!document.querySelector(\'#adm-apps [data-blocked-gone] [data-host-lift="gone-probe.example"]\')');
+      const L = await ev(LOOK('#adm-apps'));
+      if (!shownB || bad(L)) looksB.push(w + ' ' + (shownB ? '' : 'not listed ') + JSON.stringify(L));
+    }
+    await ev('document.querySelector(\'#adm-apps [data-host-lift="gone-probe.example"]\').click(); true');
+    const liftedB = await until('!document.querySelector(\'#adm-apps [data-host-lift="gone-probe.example"]\') && /is lifted/.test(document.getElementById("adm-apps-sum").textContent)');
+    check('  ...a switched-off app lists the hosts it blocks for other apps, and the hosts of switched-off apps since deleted are listed too, each with a described Lift (at 390 and 1280 px: nothing sideways, the floor, 44px targets) that frees it',
+      looksB.length === 0 && !!liftedB && !db.prepare("SELECT 1 FROM oauth_blocked_hosts WHERE host = 'gone-probe.example'").get() && !!db.prepare("SELECT 1 FROM oauth_blocked_hosts WHERE host = 'kart-probe.example'").get(), looksB.join(' || '));
+    page = '/admin';
     await adminAct('enable');
     await until('!!document.querySelector(\'#adm-apps [data-app="' + kart.client_id + '"] [data-app-act="disable"]\')');
-    check('  ...and Switch back on clears it', !db.prepare('SELECT disabled_at FROM oauth_clients WHERE client_id = ?').get(kart.client_id).disabled_at);
+    check('  ...and Switch back on clears it, and lifts the hosts it blocked', !db.prepare('SELECT disabled_at FROM oauth_clients WHERE client_id = ?').get(kart.client_id).disabled_at && !db.prepare('SELECT 1 FROM oauth_blocked_hosts WHERE client_id = ?').get(kart.client_id));
     const keysBefore = db.prepare('SELECT kid FROM oauth_keys').all().map((r) => r.kid);
     await ev('document.getElementById("adm-apps-rotate").click(); document.getElementById("adm-apps-rotate").click(); true');
     const rotated = await until('/published now|already waiting/.test(document.getElementById("adm-apps-keys-status").textContent) && document.getElementById("adm-apps-keys-status").textContent');

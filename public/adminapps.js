@@ -3,9 +3,12 @@
    in ADMIN_USER_IDS. A thin face on four routes; every app, number and state is the server's:
      GET  /api/admin/oauth/apps                    every app (with its owner, members and live tokens) and the keys
      POST /api/admin/oauth/apps/<clientId>         { reviewed: true|false } or { disabled: true|false, reason }
+     POST /api/admin/oauth/blocked-hosts           { host, clientId, blocked: false }: lifts one blocked host
      POST /api/admin/oauth/keys/rotate             a new signing key: published now, signing a day later
    Reviewing changes one line on an app's sign-in page. Switching an app off stops its sign-ins and kills its tokens at
-   once; members' consents are kept, so switching it back on does not make them answer again. */
+   once, and blocks the hosts it sent members to for every other app (kept even if the app or its developer's account is
+   deleted, until lifted here or the app is switched back on); members' consents are kept, so switching it back on does
+   not make them answer again. */
 (function () {
   const sec = document.getElementById('adm-apps');
   if (!sec) return;
@@ -23,6 +26,11 @@
     if (!o.username) return '<span class="adm-codes-gone">an account since deleted</span>';
     return '<a href="/u/' + encodeURIComponent(o.username) + '" data-tip="Opens the developer\'s Send Wall">@' + esc(o.username) + '</a>' + (o.sendId ? ' · Send ID #' + esc(o.sendId) : '') + ' · user ' + esc(o.id);
   }
+  // the hosts blocked for other apps: one row each, with Lift (for a host the app had but does not own, such as github.com)
+  function blockedList(list) {
+    return '<ul class="adm-blocked">' + list.map((b) => '<li><code>' + esc(b.host) + '</code><button class="btn btn-sm" type="button" data-host-lift="' + esc(b.host) + '" data-host-app="' + esc(b.clientId) + '" data-tip="Lets other apps use this host again (for a host this app listed but does not own)">Lift</button></li>').join('') + '</ul>';
+  }
+  const blockedOf = (id) => ((data && data.blockedHosts) || []).filter((b) => b.clientId === id);
   function appRow(a) {
     const hp = String(a.homepage || '').replace(/^https:\/\//, '').replace(/\/$/, '');
     const rid = 'adm-app-why-' + a.clientId;
@@ -40,6 +48,7 @@
         '<div><dt>Members</dt><dd>' + num(a.members) + ' allowed it · ' + num(a.liveTokens) + ' live token' + (a.liveTokens === 1 ? '' : 's') + '</dd></div>' +
         '<div><dt>Registered</dt><dd>' + esc(when(a.createdAt)) + (a.updatedAt && a.updatedAt !== a.createdAt ? ' · changed ' + esc(when(a.updatedAt)) : '') + '</dd></div>' +
         (a.disabled ? '<div><dt>Switched off</dt><dd>' + esc(when(a.disabledAt)) + (a.disabledReason ? ': ' + esc(a.disabledReason) : '') + '</dd></div>' : '') +
+        (a.disabled && blockedOf(a.clientId).length ? '<div><dt>Blocked for other apps</dt><dd>' + blockedList(blockedOf(a.clientId)) + '</dd></div>' : '') +
       '</dl>' +
       '<div class="adm-actions">' +
         (a.reviewed
@@ -68,7 +77,10 @@
     const apps = data.apps || [];
     const off = apps.filter((a) => a.disabled).length, rev = apps.filter((a) => a.reviewed).length;
     sum.textContent = apps.length ? num(apps.length) + ' app' + (apps.length === 1 ? '' : 's') + ' · ' + num(rev) + ' reviewed · ' + num(off) + ' switched off' : 'No app has been registered yet.';
-    body.innerHTML = apps.map(appRow).join('');
+    // hosts still blocked for an app that has since been deleted (with its developer's account, say)
+    const gone = (data.blockedHosts || []).filter((b) => b.app == null);
+    body.innerHTML = apps.map(appRow).join('') + (gone.length ? '<article class="adm-app is-off" data-blocked-gone><div class="adm-app-head"><h4 class="adm-app-name">Hosts of switched-off apps since deleted</h4></div>'
+      + '<p class="modal-note">No other app may use these until you lift them.</p>' + blockedList(gone) + '<p class="modal-note adm-app-status" role="status" aria-live="polite"></p></article>' : '');
     keysEl.innerHTML = keyRows(data.keys);
   }
   async function load() {
@@ -83,6 +95,7 @@
     try {
       const j = await call('/api/admin/oauth/apps/' + encodeURIComponent(id), { method: 'POST', body: payload });
       data.apps = data.apps.map((a) => (a.clientId === id ? Object.assign({}, a, j.app, { liveTokens: payload.disabled ? 0 : a.liveTokens }) : a));
+      if (j.blockedHosts) data.blockedHosts = j.blockedHosts;
       render();
       const again = body.querySelector('[data-app="' + (window.CSS && CSS.escape ? CSS.escape(id) : id) + '"]');
       if (again) { again.querySelector('.adm-app-status').textContent = done; const b = again.querySelector('button'); if (b) b.focus(); }
@@ -91,7 +104,18 @@
       st.textContent = e && e.message === 'cancelled' ? '' : '⚠️ ' + ((e && e.message) || 'that did not save');
     }
   }
+  async function lift(b) {
+    const art = b.closest('[data-app], [data-blocked-gone]'), st = art && art.querySelector('.adm-app-status'), host = b.getAttribute('data-host-lift');
+    b.disabled = true; if (st) st.textContent = 'Lifting ' + host + '.';
+    try {
+      const j = await call('/api/admin/oauth/blocked-hosts', { method: 'POST', body: { host, clientId: b.getAttribute('data-host-app'), blocked: false } });
+      data.blockedHosts = j.blockedHosts || [];
+      render();
+      sum.textContent = host + ' is lifted: other apps may use it again.';
+    } catch (err) { b.disabled = false; if (st) st.textContent = err && err.message === 'cancelled' ? '' : '⚠️ ' + ((err && err.message) || 'that did not lift'); }
+  }
   body.addEventListener('click', (e) => {
+    const h = e.target.closest('[data-host-lift]'); if (h) return lift(h);
     const b = e.target.closest('[data-app-act]'); if (!b) return;
     const art = b.closest('[data-app]'), what = b.getAttribute('data-app-act');
     if (what === 'review') return change(art, { reviewed: true }, 'Marked reviewed: its sign-in page says so now.');

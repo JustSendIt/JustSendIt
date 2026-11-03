@@ -34,6 +34,9 @@
 .oa-who { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1rem; margin: 0 0 0.5rem; }
 .oa-who p { margin: 0; font-size: max(var(--text-floor), 1rem); }
 .oa-always { margin: 0 0 0.5rem; font-size: max(var(--text-floor), 1rem); }
+/* the page without boxes (a fresh proof, or which account): what the app gets, as the member allowed it before */
+.oa-gets { margin: 0 0 0.5rem; padding-left: 1.25rem; font-size: max(var(--text-floor), 1rem); color: var(--text); }
+.oa-gets li { margin: 0.2rem 0; overflow-wrap: anywhere; }
 
 /* one box per scope the app asked for: the whole row is the target */
 .oa-scopes { border: 0; margin: 0; padding: 0; min-width: 0; }

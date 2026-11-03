@@ -5,7 +5,8 @@
        two-factor, as everywhere else), and the moment a session exists the page carries on to the same request, by its id —
        including when the member signed in in another tab and comes back to this one;
      · the consent page: "Tick all" (shown only when this script runs) and "Use another account" (signs out here, then opens
-       the same request again, which asks for a sign-in);
+       the same request again, which asks for a sign-in) — the second on the page without boxes too (a fresh proof, or which
+       account, for an app the member has answered), whose button is Continue rather than Allow;
      · "Confirm it's you" on the consent page: "Sign with wallet" asks the wallet (the site's wallet.js) for the same free
        management signature every security change takes, and puts it in the form for Allow to send; "Sign in again" signs
        out here and opens the same request, whose sign-in is then the proof. The password and the code are plain fields. */
@@ -72,7 +73,8 @@
         form.querySelector('input[name="address"]').value = address;
         form.querySelector('input[name="signature"]').value = signature;
         wb.textContent = 'Signed by the wallet ending ' + address.slice(-4);
-        say('Signed. Press Allow to let the app in.');
+        var go = form.querySelector('button[name="decision"][value="allow"]');
+        say('Signed. Press ' + (go ? go.textContent : 'Allow') + ' to let the app in.');
       }).catch(function (e) {
         wb.disabled = false;
         say(e && e.message === 'cancelled' ? '' : 'The wallet did not sign: ' + ((e && e.message) || 'try again') + '.');
