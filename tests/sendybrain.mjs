@@ -1060,7 +1060,9 @@ try {
     'gwc price, moon? '.repeat(35), 'seed phrase: ' + 'apple '.repeat(95), 'a b c d e f g h i j k l m n o p q r s t u v w x y z '.repeat(11), ('is the ' + 'buy tax sell button hold time '.repeat(20)), 'lol '.repeat(150), '?'.repeat(600)].map((x) => x.slice(0, 600));
   let slow = 0;
   for (const q of hostileQs) { const t2 = performance.now(); await site.answerBrain(q, '/', []); slow = Math.max(slow, performance.now() - t2); }
-  check('a hostile 600-character message (repeated guard words, a pasted seed, punctuation, letters) is answered whole in under 100 ms (slowest ' + slow.toFixed(1) + ' ms)', slow < 100, slow.toFixed(1));
+  // (the bound catches runaway backtracking — seconds, not milliseconds: this Mac answers in ~60 ms, GitHub's shared runners up to
+  // ~105, so 250 ms keeps the guard without failing CI on a busy runner)
+  check('a hostile 600-character message (repeated guard words, a pasted seed, punctuation, letters) is answered whole in under 250 ms (slowest ' + slow.toFixed(1) + ' ms)', slow < 250, slow.toFixed(1));
   const pins = site._test.pins();
   check('the facts asked in other words (CONCEPTS: Rocket Run\'s two caps, a Send Call, buying) each still find the sentence of the site that states them (a copy change that loses one fails here, not silently)', pins.length >= 4 && pins.every(Boolean), JSON.stringify(pins));
   check('  ...letters typed apart are one word where they spell one ("b u y gwc" → "buy gwc"), chat-speak where they do not ("r u ok"); and a real word of today ("pricey") is never read as another',
