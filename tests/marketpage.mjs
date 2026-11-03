@@ -749,6 +749,14 @@ async function browserWalk() {
       const r = await ev('(() => { const e = ' + expr + '; e.scrollIntoView({ block: "nearest", behavior: "instant" }); const b = e.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()');
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await cdp('Input.dispatchMouseEvent', { type, x: r[0], y: r[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
     };
+    /* "Show as a list", opened with a real press — once any smooth scroll has ended (a card brought into view scrolls smoothly on
+       this site; a press aimed mid-scroll lands on the page instead of the summary: GitHub's slower runner pressed the main area, which
+       took the focus), and never toggled shut when it is already open */
+    const openMapList = async () => {
+      await settle();
+      if (!(await ev('document.getElementById("mkt-map-list").open'))) await press('document.querySelector("#mkt-map-list > summary")');
+      return until('document.getElementById("mkt-map-list").open');
+    };
     const key = async (k, code, vk, text, mods) => { await cdp('Input.dispatchKeyEvent', Object.assign({ type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk, modifiers: mods || 0 }, text ? { text } : {})); await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk, modifiers: mods || 0 }); };
     const K = { tab: () => key('Tab', 'Tab', 9), shiftTab: () => key('Tab', 'Tab', 9, null, 8), enter: () => key('Enter', 'Enter', 13, '\r'), space: () => key(' ', 'Space', 32, ' '), esc: () => key('Escape', 'Escape', 27), down: () => key('ArrowDown', 'ArrowDown', 40), up: () => key('ArrowUp', 'ArrowUp', 38), end: () => key('End', 'End', 35) };
     const pickChain = async (k) => { await press(TRIG); await until('!' + POP + '.hidden'); await press(opt(k)); };
@@ -1546,9 +1554,9 @@ async function browserWalk() {
         && card.href === 'https://www.coingecko.com/en/coins/ethereum' && card.rel === 'noopener' && /View on CoinGecko ↗/.test(card.text) && /Not advice, never a tip to buy\./.test(card.text) && card.on.join() === 'ethereum' && card.focus === 'mkt-mapc-h' && card.after && cardL.sw <= cardL.iw && !cardL.out.length && !cardL.small.length,
         JSON.stringify({ card, cardL }).slice(0, 600));
       // the keyboard's way in: the list, a row's button, Enter, then Escape
-      await press('document.querySelector("#mkt-map-list > summary")'); await until('document.getElementById("mkt-map-list").open');
+      await openMapList();
       const list = await ev('({ rows: document.querySelectorAll("#mkt-map-table tbody tr").length, btns: [...document.querySelectorAll("#mkt-map-table [data-map-coin]")].filter((b) => b.tagName === "BUTTON" && (b.dataset.tip || "").length >= 8 && b.getBoundingClientRect().height >= 43.5).length, head: [...document.querySelectorAll("#mkt-map-table thead th")].map((t) => t.textContent).join("|"), first: document.querySelector("#mkt-map-table tbody tr").textContent })');
-      await ev('document.querySelector("#mkt-map-table [data-map-coin=tether]").focus(), true'); await K.enter(); await until('/^USDT/.test(document.getElementById("mkt-map-card").textContent)');
+      await ev('document.querySelector("#mkt-map-table [data-map-coin=tether]").focus(), true'); await until('document.activeElement && document.activeElement.dataset.mapCoin === "tether"'); await K.enter(); await until('/^USDT/.test(document.getElementById("mkt-map-card").textContent)');
       const kb = { focus: await ev('document.activeElement.id'), card: (await textOf('#mkt-map-card')).slice(0, 40), row: await ev('document.querySelector("#mkt-map-table tr.is-on").dataset.coin') };
       await K.esc(); await sleep(150);
       const shut = { hidden: await ev('document.getElementById("mkt-map-card").hidden'), focus: await ev('document.activeElement.dataset.mapCoin || document.activeElement.id'), on: await ev('document.querySelectorAll("#mkt-map .mkt-bub.is-on, #mkt-map-table tr.is-on").length') };
@@ -1557,7 +1565,7 @@ async function browserWalk() {
         list.rows === 100 && list.btns === 100 && list.head === 'Rank|Coin|Price|Market cap|Dominance|24 h change|Check' && /^#1BTC Bitcoin\$76,894\$1\.55T59\.6%▼ −5\.27%✓ 2 sources agree$/.test(list.first)
         && kb.focus === 'mkt-mapc-h' && /^USDT Tether/.test(kb.card) && kb.row === 'tether' && shut.hidden && shut.focus === 'tether' && shut.on === 0 && listL.sw <= listL.iw && !listL.out.length && !listL.small.length, JSON.stringify({ list, kb, shut, listL }).slice(0, 600));
       await go('/market', 390); await mapReady(100);
-      await press('document.querySelector("#mkt-map-list > summary")'); await until('document.getElementById("mkt-map-list").open');
+      await openMapList();
       await ev('document.querySelector("#mkt-map-table [data-map-coin=bitcoin]").click(), true'); await until('!document.getElementById("mkt-map-card").hidden');
       const phone = await ev(LAYOUT);
       check('  ...and on a phone the list folds into labelled cards and the card fits: no sideways scroll, nothing under the floor', phone.sw <= phone.iw && !phone.out.length && !phone.small.length
@@ -1619,7 +1627,7 @@ async function browserWalk() {
         /Price\$76,894/.test(tip1) && /Price\$70,000/.test(tip2) && /24 h change▼ −12\.50?%/.test(tip2) && /Market cap\$1\.4T/.test(tip2) && !/76,894/.test(tip2)
         && /Ethereum is [\d.]+% of the market, no 24 h change given; /.test(aria) && !/given in 24 h/.test(aria) && /Bitcoin is [\d.]+% of the market, down 12\.5% in 24 h; /.test(aria), JSON.stringify({ tip1: tip1.slice(0, 120), tip2: tip2.slice(0, 160), aria: aria.slice(0, 200) }));
       // the focus through a refresh: on a row of the list, then on the open card's Close
-      await press('document.querySelector("#mkt-map-list > summary")'); await until('document.getElementById("mkt-map-list").open');
+      await openMapList();
       await ev('document.querySelector("#mkt-map-table [data-map-coin=ethereum]").focus(), true');
       await later(11); const fRow = await ev('document.activeElement.dataset.mapCoin || document.activeElement.tagName');
       await K.enter(); await until('/^ETH/.test(document.getElementById("mkt-map-card").textContent)');
