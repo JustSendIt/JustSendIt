@@ -19,6 +19,7 @@ import net from 'node:net';
 import http from 'node:http';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { DatabaseSync } from 'node:sqlite';
 import { ROOT, SERVER_JS } from './_paths.mjs';
 const MC = createRequire(import.meta.url)(path.join(ROOT, 'lib', 'multichain.js'));
 
@@ -271,6 +272,12 @@ try {
   let up = false;
   for (let i = 0; i < 150 && !up; i++) { try { const r = await fetch(B + '/healthz'); up = r.ok; } catch {} if (!up) await sleep(200); }
   check('the server came up with every upstream pointed at the fake', up, log.slice(-300));
+  /* the no-score rule is the home chain's alone (owner, 2026-11-03: "Don't show health scores for real stocks" — RWAs on Robinhood
+     Chain): Market Data is told PEPE's address is in Robinhood's registry (as its answer is kept, mkt_state rhj_assets), so the same
+     address on Ethereum below must keep its score and its swap */
+  { const sdb = new DatabaseSync(path.join(dataDir, 'app.db')); sdb.exec('PRAGMA busy_timeout = 5000');
+    sdb.prepare('INSERT INTO mkt_state (name, value, at) VALUES (?,?,?) ON CONFLICT(name) DO UPDATE SET value = excluded.value, at = excluded.at').run('rhj_assets', JSON.stringify({ readAt: Date.now(), data: { assets: [{ address: PEPE, uid: null, symbol: 'PEPE', name: 'Pepe • Robinhood Token', status: 'ASSET_STATUS_ACTIVE', decimals: 18 }] } }), Date.now());
+    sdb.prepare("INSERT INTO mkt_runs (job, at, ok, ms, calls, note) VALUES ('rwa', ?, 1, 1, 0, 'seeded by tests/multichain.mjs')").run(Date.now()); sdb.close(); }
 
   /* ── a Solana token ── */
   const sol = await api('/api/scan?address=' + BONK);
@@ -300,6 +307,10 @@ try {
     && ep.chainFacts.honeypot === false && ep.chainFacts.buyTax === 0 && ep.chainFacts.sellTax === 0 && ep.chainFacts.mintable === false && ep.chainFacts.source === 'goplus' && ep.risk.honeypotSuspect === false && ep.risk.dataKnown.verified === true && ep.risk.dataKnown.holders === true
     && ep.market.poolCount === 4 && Math.abs(ep.market.liquidityTotalUsd - dsPepe.reduce((a, d) => a + d.liquidity.usd, 0)) < 1e-6 && ep.market.liquidityUsd === dsPepe[0].liquidity.usd && ep.poolsCapped === false,
     JSON.stringify({ pools: (ej.pools || []).map((o) => o.labels), hp: ep.risk && ep.risk.honeypotSuspect, dk: ep.risk && ep.risk.dataKnown, f: ep.chainFacts && { h: ep.chainFacts.honeypot, b: ep.chainFacts.buyTax, s: ep.chainFacts.sellTax, m: ep.chainFacts.mintable, src: ep.chainFacts.source } }).slice(0, 400));
+
+  const ethQ = await api('/api/swap/quote?chain=ethereum&token=' + PEPE + '&amount=0.01'), rhQ = await api('/api/swap/quote?chain=robinhood&token=' + PEPE + '&amount=0.01');
+  check('  ...another chain is never under the home chain\'s RWA rule: with PEPE\'s address counted as an RWA on Robinhood Chain (the home chain\'s swap is refused there), its Ethereum profile keeps its score (a number, no noScore, a triage) and its Ethereum swap is not refused',
+    rhQ.status === 403 && rhQ.j && rhQ.j.refused === 'rwa' && typeof ep.risk.health === 'number' && ep.risk.health > 0 && typeof ep.risk.triage === 'string' && !ep.risk.noScore && ethQ.status !== 403 && !(ethQ.j && ethQ.j.refused), JSON.stringify([rhQ.status, ep.risk && ep.risk.health, ep.risk && ep.risk.noScore, ethQ.status]));
 
   /* ── a 0x address the home chain cannot read, found on Ethereum ── */
   const auto = await api('/api/scan?address=' + PEPE);

@@ -33,10 +33,16 @@
   }
 
   /* ---------- verdict + flags ---------- */
-  const TRI = { ok: { cls: 'np-t-ok', ico: '🟢', word: 'Looks OK' }, caution: { cls: 'np-t-caution', ico: '🟡', word: 'Caution' }, high: { cls: 'np-t-high', ico: '🔴', word: 'High risk' }, avoid: { cls: 'np-t-avoid', ico: '☠️', word: 'Avoid' } };
-  function triageOf(p) { const r = p.risk || {}; if (TRI[r.triage]) return r.triage; if (r.health != null) return r.health >= 70 ? 'ok' : r.health >= 40 ? 'caution' : r.health >= 15 ? 'high' : 'avoid'; return 'caution'; }
+  const TRI = { ok: { cls: 'np-t-ok', ico: '🟢', word: 'Looks OK' }, caution: { cls: 'np-t-caution', ico: '🟡', word: 'Caution' }, high: { cls: 'np-t-high', ico: '🔴', word: 'High risk' }, avoid: { cls: 'np-t-avoid', ico: '☠️', word: 'Avoid' },
+    rwa: { cls: 'np-t-rwa', ico: '🏛️', word: 'Real-world asset — no health score' } };   // not a tier: no score, so none is derived
+  /* A real-world asset counted on evidence (owner, 2026-11-03: "Don't show health scores for real stocks"): the server sends its risk
+     with health and triage null and noScore saying why (server.js rwaScoreGate, on this list's every row) — no ring, no number, no tag
+     derived from a score here either. A lookalike and every other token keep theirs. */
+  const noScoreOf = (p) => { const n = p && p.risk && p.risk.noScore; return n && n.rwa === true && (!p.chain || p.chain === 'robinhood') ? n : null; };
+  function triageOf(p) { const r = p.risk || {}; if (noScoreOf(p)) return 'rwa'; if (TRI[r.triage]) return r.triage; if (r.health != null) return r.health >= 70 ? 'ok' : r.health >= 40 ? 'caution' : r.health >= 15 ? 'high' : 'avoid'; return 'caution'; }
   // same honesty rule as the radar: unreadable data is an unknown, never a green verdict
-  function verdictOf(p) { const tri = triageOf(p), h = Math.round((p.risk && p.risk.health) || 0);
+  function verdictOf(p) { if (noScoreOf(p)) return TRI.rwa;
+    const tri = triageOf(p), h = Math.round((p.risk && p.risk.health) || 0);
     /* A red power the contract read found and no renounce neutralised (owner, 2026-10-24) — the radar's own rule, read from it
        (NPCard.redFactsOf: newpairs.js loads first on this page; lib/contractfacts.js on the server), in the same place: before thin
        data, over the ok / caution tiers only. */
@@ -65,6 +71,7 @@
     return '<div class="np-flagstrip">' + f.slice(0, 4).map(k => '<span class="np-flag np-flag--' + FLAG[k].sev + '">' + FLAG[k].ico + ' ' + esc(FLAG[k].word) + '</span>').join('') + (f.length > 4 ? '<span class="np-flag-more">+' + (f.length - 4) + '</span>' : '') + '</div>';
   }
   function gaugeHTML(p, tri, health) {
+    if (noScoreOf(p)) return '<span class="np-gauge np-gauge--none ' + TRI.rwa.cls + '" aria-hidden="true"><span class="np-gauge-rwa">🏛️</span></span>';   // no ring, no number
     const off = 100 - Math.max(0, Math.min(100, health));
     return '<span class="np-gauge ' + TRI[tri].cls + '" style="--tri:' + ringColor(health) + '" aria-hidden="true"><svg viewBox="0 0 44 44" class="np-gauge-svg">' +
       '<circle class="np-gauge-track" cx="22" cy="22" r="19"></circle>' +
@@ -76,7 +83,7 @@
   const state = { items: [], open: new Set() };
   function group(id, title, open, inner) { return '<details class="np-detail-group"' + (open ? ' open' : '') + '><summary class="np-detail-h">' + title + '</summary><div class="np-detail-body">' + inner + '</div></details>'; }
   function summaryHTML(p) {
-    const tri = triageOf(p), T = verdictOf(p), health = Math.round((p.risk && p.risk.health) || 0);
+    const tri = triageOf(p), T = verdictOf(p), ns = noScoreOf(p), health = ns ? null : Math.round((p.risk && p.risk.health) || 0);
     const saved = p._wl && p._wl.source === 'saved';
     const dash = !!window.TokenModal;   // the row opens the dashboard popup rather than unfolding here
     return '<summary class="np-sum' + (dash ? ' np-sum--dash' : '') + '"' + (dash ? ' aria-haspopup="dialog"' : '') + '><div class="np-head">' + gaugeHTML(p, tri, health) +
@@ -87,7 +94,7 @@
       '<span class="np-chg-slot">' + chgChipHTML(p.priceChange.h1) + '</span>' +
       '<button class="np-wl-remove" type="button" data-tip="Takes this token off your watchlist straight away" data-remove="' + esc(p.pair.address) + '" aria-label="Remove ' + esc(p.token.symbol) + ' from watchlist" title="Remove from watchlist">✕</button>' +
       '<span class="np-chev" aria-hidden="true">▾</span>' +
-      '<span class="sr-only">' + esc(p.token.name) + ' ' + esc(p.token.symbol) + ', verdict ' + T.word + ', health ' + health + ' of 100. ' + (window.TokenModal ? 'Opens the full dashboard.' : 'Expand for detail.') + '</span>' +
+      '<span class="sr-only">' + esc(p.token.name) + ' ' + esc(p.token.symbol) + ', verdict ' + T.word + (ns ? '. ' + esc(ns.why || '') + ' ' : ', health ' + health + ' of 100. ') + (window.TokenModal ? 'Opens the full dashboard.' : 'Expand for detail.') + '</span>' +
       '</div>' + flagstripHTML(p) + '</summary>';
   }
   // same 📈 chart the New Pairs detail shows — the watchlist renders its own (lighter) body, so it needs its own copy
@@ -127,6 +134,7 @@
       '<p class="np-supply">' + (p.token.isVerified === true ? '📄 <b>Verified</b> source' : p.token.isVerified === false ? '📄 <b class="red">Unverified</b>' : '📄 Verification unknown') + '</p>' +
       '<div class="np-actions"><a class="btn btn-sm btn-ghost" href="' + esc(p.links.explorer) + '" target="_blank" rel="noopener nofollow" data-tip="Opens this token on the block explorer in a new tab">🔍 Explorer ↗</a><a class="btn btn-sm btn-ghost" href="' + esc(p.links.dex) + '" target="_blank" rel="noopener nofollow" data-tip="Opens this pair chart on Dexscreener in a new tab">📈 Chart ↗</a></div>';
     return '<div class="np-body">' +
+      (noScoreOf(p) ? '<p class="np-why-clean">🏛️ ' + esc(noScoreOf(p).why || '') + '</p>' : '') +   // a real-world asset: why there is no score, where the score would be
       (activeFlags(p).length ? '<section class="np-why"><ul class="np-why-list">' + activeFlags(p).map(k => '<li class="np-why-' + (FLAG[k].sev === 'bad' ? 'bad' : 'warn') + '"><span aria-hidden="true">' + FLAG[k].ico + '</span> ' + esc(FLAG[k].word) + '</li>').join('') + '</ul></section>' : '') +
       group('chart', '📈 Chart', true, chartHTML(p)) +
       group('market', '📊 Market', true, market) + group('activity', '🔁 Activity', false, activity) + group('holders', '👥 Holders', false, holders) + group('contract', '📄 Contract &amp; copy', false, contract) +
@@ -137,7 +145,7 @@
          not in this lighter card), or call it — the same Send Call pair every view of a token ends in. A call from
          here is not marked "detail viewed": the composer offers the full detail first. */
       '<div class="np-body-actions wl-actions">' +
-        '<a class="btn btn-sm btn-ghost" href="/newpairs?scan=' + encodeURIComponent(p.token.address) + '" data-tip="Opens this token’s full dashboard on the Scanner page — score breakdown, market, holders, contract">📊 Full dashboard</a>' +
+        '<a class="btn btn-sm btn-ghost" href="/newpairs?scan=' + encodeURIComponent(p.token.address) + '" data-tip="' + (noScoreOf(p) ? 'Opens this token’s full dashboard on the Scanner page — its real-world-asset card, market, holders, contract' : 'Opens this token’s full dashboard on the Scanner page — score breakdown, market, holders, contract') + '">📊 Full dashboard</a>' +
         (window.COMPOSE && COMPOSE.callRowHTML ? COMPOSE.callRowHTML(p.token.address, { cls: 'np-call-row' }) : '') +
       '</div></div>';
   }

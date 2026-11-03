@@ -86,9 +86,17 @@
 
   /* ---- markup ---- */
   const chainOf = (p) => (window.NPCard && NPCard.chainOf ? NPCard.chainOf(p).slug : (p && p.chain) || 'robinhood');
+  /* No button on a tokenized real-world asset on Robinhood Chain (owner, 2026-11-03: hidden "only if they are RWA on the robinhood
+     chain"): one Market Data counts on evidence — the server's risk.noScore, or the RWA card's facts confirmed or listed by Robinhood's
+     registry. A lookalike, a token not confirmed yet and every other chain keep it; the server refuses to quote or build one anyway. */
+  function rwaCounted(p) {
+    if (!p || chainOf(p) !== 'robinhood') return false;
+    const n = p.risk && p.risk.noScore, R = p.rwa;
+    return !!(n && n.rwa === true) || !!(R && typeof R === 'object' && R.notRwa !== true && R.issuer && (R.confidence === 'confirmed' || R.confidence === 'issuer-listed'));
+  }
   function buttonHTML(p) {
     const chain = chainOf(p), c = CH[chain]; const t = (p && p.token) || {};
-    if (!c || !t.address) return '';
+    if (!c || !t.address || rwaCounted(p)) return '';
     const sym = t.symbol ? '$' + t.symbol : 'this token';
     const px = p.market && Number(p.market.priceUsd) > 0 ? Number(p.market.priceUsd) : null;   // the profile's own price: the home chain's quote carries no dollar figure of its own
     // the scan's read of the token's tax: GoPlus's buy tax on Ethereum (passed to the quote, which leaves room for it), its transfer fee on Solana (said only)
@@ -356,5 +364,5 @@
     dashes.forEach((dash) => { if (dash._swapWired) return; dash._swapWired = true; dash.addEventListener('click', onClick); });
   }
 
-  window.SwapKit = { buttonHTML, panelHTML, mount, CH, TO_OK, SLIP, IMPACT_WARN, b58enc, fmt, units, solTxKeys, hexChain, _solWallets: solWallets };
+  window.SwapKit = { buttonHTML, rwaCounted, panelHTML, mount, CH, TO_OK, SLIP, IMPACT_WARN, b58enc, fmt, units, solTxKeys, hexChain, _solWallets: solWallets };
 })();

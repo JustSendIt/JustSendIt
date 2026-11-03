@@ -169,7 +169,7 @@
   "verifiedWhy": "this site has not checked a verified source for this issuer's code",
   "powers": [],
   "powersWhy": "This site reads the roles of Robinhood's registry only; this issuer's contract keeps powers of its own (see what you hold).",
-  "note": "Powers a regulated issuer keeps, shown as such, not as a verdict: for a regulated issuer they are expected — they are still powers over your tokens. The Scanner's health score does not count them."
+  "note": "Powers a regulated issuer keeps, shown as such, not as a verdict: for a regulated issuer they are expected — they are still powers over your tokens. The Scanner shows no health score for a token counted as an RWA here."
  },
  "roles": [],
  "rolesAt": 1793205000000,

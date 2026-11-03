@@ -20,8 +20,10 @@ import http from 'node:http';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import vm from 'node:vm';
+import { DatabaseSync } from 'node:sqlite';
 import { ROOT, SERVER_JS } from './_paths.mjs';
 const SK = createRequire(import.meta.url)(path.join(ROOT, 'lib', 'swapkit.js'));
+const RW = createRequire(import.meta.url)(path.join(ROOT, 'lib', 'rwa.js'));
 
 const SRC = fs.readFileSync(SERVER_JS, 'utf8');
 const LIB = fs.readFileSync(path.join(ROOT, 'lib', 'swapkit.js'), 'utf8');
@@ -84,8 +86,8 @@ const aw = (a) => a.toLowerCase().replace(/^0x/, '').padStart(64, '0');
     /if \(e && e\.code === 4001\) \{ status\(panel, 'Swap cancelled in your wallet — nothing was sent', 'info'\); return; \}/.test(CL) && /async function ensureChain\(prov, chain\)/.test(CL) && /method: 'wallet_addEthereumChain', params: \[CH\[chain\]\.add\]/.test(CL) && /if \(on === 'declined'\) \{ status\(panel, 'Network switch cancelled in your wallet — nothing was sent', 'info'\); return; \}/.test(CL)
     && /const unknownChain = \(e\) => errs\(e\)\.some\(\(x\) => x\.code === 4902/.test(CL) && /return \(await onChain\(prov, want, 8\)\) \? 'ok' : 'failed';/.test(CL));
   check('  ...the home chain\'s $SEND / $GWC buys still earn Send Points through the receipt-verified route, nothing else does', /if \(chain !== 'robinhood' \|\| !HOME_CREDIT\.includes\(String\(token\)\.toLowerCase\(\)\)\) return;/.test(CL) && /post\('\/api\/gamify\/swap', \{ txHash: hash \}\)/.test(CL) && /HOME_CREDIT = \['0xa40a9c0e2e9bf7a3b9deb9ebed2b59e77d01e105', '0x61339f11384dde4b2dc3a33e75b4dc23cc620f22'\]/.test(CL));
-  check('the dashboard: the button sits in the action group under the caveat, on every chain (hideSwap leaves it out), and mountDashboard wires the panel; the header comment tells the truth about the one CTA',
-    /\(window\.SwapKit && !opts\.hideSwap \? SwapKit\.buttonHTML\(p\) : ''\) \+/.test(NP) && /if \(window\.SwapKit\) SwapKit\.mount\(root\);/.test(NP) && NP.indexOf('tkd-caveat') < NP.indexOf('SwapKit.buttonHTML(p)') && !/No buy\/swap CTA anywhere/.test(NP) && /a tool beside the read, never a tip/.test(NP));
+  check('the dashboard: the button sits in the action group under the caveat, on every chain (hideSwap leaves it out; a real-world asset counted on evidence on Robinhood Chain gets none — owner, 2026-11-03), and mountDashboard wires the panel; the header comment tells the truth about the one CTA',
+    /\(window\.SwapKit && !opts\.hideSwap && !ns \? SwapKit\.buttonHTML\(p\) : ''\) \+/.test(NP) && /if \(window\.SwapKit\) SwapKit\.mount\(root\);/.test(NP) && NP.indexOf('tkd-caveat') < NP.indexOf('SwapKit.buttonHTML(p)') && !/No buy\/swap CTA anywhere/.test(NP) && /a tool beside the read, never a tip/.test(NP));
   check('every page that renders the token detail loads swapkit.js after wallet.js and tokenmodal.js', ['community.html', 'squad.html', 'newpairs.html', 'support.html', 'wall.html', 'watchlist.html', 'u.html'].every((f) => { const h = PUB(f); const s = h.indexOf('swapkit.js"></script>'); return s > 0 && s > h.indexOf('wallet.js"></script>') && s > h.indexOf('tokenmodal.js"></script>'); }));
   check('a connect may skip the home-chain courtesy switch (the swap on an Ethereum token puts the wallet where it needs it) — the pinned connect text is untouched', /if \(!\(opts && opts\.noSwitch\) && typeof window\.ensureRobinhoodChain === 'function'\) chainOk = await window\.ensureRobinhoodChain\(chosen\.provider, 'connect'\);/.test(WL));
   check('the panel is framed in the chain\'s colour, every size floored, and a high impact is said in words as well as colour', /\.tkd-swap \{ margin-top: 0\.8rem;[^\n]*border: 2px solid color-mix\(in srgb, var\(--chain, var\(--green\)\) 58%, var\(--ink-4\)\)/.test(CSS)
@@ -113,6 +115,36 @@ const aw = (a) => a.toLowerCase().replace(/^0x/, '').padStart(64, '0');
   const other = bytes.slice(); other[1 + 64 * other[0] + 1 + 3 + 1] ^= 0xff;   // one byte of the fee payer's key changed
   check('  ...a transaction someone else pays for reads as such, and bytes that are not a transaction read as nothing', C.solTxKeys(other)[0] !== FX.userPublicKey && C.solTxKeys(new Uint8Array([1, 2, 3])) === null && C.solTxKeys(Uint8Array.from(Buffer.from('a fake serialized v0 transaction'))) === null);
   check('  ...a wallet\'s chain id is read whatever its form (a number, uppercase hex, a leading zero, decimal)', C.hexChain(1) === '0x1' && C.hexChain('0x01') === '0x1' && C.hexChain('0X1237') === '0x1237' && C.hexChain('4663') === '0x1237' && C.hexChain(null) === '');
+}
+
+/* ═══ 2b. no swap for a tokenized real-world asset on Robinhood Chain (owner, 2026-11-03: "Swap in my wallet" hidden "only if they are
+   RWA on the robinhood chain") — the module refuses before it reads anything, whatever the amount; the client draws no button ═══ */
+const RWA_T = '0x322f0929c4625ed5bad873c95208d54e1c003b2d';   // TSLA, Robinhood's Stock Token
+{
+  const reads = [];
+  const kit = SK.createSwapKit({ mc: { pools: async () => ({ pools: [] }) }, rhCall: async (to) => { reads.push(to); return null; }, now: () => 1.8e12,
+    rwaRefusal: (chain, token) => (token === RWA_T ? RW.NOSWAP_WHY : null) });
+  const a = await kit.quote('robinhood', RWA_T, '0.1'), b = await kit.build('robinhood', RWA_T, '0.1', ME), c = await kit.quote('robinhood', RWA_T, 'abc');
+  const readsBefore = reads.length;
+  const d = await kit.quote('robinhood', '0x' + '9b'.repeat(20), '0.1'), e = await kit.quote('ethereum', RWA_T, '0.1');
+  check('the module refuses a counted real-world asset on Robinhood Chain — quote and build, whatever the amount (a bad one too) — with lib/rwa.js\'s sentence, before reading a router: { refused: "rwa", error }',
+    a.refused === 'rwa' && a.error === RW.NOSWAP_WHY && !a.amountOut && b.refused === 'rwa' && b.error === RW.NOSWAP_WHY && !b.tx && c.refused === 'rwa' && readsBefore === 0, JSON.stringify([a, b, c]).slice(0, 300));
+  check('  ...a token it does not count (a lookalike, anything else) quotes as before (the router is read), and another chain is never asked about (Ethereum at the same address quotes as before)',
+    !d.refused && reads.length > readsBefore && /no pool on Robinhood Chain prices this token/.test(d.unsupported || '') && !e.refused && /no pool prices this token/.test(e.unsupported || ''), JSON.stringify([d, e]).slice(0, 300));
+  check('  ...without the hook (another caller of the module) nothing is refused, and the server wires the hook to Market Data\'s count with lib/rwa.js\'s sentence, answering 403 on both routes',
+    !(await SK.createSwapKit({ mc: { pools: async () => ({ pools: [] }) }, rhCall: async () => null, now: () => 1.8e12 }).quote('robinhood', RWA_T, '0.1')).refused
+    && /rwaRefusal: \(chain, token\) => \(chain === 'robinhood' && MKT\.rwaCounted\(token\) \? RWA\.NOSWAP_WHY : null\),/.test(SRC)
+    && (SRC.match(/if \((?:q|r)\.refused\) return send\(res, 403, \{ error: (?:q|r)\.error, refused: (?:q|r)\.refused \}\);/g) || []).length === 2);
+  // the client: SwapKit.buttonHTML draws nothing for a counted RWA on Robinhood Chain, and the same button as before for everything else
+  const sw = { addEventListener: () => {}, dispatchEvent: () => {} }; sw.window = sw;
+  const sctx = { window: sw, CustomEvent: function () {}, console, setTimeout, clearTimeout, atob }; vm.createContext(sctx); vm.runInContext(PUB('swapkit.js'), sctx);
+  const SKC = sw.SwapKit, prof = (o) => Object.assign({ chain: 'robinhood', token: { address: RWA_T, symbol: 'TSLA' }, market: { priceUsd: 396 }, risk: {} }, o);
+  const btn = (o) => SKC.buttonHTML(prof(o));
+  const issuer = { key: 'rhj', name: 'Robinhood Assets (Jersey) Limited (RHJ)' };
+  check('the client: no button on a real-world asset counted on evidence (the server\'s risk.noScore, or the RWA card\'s facts confirmed or registry-listed); the same button on a token not confirmed yet, a lookalike, an ordinary token and the same address on Ethereum',
+    btn({ risk: { health: null, triage: null, noScore: { rwa: true, why: RW.NOSCORE_WHY } } }) === '' && btn({ rwa: { issuer, confidence: 'confirmed' } }) === '' && btn({ rwa: { issuer, confidence: 'issuer-listed' } }) === ''
+    && /data-swap-open/.test(btn({ rwa: { issuer, confidence: 'not-confirmed' } })) && /data-swap-open/.test(btn({ rwa: { notRwa: true, why: 'Same ticker as $TSLA, but not issued by Robinhood Assets (Jersey)' } })) && /data-swap-open/.test(btn({}))
+    && /data-swap-open/.test(btn({ chain: 'ethereum', risk: { noScore: { rwa: true } }, rwa: { issuer, confidence: 'confirmed' } })) && SKC.rwaCounted(prof({ rwa: { issuer, confidence: 'confirmed' } })) === true);
 }
 
 /* ═══ 3. a server of its own, every upstream faked ═══
@@ -234,6 +266,15 @@ try {
   let up = false;
   for (let i = 0; i < 150 && !up; i++) { try { const r = await fetch(B + '/healthz'); up = r.ok; } catch {} if (!up) await sleep(200); }
   check('the server came up with every upstream pointed at the fake', up, log.slice(-300));
+  /* TSLA in Robinhood's registry, as Market Data keeps its answer (mkt_state rhj_assets; a run row moves its memo on): counted on
+     evidence — registry-listed — so the swap routes refuse it before reading the fake node */
+  { const sdb = new DatabaseSync(path.join(dataDir, 'app.db')); sdb.exec('PRAGMA busy_timeout = 5000');
+    sdb.prepare('INSERT INTO mkt_state (name, value, at) VALUES (?,?,?) ON CONFLICT(name) DO UPDATE SET value = excluded.value, at = excluded.at').run('rhj_assets', JSON.stringify({ readAt: Date.now(), data: { assets: [{ address: RWA_T, uid: null, symbol: 'TSLA', name: 'Tesla • Robinhood Token', status: 'ASSET_STATUS_ACTIVE', decimals: 18 }] } }), Date.now());
+    sdb.prepare("INSERT INTO mkt_runs (job, at, ok, ms, calls, note) VALUES ('rwa', ?, 1, 1, 0, 'seeded by tests/swapkit.mjs')").run(Date.now()); sdb.close(); }
+  const rwaCalls0 = rhRouterCalls, rwq = await q('robinhood', RWA_T, '0.01'), rwb = await api('/api/swap/build', { chain: 'robinhood', token: RWA_T, amount: '0.01', from: ME, slippage: 10 }), rwbad = await q('robinhood', RWA_T, 'abc');
+  check('the routes refuse TSLA (in Robinhood\'s registry: a real-world asset counted on evidence) with 403 and the stable sentence — the quote, the build and a bad amount alike — and the router is never asked',
+    rwq.status === 403 && rwq.j.error === RW.NOSWAP_WHY && rwq.j.refused === 'rwa' && !rwq.j.amountOut && rwb.status === 403 && rwb.j.error === RW.NOSWAP_WHY && !rwb.j.tx && rwbad.status === 403 && rhRouterCalls === rwaCalls0,
+    JSON.stringify([rwq.status, rwq.j, rwb.status, rwbad.status, rhRouterCalls - rwaCalls0]).slice(0, 300));
 
   /* ── the home chain ── */
   const rq = await q('robinhood', SEND, '0.01');

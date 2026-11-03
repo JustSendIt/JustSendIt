@@ -5,7 +5,8 @@
  * Tons of filters + full on-chain detail + one-tap copy on every address. The radar's rows carry no buy CTA — the
  * list protects, it doesn't funnel. The token DETAIL carries one swap button (swapkit.js; owner, 2026-10-23: "a simple
  * button on every token on-chain details"), under the caveat: it builds a buy for the reader's own wallet to review and
- * sign — a tool beside the read, never a tip. Honest. CSP-safe: addEventListener only, no inline JS. */
+ * sign — a tool beside the read, never a tip; none on a tokenized real-world asset on Robinhood Chain, which has no health score
+ * either (owner, 2026-11-03: rwaCountedOf). Honest. CSP-safe: addEventListener only, no inline JS. */
 (function () {
   const listEl = document.getElementById('np-list');
   // NOTE: we do NOT early-return when np-list is absent — the render helpers below are also exported as window.NPCard
@@ -149,9 +150,12 @@
     caution: { cls: 'np-t-caution', ico: '🟡', word: 'Caution' },
     high:    { cls: 'np-t-high',    ico: '🔴', word: 'High risk' },
     avoid:   { cls: 'np-t-avoid',   ico: '☠️', word: 'Avoid' },
+    // not a tier: a real-world asset counted on evidence carries no score, so none is derived (rwaCountedOf, below)
+    rwa:     { cls: 'np-t-rwa',     ico: '🏛️', word: 'Real-world asset — no health score' },
   };
   function triageOf(p) {
     const r = p.risk || {};
+    if (rwaCountedOf(p)) return 'rwa';
     if (TRI[r.triage]) return r.triage;
     if (r.health != null) return r.health >= 70 ? 'ok' : r.health >= 40 ? 'caution' : r.health >= 15 ? 'high' : 'avoid';
     return 'caution';
@@ -304,7 +308,7 @@
      in it is a thing we actually checked and that actually passed: the data was readable, the risk
      model's top tier, a full score, and a clean first block. */
   function clearsSiteBar(p) {
-    return !thinData(p) && triageOf(p) === 'ok' && Math.round((p.risk && p.risk.health) || 0) >= 100 && sniperOk(p);
+    return !rwaCountedOf(p) && !thinData(p) && triageOf(p) === 'ok' && Math.round((p.risk && p.risk.health) || 0) >= 100 && sniperOk(p);
   }
   /* Is the reader's own bar in play on THIS page? It is not enough that filters exist in localStorage.
      newpairs.js is also loaded on the Send Wall, community, support and profile pages to render token
@@ -322,13 +326,13 @@
      now, block-0 buyers who already sold, or the risk model's own avoid tier can never read "Looks Good"
      at any score. */
   const LOOKS_GOOD_MIN = 75;
-  const healthOfP = (p) => Math.round((p.risk && p.risk.health) || 0);
+  const healthOfP = (p) => (rwaCountedOf(p) ? null : Math.round((p.risk && p.risk.health) || 0));   // a real-world asset: null, never 0
   /* The one predicate for the top tag, so the tag and the Hot Feed can never disagree about it. Both
      routes to it now require a perfect 100: the site's own bar, or the reader's filters. */
-  const earnsSendIt = (p) => healthOfP(p) >= 100 && !floorBreached(p);
+  const earnsSendIt = (p) => !rwaCountedOf(p) && healthOfP(p) >= 100 && !floorBreached(p);   // a real-world asset never does (no score)
   function meetsYourBar(p) {
     const f = state.filters;
-    if (floorBreached(p)) return false;
+    if (rwaCountedOf(p) || floorBreached(p)) return false;
     if (!passFilters(p, f)) return false;
     // a reader who has set NO bar at all gets the site's own, so the tag never becomes a participation medal
     if (activeFilterCount(f) === 0) return clearsSiteBar(p);
@@ -363,6 +367,10 @@
   const verdictTitle = (T) => T.why ? ' title="' + esc(T.why) + '"' : '';
   const spokenWhy = (T) => T.why ? ' ' + T.why : '';
   function verdictOf(p) {
+    /* A real-world asset counted on evidence (owner, 2026-11-03: "Don't show health scores for real stocks"): no score, so no tag
+       derived from one — not the rocket, not ✅, not a tier. The chip says what it is instead, and why rides on it. */
+    const ns = rwaCountedOf(p);
+    if (ns) return { cls: TRI.rwa.cls, ico: TRI.rwa.ico, word: TRI.rwa.word, why: ns.why || RWA_NOSCORE_WHY, noScore: true };
     const tri = triageOf(p), health = Math.round((p.risk && p.risk.health) || 0);
     /* A FULL 100 EARNS THE ROCKET. One rule, and the score is the whole of it: every token our checks
        score 100 out of 100 carries 🚀 Looks Good, Send It.
@@ -549,6 +557,8 @@
   }
   const NOT_SCORED = ' <i class="np-bd-unscored">(found, not in the score)</i>';
   function breakdownHTML(p, noContract) {   // noContract: the dashboard reads the contract on its own card, so the slot here would fetch it twice
+    // a real-world asset counted on evidence has no score to break down (its views leave this out; said, should one ask)
+    if (rwaCountedOf(p)) return '<div class="np-breakdown"><p class="np-bd-formula">' + esc(rwaCountedOf(p).why || RWA_NOSCORE_WHY) + '</p></div>';
     const health = Math.round((p.risk && p.risk.health) || 0);
     const secs = scoreBreakdown(p);
     const totalPenalty = 100 - health;
@@ -704,7 +714,7 @@
     // ---- the contract ----
     verified:   { kind: 'bool', def: false, group: 'contract', read: p => p.token.isVerified === true },
     indexed:    { kind: 'bool', def: false, group: 'contract', read: p => !!p.indexed },
-    minHealth:  { kind: 'min',  def: 0, max: 100, group: 'contract', read: p => (p.risk && p.risk.health) || 0, onNull: 'fail' },
+    minHealth:  { kind: 'min',  def: 0, max: 100, group: 'contract', read: p => (rwaCountedOf(p) ? null : (p.risk && p.risk.health) || 0), onNull: 'fail' },   // a real-world asset has no score: it never meets a minimum
     // ---- what must actually have been checked ----
     /* The honest counterweight to every "onNull: pass" above. A reader who genuinely requires a signal
        says so here, and then a token the site could not read is excluded rather than quietly accepted. */
@@ -835,6 +845,8 @@
 
   /* ---------- collapsed row ---------- */
   function gaugeHTML(p, tri, health) {
+    // a real-world asset counted on evidence: no ring and no number — a 🏛️ in the ring's place (the chip beside it says why)
+    if (rwaCountedOf(p)) return '<span class="np-gauge np-gauge--none ' + TRI.rwa.cls + '" aria-hidden="true"><span class="np-gauge-rwa">🏛️</span></span>';
     return '<span class="np-gauge ' + TRI[tri].cls + '" style="--tri:' + ringColor(health) + '" aria-hidden="true">' +
       '<svg viewBox="0 0 44 44" class="np-gauge-svg">' +
         '<circle class="np-gauge-track" cx="22" cy="22" r="19"></circle>' +
@@ -846,7 +858,7 @@
     // count (vendorFacts): a strip that read "✔ No automatic red flags" over a blacklist was the PEPE case
     const flags = activeFlags(p), V = vendorFacts(p);
     const chips = flags.map(k => '<span class="np-flag np-flag--' + FLAG[k].sev + '">' + FLAG[k].ico + ' ' + esc(flagWord(k, p)) + '</span>')
-      .concat(V.map(x => '<span class="np-flag np-flag--warn">' + (x.k === 'lpUnlocked' ? '🔓 ' : '⚠️ ') + esc(x.word) + '<span class="sr-only"> — ' + esc(x.src || vendorSrc(p)) + ' reports it; not in the score</span></span>'));
+      .concat(V.map(x => '<span class="np-flag np-flag--warn">' + (x.k === 'lpUnlocked' ? '🔓 ' : '⚠️ ') + esc(x.word) + '<span class="sr-only"> — ' + esc(x.src || vendorSrc(p)) + ' reports it' + (rwaCountedOf(p) ? '' : '; not in the score') + '</span></span>'));
     let inner = '';
     if (!chips.length) {
       inner = '<span class="np-flag np-flag--ok">✔ No automatic red flags — still DYOR</span>';
@@ -934,7 +946,7 @@
   }
 
   function summaryHTML(p) {
-    const tri = triageOf(p), health = Math.round((p.risk && p.risk.health) || 0);
+    const tri = triageOf(p), health = healthOfP(p);   // null for a real-world asset counted on evidence: no ring, no number
     const T = verdictOf(p);
     const liq = npFmtUsd(p.market.liquidityUsd);
     const mc = npFmtUsd(p.market.marketCap);
@@ -965,7 +977,7 @@
         (window.Watchlist ? Watchlist.btnHTML(p, 'np-row-watch') : '') +
       '</span>' +
       '<span class="np-chev" aria-hidden="true">▾</span>' +
-      '<span class="sr-only" id="' + srId + '">' + esc(p.token.name) + ', ' + esc(p.token.symbol) + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100.' + esc(spokenWhy(T)) + ' Market cap ' + mc + ', liquidity ' + liq + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + (dash ? '. Opens the full dashboard.' : '. Expand for full detail.') + '</span>' +
+      '<span class="sr-only" id="' + srId + '">' + esc(p.token.name) + ', ' + esc(p.token.symbol) + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + healthSaid(health) + esc(spokenWhy(T)) + ' Market cap ' + mc + ', liquidity ' + liq + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + (dash ? '. Opens the full dashboard.' : '. Expand for full detail.') + '</span>' +
     '</div>' + flagstripHTML(p) + '</summary>';
   }
 
@@ -1171,15 +1183,18 @@
   };
   function auditParts(p) {
     const r = p.risk || {}, m = p.market || {}, h = p.holders || {}, t = p.token || {};
-    const flags = activeFlags(p), health = healthOf(p), V = vendorFacts(p);
+    const flags = activeFlags(p), health = healthOf(p), V = vendorFacts(p), ns = rwaCountedOf(p);
     const sym = t.symbol ? '$' + esc(t.symbol) : 'This token';
 
     // ---- the bottom line, in one sentence ----
     const age = p.pair && p.pair.ageMinutes != null ? npFmtAge(p.pair.ageMinutes) + ' old' : 'of unknown age';
     let line = sym + ' is ' + esc(age) + (p.pair && p.pair.quoteSymbol ? ', trading against ' + esc(p.pair.quoteSymbol) : '') + '. ';
     // another chain's contract powers the score does not count (vendorFacts) are named here too — "nothing tripped" over a blacklist was the PEPE case
-    const vSay = V.length ? ' ' + esc(vendorLine(p, V)) + ', which the score does not count — read the Contract card.' : '';
-    if (r.thinData) {
+    const vSay = V.length ? ' ' + esc(vendorLine(p, V)) + (ns ? ' — read the Contract card.' : ', which the score does not count — read the Contract card.') : '';
+    if (ns) {
+      // a real-world asset counted on evidence: no score in the sentence, and what the automatic flags found is still said
+      line += 'There is no health score for it: it is a tokenized real-world asset, and the score is built for memecoin risks — its issuer keeps powers to pause it, freeze wallets or mint more by design. ' + (flags.length ? (flags.length === 1 ? 'One automatic check tripped' : flags.length + ' automatic checks tripped') + ', listed below.' : 'None of the automatic checks tripped.') + vSay;
+    } else if (r.thinData) {
       line += 'We cannot say much about it yet — too little of it is readable to judge, which is an unknown, not a pass.' + vSay;
     } else if (flags.length) {
       line += 'Our checks score it <b' + ratingInk(health) + '>' + health + '/100</b> and ' + (flags.length === 1 ? 'one thing tripped' : flags.length + ' things tripped') + ', listed below.' + vSay;
@@ -1242,7 +1257,7 @@
     // ---- what another chain's contract read found that the score does not count (vendorFacts) ----
     if (V.length) {
       rows.push(['⚠️', 'What the contract read found',
-        V.map(x => '<b>' + esc(x.word) + '</b> — ' + esc(x.say) + '.').join('<br>') + '<br>Read by ' + esc(andList([...new Set(V.map(x => srcLc(x.src || vendorSrc(p))))])) + ' — an automated reading, not an audit, and not counted in the score.']);
+        V.map(x => '<b>' + esc(x.word) + '</b> — ' + esc(x.say) + '.').join('<br>') + '<br>Read by ' + esc(andList([...new Set(V.map(x => srcLc(x.src || vendorSrc(p))))])) + ' — an automated reading, not an audit' + (ns ? '.' : ', and not counted in the score.')]);
     }
     // ---- what tripped, named plainly ----
     if (flags.length) {
@@ -1278,12 +1293,14 @@
          It also cannot be left alone: this branch renders only when flags.length is truthy, and a
          reader-bar pass can carry flags, so the old wording would print "Why we say Looks Good, Send It"
          directly above a list of warnings the site itself raised. */
-      let why = '<section class="np-why"><' + hx + ' class="np-why-h">' + (T.yours ? 'Why your settings say ' : 'Why we say ') + '<span class="np-verdict-word ' + T.cls + '">' + T.word + '</span></' + hx + '><ul class="np-why-list">';
+      // a real-world asset has no verdict to explain: the heading says what the list is
+      let why = '<section class="np-why"><' + hx + ' class="np-why-h">' + (T.noScore ? 'What the automatic checks found' : (T.yours ? 'Why your settings say ' : 'Why we say ') + '<span class="np-verdict-word ' + T.cls + '">' + T.word + '</span>') + '</' + hx + '><ul class="np-why-list">';
       flags.forEach(k => { why += '<li class="np-why-' + (FLAG[k].sev === 'bad' ? 'bad' : 'warn') + '"><span aria-hidden="true">' + FLAG[k].ico + '</span> ' + esc(FLAG[k].say(p)) + '</li>'; });
       // another chain's contract powers (vendorFacts): found by the read, not in the score — said so, so the list and the number agree
-      V.forEach(x => { why += '<li class="np-why-warn"><span aria-hidden="true">' + (x.k === 'lpUnlocked' ? '🔓' : '⚠️') + '</span> ' + esc((x.src || vendorSrc(p)) + ' reports: ' + x.word + ' — ' + x.say + '. Not counted in the score; the Contract card has the read.') + '</li>'; });
+      V.forEach(x => { why += '<li class="np-why-warn"><span aria-hidden="true">' + (x.k === 'lpUnlocked' ? '🔓' : '⚠️') + '</span> ' + esc((x.src || vendorSrc(p)) + ' reports: ' + x.word + ' — ' + x.say + '. ' + (T.noScore ? 'The Contract card has the read.' : 'Not counted in the score; the Contract card has the read.')) + '</li>'; });
       return why + '</ul></section>';
     }
+    if (T.noScore) return '<section class="np-why"><p class="np-why-clean">✔ None of the automatic checks tripped. They are built for memecoin risks and are not a rating of a real-world asset — the real-world-asset card has its issuer facts. Do your own research.</p></section>';
     return '<section class="np-why"><p class="np-why-clean">✔ No automatic red flags tripped. That doesn\'t mean it\'s safe — most new tokens still go to zero. Do your own research.</p></section>';
   }
 
@@ -1452,7 +1469,7 @@
 
     return '<div class="np-body">' + brandHeadHTML(p) + auditHTML(p) + whyHTML(p) +
       group('chart', '📈 Chart', S.chart !== false, chartHTML(p)) +
-      group('score', '🎯 Score breakdown', S.score, breakdownHTML(p)) +
+      (rwaCountedOf(p) ? '' : group('score', '🎯 Score breakdown', S.score, breakdownHTML(p))) +   // a real-world asset: no score to break down
       group('market', '📊 Market', S.market, marketInner) +
       group('activity', '🔁 Activity', S.activity, activityInner) +
       group('holders', '👥 Holders', S.holders, holdersInner) +
@@ -1740,10 +1757,30 @@
   // the RWA facts a profile carries, as the card needs them: a token counted as an RWA here (not a lookalike's 404)
   const rwaOf = (p) => (p && p.rwa && typeof p.rwa === 'object' && p.rwa.notRwa !== true && !foreignChain(p) ? p.rwa : null);
   const rwaIsRhj = (p) => { const R = rwaOf(p); return !!R && !!R.issuer && R.issuer.key === 'rhj'; };
+  /* ═══ NO HEALTH SCORE, NO SWAP: A REAL-WORLD ASSET COUNTED ON EVIDENCE (owner, 2026-11-03) ═══════════════════════════════
+     "Don't show health scores for real stocks", and "Swap in my wallet" hidden "only if they are RWA on the robinhood chain". A Robinhood
+     Chain token Market Data counts as an RWA on evidence — Robinhood's registry and its code on the chain, or an issuer on this site's
+     list confirmed by its own beacon; every kind — carries no score: the server sends risk.noScore with health and triage null
+     (server.js rwaScoreGate), and a profile carrying the RWA card's facts (p.rwa, confirmed or registry-listed) is held to the same rule
+     here. A lookalike (the 404 that names its twin), a token not confirmed on the chain yet and every other chain keep their score and
+     their button — that is exactly where the score matters. The words are lib/rwa.js's (tests/rwanoscore.mjs holds them equal). */
+  const RWA_NOSCORE_WHY = 'No health score for a tokenized real-world asset: the Scanner\'s score is built for memecoin risks, and an issuer keeps powers to pause the token, freeze wallets or mint more by design, so a number would mislead either way. The real-world-asset card has the issuer facts.';
+  const RWA_NOSWAP_SAY = 'No swap button: this is a tokenized real-world asset on Robinhood Chain, and the Scanner does not offer swaps for those.';
+  function rwaCountedOf(p) {
+    if (!p || foreignChain(p)) return null;
+    const n = p.risk && p.risk.noScore;
+    if (n && typeof n === 'object' && n.rwa === true) return n;
+    const R = p.rwa;
+    return R && typeof R === 'object' && R.notRwa !== true && R.issuer && (R.confidence === 'confirmed' || R.confidence === 'issuer-listed')
+      ? { rwa: true, symbol: R.symbol || null, issuer: R.issuer, kind: (R.underlying && R.underlying.kind) || null, confidence: R.confidence, why: RWA_NOSCORE_WHY } : null;
+  }
+  // the spoken score: ", health 88 of 100." — and for a real-world asset nothing (its verdict word already says there is no score)
+  const healthSaid = (health) => (health == null ? '.' : ', health ' + health + ' of 100.');
   // a lookalike's 404 (the server's { notRwa, why: "Same ticker as $…" }), or null
   const rwaLookOf = (p) => (p && p.rwa && typeof p.rwa === 'object' && p.rwa.notRwa === true && !p.rwa.stablecoin && /^Same ticker as \$/.test(String(p.rwa.why || '')) && !foreignChain(p) ? p.rwa : null);
-  /* Next to the verdict (it is unchanged — the owner decides the score): one plain line that the token is a real-world asset whose
-     issuer keeps powers over every holder's tokens, which the health score does not count; or that it only shares an RWA's ticker. */
+  /* Next to the verdict: one plain line that the token is a real-world asset — counted on evidence it has no health score (owner,
+     2026-11-03), its issuer keeping powers over every holder's tokens by design; listed but not confirmed yet, it keeps its score and
+     the line says the score does not count those powers — or that it only shares an RWA's ticker. */
   // a twin this site has confirmed (or Robinhood's registry lists) is "the real one"; one not confirmed yet is never asserted to be its issuer's
   const rwaTwinSure = (tw) => !!tw && (tw.confidence === 'confirmed' || tw.registry === true);
   function rwaVerdictHTML(p) {
@@ -1760,13 +1797,18 @@
       : R.confidence === 'issuer-listed' ? '🏛️ <b>A real-world-asset token in Robinhood’s registry</b>, not checked on the chain yet. '
       : '⚠️ <b>Listed as a real-world-asset token of ' + esc((R.issuer && R.issuer.name) || 'its issuer') + ', not confirmed on the chain yet</b> — not counted. ';
     const sure = R.confidence === 'confirmed' || R.confidence === 'issuer-listed', its = sure ? 'Its issuer keeps' : 'If it is one, its issuer keeps';
+    if (sure) return '<p class="tkd-verdict-rwa tkd-noscore">' + lead + '<b>No health score:</b> the Scanner’s score is built for memecoin risks, and ' +
+      (rwaIsRhj(p) ? 'its issuer keeps powers over every holder’s tokens by design (replacing their code, minting, burning from any wallet, pausing them and blocking wallets' + (powers.length ? ': ' + powers.length + ' powers read from its registry' : '') + '), so a number would mislead either way — the real-world-asset card lists who holds each.'
+        : 'its issuer keeps powers of its own over holders’ tokens by design, which this site does not read, so a number would mislead either way — the real-world-asset card says what was read.') + '</p>';
     return '<p class="tkd-verdict-rwa' + (sure ? '' : ' tkd-warn') + '">' + lead +
       (rwaIsRhj(p) ? its + ' powers over every holder’s tokens (replacing their code, minting, burning from any wallet, pausing them and blocking wallets' + (powers.length ? ': ' + powers.length + ' powers read from its registry' : '') + ') that the health score does not count — the real-world-asset card lists them.'
         : its + ' powers of its own over holders’ tokens, which this site does not read and the health score does not count — the real-world-asset card says what was read.') + '</p>';
   }
-  // beside the Swap button (its showing is the owner's call): who Robinhood says its Stock Tokens are not for, in Robinhood's words
+  /* where the Swap button would be, on a real-world asset counted on evidence: why there is none (owner, 2026-11-03) — and beside the
+     button of a Robinhood token listed but not confirmed yet, who Robinhood says its Stock Tokens are not for, in Robinhood's words */
+  const rwaNoSwapHTML = (p) => (rwaCountedOf(p) ? '<p class="tkd-note tkd-rwa-noswap">🏛️ ' + esc(RWA_NOSWAP_SAY) + '</p>' : '');
   function rwaSwapNoteHTML(p) {
-    if (!rwaIsRhj(p)) return '';
+    if (!rwaIsRhj(p) || rwaCountedOf(p)) return '';
     const said = ((p.rwa.issuerProfile || {}).sentences || []).find((s) => s && /Not offered to US persons/.test(String(s.text || '')));
     return said ? '<p class="tkd-note tkd-rwa-swapnote">🏛️ ' + esc(said.text) + (httpsOnly(said.href) ? ' ' + rwaOut(said.href, 'Robinhood’s list', 'Opens Robinhood’s list of the places its Stock Tokens are not offered, in a new tab') : '') + '</p>' : '';
   }
@@ -1960,8 +2002,11 @@
     opts = opts || {};
     const u = 'tkd' + (++dashSeq), hl = opts.level === 3 ? 3 : 2, hc = hl + 1;
     const t = p.token || {}, m = p.market || {}, h = p.holders || {}, r = p.risk || {}, v = p.volume || {}, pc = p.priceChange || {}, pr = p.pair || {}, lk = p.links || {};
-    const tri = triageOf(p), health = healthOfP(p), T = verdictOf(p);
+    const tri = triageOf(p), health = healthOfP(p), T = verdictOf(p), ns = rwaCountedOf(p);   // ns: a real-world asset counted on evidence — no score anywhere here
     const mono = (Array.from(String(t.symbol || t.name || '?'))[0] || '?').toUpperCase();
+    /* the no-score line when the profile came without the RWA card's facts (a radar row, a saved one): what the server said, and where
+       the card is — its Scanner page */
+    const nsLine = ns && !rwaOf(p) ? '<p class="tkd-verdict-rwa tkd-noscore">🏛️ <b>No health score for a tokenized real-world asset:</b> the Scanner’s score is built for memecoin risks, and an issuer keeps powers to pause the token, freeze wallets or mint more by design, so a number would mislead either way. <a class="np-addr-link" href="/newpairs?scan=' + encodeURIComponent(String(t.address || '')) + '" data-tip="Opens this token on the Scanner page, with its real-world-asset card">Its real-world-asset card</a> has the issuer facts.</p>' : '';
 
     // ---- who it is, what it trades at, and what our checks make of it ----
     const logo = '<span class="tkd-logo" aria-hidden="true"><span class="tkd-mono">' + esc(mono) + '</span>' +
@@ -1984,13 +2029,13 @@
           '<b class="tkd-price-v">' + (m.priceUsd != null && isFinite(m.priceUsd) ? npPrice(m.priceUsd) : UNREAD) + '</b>' +
           '<span class="tkd-moves">' + moveChip('1h', pc.h1) + moveChip('6h', pc.h6) + moveChip('24h', pc.h24) + '</span>' +
         '</div>' +
-        '<div class="tkd-verdict">' + gaugeHTML(p, tri, health) +
+        '<div class="tkd-verdict">' + (ns ? '' : gaugeHTML(p, tri, health)) +   // a real-world asset: no ring (its chip and line say why)
           '<div class="tkd-verdict-t">' +
             '<span class="np-verdict ' + T.cls + '"><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
-            '<span class="tkd-health">Health <b' + ratingInk(health) + '>' + health + '</b>/100</span>' +
+            (ns ? '' : '<span class="tkd-health">Health <b' + ratingInk(health) + '>' + health + '</b>/100</span>') +   // no number for a real-world asset
           '</div>' +
-          (T.why ? '<p class="tkd-verdict-why">' + esc(T.why) + '</p>' : '') +
-          rwaVerdictHTML(p) +   // a real-world asset (its issuer's powers, which the score does not count) or a lookalike of one, said beside the verdict
+          (T.why && !ns ? '<p class="tkd-verdict-why">' + esc(T.why) + '</p>' : '') +   // (a real-world asset's why is the line below)
+          rwaVerdictHTML(p) + nsLine +   // a real-world asset (no score: its issuer's powers) or a lookalike of one, said beside the verdict
         '</div>' +
       '</div>';
 
@@ -2030,9 +2075,10 @@
           (lk.explorer ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this token on the chain explorer in a new tab" href="' + esc(lk.explorer) + '" target="_blank" rel="noopener nofollow">🔍 Explorer ↗</a>' : '') +
           (lk.dex && p.indexed ? '<a class="btn btn-sm btn-ghost" data-tip="Opens this pair on Dexscreener in a new tab to cross-check the figures" href="' + esc(lk.dex) + '" target="_blank" rel="noopener nofollow">📈 Dexscreener ↗</a>' : '') +
           // 🚀 Swap in my wallet (owner, 2026-10-23): on every chain — quotes a buy and builds it for the reader's own wallet (swapkit.js inserts its panel under this bar)
-          (window.SwapKit && !opts.hideSwap ? SwapKit.buttonHTML(p) : '') +
+          // …none on a real-world asset counted on evidence on Robinhood Chain (owner, 2026-11-03): SwapKit gives no button for it, the server builds none
+          (window.SwapKit && !opts.hideSwap && !ns ? SwapKit.buttonHTML(p) : '') +
         '</div>' +
-        (window.SwapKit && !opts.hideSwap ? rwaSwapNoteHTML(p) : '') +   // a Robinhood Stock Token: who Robinhood says it is not offered to, beside the button that quotes a buy
+        (window.SwapKit && !opts.hideSwap ? (ns ? rwaNoSwapHTML(p) : rwaSwapNoteHTML(p)) : '') +   // in its place, why there is none; a Robinhood token not confirmed yet: who Robinhood says it is not offered to
         (foreignChain(p) ? '<p class="tkd-note tkd-chain-note">Send Calls, the watchlist and wall pins work with Robinhood Chain tokens; on ' + esc(chainOf(p).name) + ' the Scanner reads the profile.</p>' : '') +
       '</div>';
 
@@ -2055,7 +2101,7 @@
         ? chainFactsHTML(p)
         : '<div class="np-contract" data-dash="1" data-token="' + esc(t.address) + '" data-pair="' + esc(pr.address || '') + '"><p class="np-contract-load"><span class="np-live-dot" aria-hidden="true"></span> Reading the contract code…</p></div>'),
       addrRowsHTML(p) + (foreignChain(p) || !tgTokenLink(t.address) ? '' : '<p class="np-tg-row">' + tgTokenLink(t.address) + '</p>'), '📋 Token, pool and deployer addresses');
-    const cScore = dashCard(u, 'score', hc, '🎯 Score breakdown', breakdownHTML(p, true), '', '', '<b' + ratingInk(health) + '>' + health + '</b>/100');
+    const cScore = ns ? '' : dashCard(u, 'score', hc, '🎯 Score breakdown', breakdownHTML(p, true), '', '', '<b' + ratingInk(health) + '>' + health + '</b>/100');   // a real-world asset: no score to break down
     const cChart = dashCard(u, 'chart', hc, '📈 Price chart', chartHTML(p));
     const flow = flowHTML(p);
     const cActivity = dashCard(u, 'activity', hc, '🔁 Trading activity',
@@ -2115,7 +2161,7 @@
             '<div class="tkd-col tkd-col--r">' + cMarket + cHolders + cPools + cBlock0 + cBundles + comm + cLinks + '</div>' +
           '</div>' +
           (cRwa ? '<div class="tkd-col tkd-col--rwa">' + cRwa + '</div>' : '') +
-          '<div class="tkd-col tkd-col--c2">' + cScore + '</div>' +
+          (cScore ? '<div class="tkd-col tkd-col--c2">' + cScore + '</div>' : '') +
         '</div>' +
         HONEST +
       '</div>' +
@@ -2229,7 +2275,7 @@
     const liq = p => p.market.liquidityUsd == null ? -1 : p.market.liquidityUsd;
     if (S === 'new') v.sort((a, b) => (b.pair.createdAt || 0) - (a.pair.createdAt || 0));
     else if (S === 'old') v.sort((a, b) => (a.pair.createdAt || 0) - (b.pair.createdAt || 0));
-    else if (S === 'health') v.sort((a, b) => (b.risk.health || 0) - (a.risk.health || 0));
+    else if (S === 'health') { const hk = (p) => (rwaCountedOf(p) ? -1 : (p.risk.health || 0)); v.sort((a, b) => hk(b) - hk(a)); }   // a real-world asset has no score: after every scored row
     else if (S === 'liq') v.sort((a, b) => liq(b) - liq(a));
     else if (S === 'vol') v.sort((a, b) => (b.volume.h24 || 0) - (a.volume.h24 || 0));
     else if (S === 'move') v.sort((a, b) => Math.abs(b.priceChange.h1 || 0) - Math.abs(a.priceChange.h1 || 0));
@@ -2277,7 +2323,8 @@
       : passed.filter(p => !hideFromMain(p)).length;
     const ago = state.lastFetch ? Math.max(0, Math.round((Date.now() - state.lastFetch) / 1000)) : null;
     let txt = '<span class="np-live-dot' + (npData.stale ? ' stale' : '') + '" aria-hidden="true"></span> ' + shown + ' of ' + state.all.length + ' pair' + (state.all.length === 1 ? '' : 's');
-    if (state.safety === 'safer' && hidden > 0) txt += ' · <button class="np-hidden-link" type="button" id="np-showhidden" data-tip="Switches to the All tab so these pairs appear">' + hidden + ' hidden (risky or under ' + SAFER_MIN + '%)</button>';
+    const hiddenNs = state.safety === 'safer' ? passed.filter(p => !saferOk(p) && rwaCountedOf(p)).length : 0;   // real-world assets: no score to clear the bar with
+    if (state.safety === 'safer' && hidden > 0) txt += ' · <button class="np-hidden-link" type="button" id="np-showhidden" data-tip="Switches to the All tab so these pairs appear">' + hidden + ' hidden (' + (hiddenNs === hidden ? (hidden === 1 ? 'a real-world asset' : 'real-world assets') + ' — no health score' : hiddenNs ? 'risky, under ' + SAFER_MIN + '%, or a real-world asset with no health score' : 'risky or under ' + SAFER_MIN + '%') + ')</button>';
     else if (state.safety === 'all' && hidden > 0) txt += ' · <button class="np-hidden-link" type="button" id="np-showhigh" data-tip="Switches to the Risky tab so these pairs appear">🛡️ ' + hidden + ' high-risk hidden ☠️</button>';
     if (ago != null) txt += ' · <span class="np-ago">updated ' + (ago < 60 ? ago + 's' : Math.round(ago / 60) + 'm') + ' ago</span>';
     if (npData.degraded) txt = '<span class="np-live-dot stale" aria-hidden="true"></span> ⚠️ Price feed unreachable (' + esc(npData.degraded) + ') — showing the last reading we actually took · ' + txt.replace(/^<span[^>]*><\/span> /, '');
@@ -2411,17 +2458,19 @@
 
   /* ---------- in-place patch (poll) ---------- */
   function patchRow(li, p) {
-    const tri = triageOf(p), T = verdictOf(p), health = Math.round((p.risk && p.risk.health) || 0);
+    const tri = triageOf(p), T = verdictOf(p), health = healthOfP(p);
     li.dataset.level = tri;
-    const gauge = li.querySelector('.np-gauge'); if (gauge) { gauge.className = 'np-gauge ' + T.cls; gauge.style.setProperty('--tri', ringColor(health)); }
-    const gnum = li.querySelector('.np-gauge-num'); if (gnum) gnum.textContent = health;
-    const arc = li.querySelector('.np-gauge-arc'); if (arc) { const prevFill = Number(arc.getAttribute('data-fill')); arc.setAttribute('data-fill', health); if (prevFill !== health) setArc(arc, health); else arc.style.strokeDashoffset = 100 - Math.max(0, Math.min(100, health)); } // only replay the fill when it actually changed (no idle-poll flicker)
+    // a ring that became a real-world asset's 🏛️ (or the other way) is drawn again; a 🏛️ has no number or arc to patch
+    const g0 = li.querySelector('.np-gauge'); if (g0 && g0.classList.contains('np-gauge--none') !== (health == null)) { g0.outerHTML = gaugeHTML(p, tri, health); animateRings(li); }
+    const gauge = health == null ? null : li.querySelector('.np-gauge'); if (gauge) { gauge.className = 'np-gauge ' + T.cls; gauge.style.setProperty('--tri', ringColor(health)); }
+    const gnum = health == null ? null : li.querySelector('.np-gauge-num'); if (gnum) gnum.textContent = health;
+    const arc = health == null ? null : li.querySelector('.np-gauge-arc'); if (arc) { const prevFill = Number(arc.getAttribute('data-fill')); arc.setAttribute('data-fill', health); if (prevFill !== health) setArc(arc, health); else arc.style.strokeDashoffset = 100 - Math.max(0, Math.min(100, health)); } // only replay the fill when it actually changed (no idle-poll flicker)
     const vw = li.querySelector('.np-verdict'); if (vw) { vw.className = 'np-verdict ' + T.cls; if (T.why) vw.title = T.why; else vw.removeAttribute('title'); vw.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>'; }
     const lv = li.querySelector('.np-liq-val'); if (lv) lv.textContent = npFmtUsd(p.market.liquidityUsd);
     const cs = li.querySelector('.np-chg-slot'); if (cs) cs.innerHTML = chgChipHTML(p.priceChange.h1);
     const strip = li.querySelector('.np-flagstrip'); if (strip) strip.outerHTML = flagstripHTML(p);
     const sr = li.querySelector('.np-sum .np-head > .sr-only');
-    if (sr) sr.textContent = p.token.name + ', ' + p.token.symbol + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100.' + spokenWhy(T) + ' Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + (window.TokenModal ? '. Opens the full dashboard.' : '. Expand for full detail.');
+    if (sr) sr.textContent = p.token.name + ', ' + p.token.symbol + ', ' + npFmtAge(p.pair.ageMinutes) + ' old. Verdict ' + spokenVerdict(T) + healthSaid(health) + spokenWhy(T) + ' Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + (window.TokenModal ? '. Opens the full dashboard.' : '. Expand for full detail.');
     const det = li.querySelector('details.np-card');
     if (det && det.open) {
       const body = li.querySelector('.np-body');
@@ -3055,7 +3104,7 @@
   }
 
   /* ============================ 🎬 HOT FEED (TikTok-style) ============================ */
-  const healthOf = (p) => Math.round((p.risk && p.risk.health) || 0);
+  const healthOf = (p) => (rwaCountedOf(p) ? null : Math.round((p.risk && p.risk.health) || 0));   // a real-world asset counted on evidence: null, never 0
   // The ONE feed filter: a perfect score AND the 'ok' triage — i.e. exactly the pairs that carry the
   // 🚀 "Looks Good, Send It" verdict. Same test as verdictOf(), kept in one place so the two can never drift.
   /* The Hot Feed used to run its own private test and ignore every setting the reader had chosen: you
@@ -3111,7 +3160,7 @@
   function rocketLabel(addr) { const n = rocketCount(addr); return n ? 'you \u00d7' + n : ''; }
   function srLine(p) {
     const T = verdictOf(p), health = healthOf(p);
-    return esc(p.token.name) + ' ' + esc(p.token.symbol) + '. Verdict ' + spokenVerdict(T) + ', health ' + health + ' of 100.' + esc(spokenWhy(T)) + ' Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '.';
+    return esc(p.token.name) + ' ' + esc(p.token.symbol) + '. Verdict ' + spokenVerdict(T) + healthSaid(health) + esc(spokenWhy(T)) + ' Liquidity ' + npFmtUsd(p.market.liquidityUsd) + (p.priceChange.h1 != null ? ', ' + (p.priceChange.h1 >= 0 ? 'up ' : 'down ') + pctPlain(Math.abs(p.priceChange.h1)) + ' in the last hour' : '') + '.';
   }
   function seatRing(el) { el.querySelectorAll('.np-gauge-arc[data-fill]').forEach(a => { a.style.strokeDashoffset = 100 - Math.max(0, Math.min(100, Number(a.getAttribute('data-fill')) || 0)); }); }
 
@@ -3175,7 +3224,7 @@
           '<p class="np-slide-sub">🕐 <span class="np-slide-age">' + npFmtAge(p.pair.ageMinutes) + '</span> old · / ' + esc(p.pair.quoteSymbol) + ' · <span class="np-slide-indexed">' + (p.indexed ? 'indexed' : 'not indexed yet') + '</span>' + commSlot(p.token.address, p.token.symbol) + '</p>' + badgesHTML(p) + '</div></header>' +
         '<div class="np-slide-hero">' + gaugeHTML(p, tri, health) + '<div class="np-slide-verdict-wrap">' +
           '<span class="np-verdict np-slide-verdict ' + T.cls + '"' + verdictTitle(T) + '><span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span></span>' +
-          '<span class="np-slide-health"' + ratingInk(health) + '>Health ' + health + '/100</span></div></div>' +
+          (health == null ? '<span class="np-slide-health">No health score</span>' : '<span class="np-slide-health"' + ratingInk(health) + '>Health ' + health + '/100</span>') + '</div></div>' +
         '<div class="np-slide-price"><span class="np-slide-priceval">' + npPrice(m.priceUsd) + '</span>' + chgChipHTML(p.priceChange.h1) + feedMove('6h', p.priceChange.h6) + feedMove('24h', p.priceChange.h24) + '</div>' +
         statsHTML(p) +
         socialsHTML(p) +
@@ -3274,15 +3323,17 @@
     if (ageEl && p.pair.ageMinutes != null) { const a = npFmtAge(p.pair.ageMinutes); if (ageEl.textContent !== a) ageEl.textContent = a; }
     const idxEl = el.querySelector('.np-slide-indexed');
     if (idxEl) { const t = p.indexed ? 'indexed' : 'not indexed yet'; if (idxEl.textContent !== t) idxEl.textContent = t; }
-    const gnum = el.querySelector('.np-gauge-num'); if (gnum) gnum.textContent = health;
-    const arc = el.querySelector('.np-gauge-arc'); if (arc) { const prev = Number(arc.getAttribute('data-fill')); arc.setAttribute('data-fill', health); if (prev !== health) { if (el.classList.contains('is-active') && !reduced()) setArc(arc, health); else seatRing(el); } }
-    const gauge = el.querySelector('.np-gauge'); if (gauge) { gauge.className = 'np-gauge ' + (TRI[tri] ? TRI[tri].cls : 'np-t-caution'); gauge.style.setProperty('--tri', ringColor(health)); }
+    // a slide whose token became a real-world asset counted on evidence (it leaves the feed when flipped past): its ring becomes the 🏛️, no number
+    const g0 = el.querySelector('.np-gauge'); if (g0 && g0.classList.contains('np-gauge--none') !== (health == null)) { g0.outerHTML = gaugeHTML(p, tri, health); seatRing(el); }
+    const gnum = health == null ? null : el.querySelector('.np-gauge-num'); if (gnum) gnum.textContent = health;
+    const arc = health == null ? null : el.querySelector('.np-gauge-arc'); if (arc) { const prev = Number(arc.getAttribute('data-fill')); arc.setAttribute('data-fill', health); if (prev !== health) { if (el.classList.contains('is-active') && !reduced()) setArc(arc, health); else seatRing(el); } }
+    const gauge = health == null ? null : el.querySelector('.np-gauge'); if (gauge) { gauge.className = 'np-gauge ' + (TRI[tri] ? TRI[tri].cls : 'np-t-caution'); gauge.style.setProperty('--tri', ringColor(health)); }
     const vd = el.querySelector('.np-slide-verdict'); if (vd) { vd.className = 'np-verdict np-slide-verdict ' + T.cls; if (T.why) vd.title = T.why; else vd.removeAttribute('title'); vd.innerHTML = '<span class="np-verdict-ico" aria-hidden="true">' + T.ico + '</span><span class="np-verdict-word">' + T.word + '</span>'; }
     /* The slide's spoken line is repainted here too. It was the one thing patchFeedSlide left alone, and
        with both bars sharing a word a stale line does not merely go out of date — it asserts the wrong
        bar, on the surface that is spoken most often. */
     const srSlide = el.querySelector('.np-slide-sr'); if (srSlide) srSlide.textContent = srLine(p) + ' Press Enter for the full dashboard.';
-    const hp = el.querySelector('.np-slide-health'); if (hp) { hp.textContent = 'Health ' + health + '/100'; hp.style.color = ringColor(health); }
+    const hp = el.querySelector('.np-slide-health'); if (hp) { if (health == null) { hp.textContent = 'No health score'; hp.style.color = ''; } else { hp.textContent = 'Health ' + health + '/100'; hp.style.color = ringColor(health); } }
     const priceRow = el.querySelector('.np-slide-price'); if (priceRow) priceRow.innerHTML = '<span class="np-slide-priceval">' + npPrice(m.priceUsd) + '</span>' + chgChipHTML(p.priceChange.h1) + feedMove('6h', p.priceChange.h6) + feedMove('24h', p.priceChange.h24);
     patchStats(el, p);
     const strip = el.querySelector('.np-flagstrip'); if (strip) strip.outerHTML = flagstripHTML(p);
@@ -3418,7 +3469,9 @@
   function runnerMetricsHTML(r) {
     // title= only ever reaches a mouse; the sr-only copy carries the same explanation to everyone else
     const note = !r.exact ? '<span class="np-runner-note" title="Tracked for ' + r.depthDays + ' days — shorter than this window, so it’s measured since we first saw it, not the full window.">since ' + r.depthDays + 'd<span class="sr-only"> — tracked for ' + r.depthDays + ' days, shorter than this window, so measured since we first saw it</span></span>' : '';
-    const health = r.health != null ? '<span class="np-runner-health"' + ratingInk(r.health) + ' role="img" aria-label="Health score ' + r.health + ' of 100" title="Automated health score (heuristic, not an audit)">🩺 ' + r.health + '</span>' : '';
+    const health = r.noScore && r.noScore.rwa   // a real-world asset counted on evidence: no score, said so (server.js bestRunners)
+      ? '<span class="np-runner-health np-runner-noscore" role="img" aria-label="A real-world asset: no health score" title="' + esc(r.noScore.why || RWA_NOSCORE_WHY) + '">🏛️ no score</span>'
+      : r.health != null ? '<span class="np-runner-health"' + ratingInk(r.health) + ' role="img" aria-label="Health score ' + r.health + ' of 100" title="Automated health score (heuristic, not an audit)">🩺 ' + r.health + '</span>' : '';
     // hover/SR detail: the EXACT (uncapped) current multiple + the all-time high — the visible chip stays abbreviated
     const curFull = r.gain >= 1 ? fmtFullX(r.gain) + '×' : (r.gain >= 0 ? '+' + Math.round(r.gain * 100) + '%' : '−' + Math.round(Math.abs(r.gain) * 100) + '%');
     // How many Xs it has done since the scanner caught it — the same live number a Send Call card shows, with our
@@ -3610,6 +3663,8 @@
     // the red-fact rule as the page applies it — tests/contractfacts.mjs runs it beside lib/contractfacts.js's redFacts on the same profiles
     redFactsOf: (p) => ({ found: vendorFacts(p).map((x) => x.k), neutralised: vendorNeutral(p).map((x) => x.k) }), VENDOR_EVM, OWNER_GATED: [...OWNER_GATED], DEAD_ADDRS: [...DEAD_ADDRS], LP_UNLOCKED,
     verdictWordOf: (p) => { const v = verdictOf(p); return { word: v.word, vendor: /np-t-vendor/.test(v.cls || '') }; },   // the verdict the page gives — the same test runs it beside scanVerdict
+    // a real-world asset counted on evidence (no score, no swap) — and the DEX row, the Hot Feed's test and a runner's figures, for tests/rwanoscore.mjs
+    rwaCountedOf, RWA_NOSCORE_WHY, RWA_NOSWAP_SAY, rowHTML, feedQualifies, saferOk, runnerMetricsHTML, passFilters: (p, f) => passFilters(p, Object.assign(defaultFilters(), f || {})),
   };
 
   /* Lazy-load the honeypot/contract read the first time its section is expanded. Attached on EVERY page,

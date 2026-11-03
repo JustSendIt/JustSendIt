@@ -1581,7 +1581,7 @@
     const line = powers.length ? '<p class="mkt-rwa-line"><b>' + heldN + ' of ' + powers.length + '</b> powers held' + (bl && typeof bl === 'object' && val(bl.count) != null ? ' · <b>' + (bl.complete ? '' : 'at least ') + esc(count(val(bl.count))) + '</b> wallets blocked from moving these tokens' : '') + '</p>' + (sofar ? '<p class="mkt-note">' + sofar + '</p>' : '')
       : '<p class="mkt-empty">' + esc(cap1(String(c.powersWhy || 'No powers are listed for it.'))) + '</p>';
     return rwaSec('mkt-rw6-h', '🔐 Powers its issuer keeps', j.rolesAt ? (partial ? 'From Robinhood’s registry on the chain, read so far · ' : 'From Robinhood’s registry on the chain · ') + srcLine({ src: 'rpc', at: j.rolesAt }) : '',
-      '<p class="mkt-rwa-powers">' + esc(c.note || 'Powers a regulated issuer keeps, shown as such, not as a verdict: for a regulated issuer they are expected — they are still powers over your tokens. The Scanner’s health score does not count them.') + '</p>' + line +
+      '<p class="mkt-rwa-powers">' + esc(c.note || 'Powers a regulated issuer keeps, shown as such, not as a verdict: for a regulated issuer they are expected — they are still powers over your tokens. The Scanner shows no health score for a token counted as an RWA here.') + '</p>' + line +
       '<details class="mkt-tbl mkt-rwa-fold"><summary>Its code, its beacon' + (bl && typeof bl === 'object' ? ' and the wallets it has blocked' : '') + '</summary><div class="mkt-rwa-fold-b">' + kv + depH + '</div></details>' +
       (table ? '<details class="mkt-tbl mkt-rwa-fold"><summary>Every power and who holds it (' + powers.length + ')</summary><div class="mkt-rwa-fold-b">' + table + log + '</div></details>' : ''));
   }
