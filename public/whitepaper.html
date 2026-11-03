@@ -561,6 +561,7 @@
         <li><a href="#s2"><span class="n">02</span><span>The coins and the chain</span></a></li>
         <li><a href="#s3"><span class="n">03</span><span>What it refuses to say</span></a></li>
         <li><a href="#s4"><span class="n">04</span><span>Getting an account</span></a></li>
+        <li><a href="#s4b"><span class="n">04b</span><span>Sign in with Send</span></a></li>
         <li><a href="#s5"><span class="n">05</span><span>Scrambling your data</span></a></li>
         <li><a href="#s6"><span class="n">06</span><span>Locking the doors</span></a></li>
         <li><a href="#s7"><span class="n">07</span><span>Your wallet stays yours</span></a></li>
@@ -688,6 +689,30 @@ Expiration Time: &lt;10 minutes later&gt;
         <p>Passwords are never stored. They are put through a slow scrambling process called <strong>scrypt</strong>, which is deliberately hard for a computer to run millions of times, so guessing is expensive. Only the scrambled result is kept. Passwords are also capped at 1024 characters so nobody can jam the server with an enormous one.</p>
         <h3>Two-factor</h3>
         <p>You can add a second lock in one of three ways. One is a six-digit code from an authenticator app that changes every 30 seconds. Another is a wallet signature &mdash; from the one linked wallet you chose when you turned it on; wallets linked afterwards do not count, so a stolen session cannot add a fresh wallet and use that. And an account that started with a wallet and later added an email and password can use that password as the second factor for wallet sign-ins. Turning <em>any</em> two-factor off, or changing which wallet is the key, requires the current factor &mdash; at the change, or at the &ldquo;confirm it's you&rdquo; step within the last 30 minutes (section 6) &mdash; so someone who steals a logged-in session cannot remove it unless they took it inside that window. Code guessing is rate-limited and gives up after five tries, which destroys the half-finished login.</p>
+      </section>
+
+      <!-- 4b -->
+      <section id="s4b">
+        <div class="sec-head"><span class="sec-num">04b</span><h2>Sign in with Send</h2></div>
+        <p>Other people&rsquo;s apps and games can let members sign in with their Send account, the way many sites offer a Google or X button. It uses the standard protocols for this, <strong>OAuth 2.0</strong> with <strong>PKCE</strong> and <strong>OpenID Connect</strong>, so a builder can use an ordinary library. It is run by this site&rsquo;s own server, not by a blockchain or a group of servers: this site is the one that says who you are. What it hands an app is a signed note (an ID token, signed with a key published at <span class="mono">/.well-known/jwks.json</span>), so the app can check the note without asking this site again.</p>
+        <h3>What an app can see</h3>
+        <p>When an app asks for something you have not answered yet, this site shows you a page with the app&rsquo;s name, its homepage, where it will send you back, and &ldquo;Not reviewed by Just Send It&rdquo; until an admin has looked at it. Below that is one tick-box for each thing the app asked for, most showing your own value, and <strong>every box starts unticked</strong>:</p>
+        <ul>
+          <li><strong>Your handle</strong> and <strong>your picture</strong>.</li>
+          <li><strong>Your Send ID</strong> &mdash; the same number in every app you share it with, which is the point: one account, the same everywhere. Its box says so.</li>
+          <li><strong>Your Send Power</strong>, with your level and title.</li>
+          <li><strong>Your Send Boost</strong> &mdash; the total only. It is made from your holdings, your OG tier, a live community and the Rocket Run, weekly and beta boosts, so an app can estimate your holdings from it, and its box says that too.</li>
+          <li><strong>Whether your wallet passed the holder check</strong>.</li>
+          <li><strong>Keeping these up to date</strong> for up to 30 days after you sign in, without a new sign-in.</li>
+        </ul>
+        <p>Apart from a private ID for you and roughly when you signed in, nothing else is ever sent. Apps never get your email, your wallets, your sign-in history or your communities. Each app gets its own random id for you, made the first time you allow it, so two apps cannot match you up by that id. Your handle, picture and exact Send Power are public on the Wall, so an app given any of them can find your handle; their boxes say so.</p>
+        <h3>Guarding the door</h3>
+        <p>The first time you allow an app, the site asks you to confirm it&rsquo;s you (Section 6), unless you have just signed in for it or your session is still unlocked, so someone who copied your session cannot connect an app with one press unless they took it inside that window. Changing your password, ending your other sessions or turning two-factor off ends every app&rsquo;s sign-in with Send, and each one asks you again next time, as a restriction or deleting your account does. Settings &rarr; <strong>Apps you&rsquo;ve signed in to</strong> lists every app, what it can see and since when, and <strong>Revoke</strong> ends it.</p>
+        <p>Every app must use PKCE, which stops a stolen sign-in code from being used by anyone else. Codes last 60 seconds and work once; an access pass lasts an hour; a keep-up-to-date pass is swapped for a new one each time it is used, and using an old one ends the whole chain. Limits are counted per app, per member and per address, so one member, or a stream of refused requests, uses up its own share rather than the app&rsquo;s.</p>
+        <h3>What is kept</h3>
+        <p>The site keeps each app&rsquo;s registration; for each member and app, what was ticked and which boxes were asked, when it was first allowed and when that answer last changed, and the app&rsquo;s id for that member; and the live codes and passes, as one-way fingerprints, until soon after they expire (they are left out of backups). The sign-in time it tells an app is rounded down to the hour (to ten minutes when the app asks how recent the sign-in is; the exact second only for a fresh sign-in you make for that app), so apps cannot match you up by it. It keeps no log of which app you used when, and not your internet address or device, beyond rate-limit counters kept in memory for up to about an hour.</p>
+        <h3>For builders</h3>
+        <p>The <a href="/developers">Developers page</a> has the addresses, the full list of what each permission shares, a browser example in about thirty lines, a server example, the button, and <strong>Your apps</strong>: up to five apps per member, each with up to five return addresses. An admin can mark an app reviewed or switch it off. The site&rsquo;s operator can also set up one app in advance, the game <em>Sendy&rsquo;s Metaverse</em> at sendy.gg, without a member registering it.</p>
       </section>
 
       <!-- 5 -->
@@ -1345,6 +1370,7 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
           <li><strong>Sendy can be wrong.</strong> He answers from the site&rsquo;s own text and public data, he is not retrained, and a program that matches questions to passages will sometimes match the wrong one. Check the page he points to.</li>
           <li><strong>The numbers in the menu bar are totals, with gaps.</strong> Views have been counted only since 13 October 2026, the live count starts again from zero whenever the server restarts, and the verified chart is not a history of past counts (Section 14c).</li>
           <li><strong>Encryption protects a stolen database, not a stolen server.</strong> If an attacker took the key as well as the data, the scrambling would not save you.</li>
+          <li><strong>Sign in with Send rests on this site.</strong> It is one server, not a network: if the site is down, nobody can sign in to an app with it, and an app has to trust this site&rsquo;s word about who you are. An app that was handed your details can keep what it was handed; Revoke stops it getting more.</li>
           <li><strong>Rocket Run is fair but not provably fair.</strong> You are trusting the server's roll. Nothing is staked, so nothing is lost either way.</li>
           <li><strong>Points are not money.</strong> They cannot be cashed out, sold or transferred, and they never will be.</li>
           <li><strong>Nothing here is advice.</strong> The site shows what the blockchain says. What you do about it is yours to decide, and most new coins go to zero.</li>

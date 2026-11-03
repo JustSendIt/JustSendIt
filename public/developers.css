@@ -16,6 +16,12 @@
 /* the two tables: a table on a wide screen, labelled rows on a narrow one (nothing scrolls sideways at 320px) */
 .dv-table { width: 100%; border-collapse: collapse; margin: 0.4rem 0 0.6rem; table-layout: auto; }
 .dv-table td code, .dv-table th { overflow-wrap: anywhere; }
+/* ...but as a table, a name is never split: a scope, a claim, a header word or the "always" pill moves to the next line
+   whole (the columns take the room from the descriptions and the examples, which still wrap anywhere) */
+@media (min-width: 761px) {
+  .dv-table th, .dv-table td:is([data-label="Scope"], [data-label="Claims"]) code, .dv-req { overflow-wrap: normal; word-break: normal; white-space: nowrap; }
+  .dv-table th { white-space: normal; }
+}
 @media (max-width: 760px) {
   .dv-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
   .dv-table, .dv-table tbody, .dv-table tr, .dv-table td { display: block; width: auto; }
