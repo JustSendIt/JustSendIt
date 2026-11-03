@@ -15911,22 +15911,39 @@ function healthCheck() {
    Owner, 2026-11-03: other people building apps around Send sign members in with their Send account and carry over the
    handle, the Send ID, Send Power (level and title) and the Send Boost — "account consistency across everyone building
    around Send" — without being data-farmed. The protocol, the consent page, the tables and the privacy rules are
-   lib/oidc.js's; this hands it the site's own pieces: the sessions (one sign-in system, never a second), the keyring (the
-   signing keys are encrypted with it, and the pairwise subject secret is derived from it and never stored), the claims'
-   sources (levelForXp, titleFor, effectiveMult, the Send ID) and the site's rules (the restriction, the reserved names). */
+   lib/oidc.js's; this hands it the site's own pieces: the sessions (one sign-in system, never a second), "Confirm it's you"
+   (ownershipRefusal, asked on a member's first Allow for an app), the keyring (the signing keys are encrypted with it), the
+   claims' sources (levelForXp, titleFor, effectiveMult, the Send ID) and the site's rules (the restriction, the reserved
+   names, the rate-limit buckets). */
 const OIDC_LIB = require('./lib/oidc.js');
 const OIDC = OIDC_LIB.createOidc({
   db, now, encField, decField, hashToken, parseCookies, getUser, rateLimit, clientIp, send, bad, readBody, blockSanctioned, isAdmin,
+  // how full a rate-limit bucket is, without counting this request (the token endpoint counts only what it refused)
+  rateHits: (key, windowMs) => { const b = buckets.get(key); return b && now() - b.t <= windowMs ? b.n : 0; },
+  ownershipRefusal: (me, b) => ownershipRefusal(me, b), verifyNeeds: (me) => verifyNeedsOf(me),
   origin: () => SITE_ORIGIN, escHtml: (v) => escHtml(v), assetVer: (f) => assetVer(f), secHeaders: SEC_HEADERS,
-  pairwiseSecret: () => KEYS.derive('oidc-pairwise-sub'),
   levelForXp, titleFor, effectiveMult, restrictionOf, sendNoOf: (u) => sendNoOf(u),
   nameKey: (v) => nameKey(v), reservedKeys: () => [...RESERVED_KEYS],
   // the signing key is replaced every this many days (a new one is published a day before it signs); 0 = only by hand (/admin)
   rotateDays: () => { const v = String(process.env.OIDC_KEY_ROTATE_DAYS == null ? '' : process.env.OIDC_KEY_ROTATE_DAYS).trim(); return v === '' ? 90 : Math.max(0, Number(v) || 0); },
   log: (m) => console.log(m),
 });
+/* The first app (owner, 2026-11-03: one system, sendy.gg its first app): the game's server, a reviewed confidential client
+   owned by no member. CONNECT_SENDY_SECRET_HASH is the SHA-256 (64 hex) of the secret the game holds — the secret itself
+   never comes here; unset, the client is not seeded (and one seeded before signs nobody in). CONNECT_SENDY_REDIRECT is its
+   one redirect address. */
+try {
+  OIDC.seedFirstParty({ clientId: 'sendy.gg', name: 'Sendy\'s Metaverse', homepage: 'https://sendy.gg',
+    description: 'The Send game world: your handle, Send ID and Send Power, carried into the game.',
+    redirect: String(process.env.CONNECT_SENDY_REDIRECT || '').trim() || 'https://sendy.gg/api/sendrh/callback',
+    secretHash: String(process.env.CONNECT_SENDY_SECRET_HASH || '').trim() });
+} catch (e) { console.error('Sign in with Send: sendy.gg could not be set up', e && e.message); }
 // a member who loses access to apps loses it now, not at the next token use (which refuses them anyway)
 function oidcRevokeUser(userId) { try { OIDC.revokeUser(userId); } catch {} }
+/* A change to how the account is proved (a password change, "end other sessions", two-factor off): every app's grant ends
+   with the sessions it shut out — consents, codes and tokens — so an app let in through a session the member just ended
+   loses it too. The answer counts the apps. */
+function oidcRevokeAll(userId) { try { return OIDC.revokeAllGrants(userId); } catch (e) { console.error('Sign in with Send: revoking every app failed', e && e.message); return 0; } }
 
 const server = http.createServer(async (req, res) => {
   res._gzip = acceptsGzip(req.headers['accept-encoding']); // whether we may gzip this response (read by send/serveFile)
@@ -16626,7 +16643,8 @@ const server = http.createServer(async (req, res) => {
         const r = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid));
         burnProofsOff(me, 'you ended your other sessions, and one of them had started this window');   // a window those sessions opened goes with them
         const keyReset = resetDataKeySecret(me.id, 'you ended your other sessions');
-        return send(res, 200, { ok: true, endedOthers: r.changes, dataKeyReset: keyReset });
+        const appsSignedOut = oidcRevokeAll(me.id);   // Sign in with Send: every app let in through a session that just ended loses it too
+        return send(res, 200, { ok: true, endedOthers: r.changes, dataKeyReset: keyReset, appsSignedOut });
       }
       /* Change the account password. There is no reset — this site can send no email — so this is the only
          way a password ever changes, and it needs the old one plus whatever second factor is on. Every
@@ -16965,8 +16983,9 @@ const server = http.createServer(async (req, res) => {
         const dropped = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token <> ?').run(me.id, hashToken(me.sid)).changes;
         burnProofsOff(me, 'the password was changed, and another session had started this window');
         resetDataKeySecret(me.id, 'your password was changed');
-        notify(me.id, '🔑', 'Your password was changed' + (dropped ? ', and ' + dropped + ' other signed-in ' + (dropped === 1 ? 'session was' : 'sessions were') + ' ended.' : '.'), 'wallet');
-        return send(res, 200, { ok: true, endedOthers: dropped });
+        const appsSignedOut = oidcRevokeAll(me.id);   // Sign in with Send: and every app's sign-in, which a session holding the old password could have made
+        notify(me.id, '🔑', 'Your password was changed' + (dropped ? ', and ' + dropped + ' other signed-in ' + (dropped === 1 ? 'session was' : 'sessions were') + ' ended' : '') + (appsSignedOut ? (dropped ? '; ' : ', and ') + appsSignedOut + (appsSignedOut === 1 ? ' app you had signed in to with Send was' : ' apps you had signed in to with Send were') + ' signed out.' : '.'), 'wallet');
+        return send(res, 200, { ok: true, endedOthers: dropped, appsSignedOut });
       }
       // Unlink ALL linked wallets from the account (the nav "Disconnect wallet"). Guarded so it can't lock you out or
       // strand wallet-2FA. Reversible — the user can re-link by signing again. Holder streak resets (we can no longer
@@ -17099,8 +17118,9 @@ const server = http.createServer(async (req, res) => {
         setTwofaWallet(me.id, null);   // the wallets stay linked and keep counting for Send Power; none of them is a key any more
         sudoOthersOff(me);
         resetDataKeySecret(me.id, 'two-factor was turned off');
-        notify(me.id, '🔓', 'Two-factor was turned OFF on your account. Not you? Turn it back on and end other sessions in Settings → Security.', 'alert');   // F091
-        return send(res, 200, { ok: true });
+        const appsSignedOut = oidcRevokeAll(me.id);   // Sign in with Send: every app's sign-in ends with the factor that guarded it
+        notify(me.id, '🔓', 'Two-factor was turned OFF on your account' + (appsSignedOut ? ', and every app you had signed in to with Send was signed out' : '') + '. Not you? Turn it back on and end other sessions in Settings → Security.', 'alert');   // F091
+        return send(res, 200, { ok: true, appsSignedOut });
       }
       /* Change WHICH linked wallet is the second factor, without turning 2FA off and on again (which would
          mean a window with no protection at all). Proving the CURRENT factor is required, so someone holding

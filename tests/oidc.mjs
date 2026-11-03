@@ -42,6 +42,14 @@ const IP = NET + '10';
 let ipTick = 0;
 const nextIp = () => NET + (100 + (ipTick++ % 120));   // the per-address limits are for a person, not for a suite making hundreds of sign-ins
 
+// a member signs in with a password (an email identity, scrypt as the server writes it): what "Confirm it's you" asks for
+function givePassword(id, pw) {
+  const salt = crypto.randomBytes(16).toString('hex');
+  db.prepare("INSERT INTO identities (user_id, type, identifier, identifier_enc, secret, linked_at) VALUES (?, 'email', ?, 'v1:test', ?, ?)").run(id, 'oi-test-' + crypto.randomBytes(8).toString('hex'), salt + ':' + crypto.scryptSync(pw, salt, 64).toString('hex'), Date.now());
+}
+/* Members are made as if they had just confirmed it is them (an open "Confirm it's you" window, as a fresh sign-in of an
+   account whose only proof is its sign-in has), so a first Allow passes as it does for them; o.sudo === false makes a
+   session with no window, which is asked. */
 function mkUser(name, o = {}) {
   db.prepare('DELETE FROM users WHERE username = ?').run(name);
   if (o.id) db.prepare('DELETE FROM users WHERE id = ?').run(o.id);
@@ -55,9 +63,9 @@ function mkUser(name, o = {}) {
   return { id, name, ...newSession(id, o) };
 }
 function newSession(id, o = {}) {
-  const raw = 'tok_oi_' + crypto.randomBytes(16).toString('hex');
+  const raw = 'tok_oi_' + crypto.randomBytes(16).toString('hex'), at = Date.now() - (o.ageMs || 5000), sudo = o.sudo !== false;
   db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed, sudo_until, sudo_since) VALUES (?,?,?,?,1,?,?)')
-    .run(sha(raw), id, Date.now() - 5000, Date.now() + 864e5, o.sudo ? Date.now() + 36e5 : null, o.sudo ? Date.now() : null);
+    .run(sha(raw), id, at, Date.now() + 864e5, sudo ? Date.now() + 36e5 : null, sudo ? at : null);
   return { sid: raw, cookie: 'sid=' + raw };
 }
 async function api(p, opts = {}) {
@@ -127,12 +135,15 @@ try {
     && /if \(p\.startsWith\('\/api\/oauth\/'\) \|\| p\.startsWith\('\/api\/admin\/oauth\/'\)\) \{ if \(await OIDC\.api\(req, res, p, me\)\) return; \}/.test(SRC) && /OIDC\.forgetUser\(uid\);/.test(SRC));
   check('the signing keys\' private halves are a protected column (re-encrypted by every key rotation); live codes and tokens are not kept in backups',
     KEYLIB.ENC_FIELDS.some(([t, c]) => t === 'oauth_keys' && c === 'private_enc') && /'DELETE FROM oauth_codes', 'DELETE FROM oauth_tokens'/.test(SRC));
-  check('the pairwise secret is derived from the keyring (HKDF over the index key\'s inner half, which never rotates) and never stored',
-    /pairwiseSecret: \(\) => KEYS\.derive\('oidc-pairwise-sub'\)/.test(SRC) && /derive\(info\) \{ return Buffer\.from\(crypto\.hkdfSync\('sha256', this\.inner, 'jsi-derive', String\(info\), 32\)\); \}/.test(readFileSync(path.join(ROOT, 'lib', 'keys.js'), 'utf8'))
-    && !/pairwise/i.test(db.prepare("SELECT group_concat(sql, ' ') s FROM sqlite_master").get().s || ''));
-  const K1 = KEYLIB.Keys.legacy(crypto.randomBytes(32));
-  const ring = KEYLIB.Keys.fromRing(KEYLIB.newRingFromLegacy(Buffer.from(K1.byId.get(1))));
-  check('  ...the same secret before and after a key file becomes a keyring, and not the same as any blind index', K1.derive('oidc-pairwise-sub').equals(ring.derive('oidc-pairwise-sub')) && K1.derive('oidc-pairwise-sub').toString('hex') !== K1.bidxAt('oidc-pairwise-sub', 0));
+  const WIRE = SRC.slice(SRC.indexOf('const OIDC = OIDC_LIB.createOidc'), SRC.indexOf('function oidcRevokeUser'));
+  check('the sub is a random 256-bit id per (member, app), made at the first grant and STORED (oauth_subjects): no key derives it, so no key change can move it',
+    /CREATE TABLE IF NOT EXISTS oauth_subjects/.test(LIB) && /\.run\(userId, clientId, randTok\(32\)\)/.test(LIB) && /subFor\(me\.id, c\.client_id\);   \/\/ the member's private id in this app: made at the first grant/.test(LIB)
+    && !/pairwiseSecret|derive\(/.test(WIRE) && !/derive\(info\)/.test(readFileSync(path.join(ROOT, 'lib', 'keys.js'), 'utf8')) && !/createHmac/.test(LIB));
+  const credRoutes = ["if (p === '/api/auth/sessions' && req.method === 'DELETE')", "if (p === '/api/account/password' && req.method === 'POST')", "if (p === '/api/2fa/disable' && req.method === 'POST')"]
+    .map((h) => { const i = SRC.indexOf(h); return i < 0 ? '' : SRC.slice(i, SRC.indexOf('return send(res, 200', i)); });
+  check('a password change, "end other sessions" and two-factor turned off each end every app\'s grant (OIDC.revokeAllGrants), where the sessions and the data-key secret are reset',
+    credRoutes.every((r) => /resetDataKeySecret\(me\.id/.test(r) && /const appsSignedOut = oidcRevokeAll\(me\.id\);/.test(r)) && /function oidcRevokeAll\(userId\) \{ try \{ return OIDC\.revokeAllGrants\(userId\);/.test(SRC)
+    && /ownershipRefusal: \(me, b\) => ownershipRefusal\(me, b\)/.test(WIRE) && /OIDC\.seedFirstParty\(\{ clientId: 'sendy\.gg'/.test(SRC), credRoutes.map((r) => r.length).join(' '));
 
   /* ═══ 1. discovery and keys ═══ */
   const disc = await req('GET', '/.well-known/openid-configuration', { headers: { Host: 'evil.example', Origin: 'https://racer.example' } });
@@ -163,7 +174,7 @@ try {
   const devA = mkUser('__oi_dev_a__'), devB = mkUser('__oi_dev_b__'), devC = mkUser('__oi_dev_c__'), devD = mkUser('__oi_dev_d__');
   const anon = await api('/api/oauth/apps');
   check('registering an app takes a signed-in member', anon.status === 401);
-  const mkApp = async (dev, body) => { const r = await api('/api/oauth/apps', { method: 'POST', cookie: dev.cookie, body }); if (r.j && r.j.app) apps.push(r.j.app.clientId); return r; };
+  const mkApp = async (dev, body, ip) => { const r = await api('/api/oauth/apps', { method: 'POST', cookie: dev.cookie, body, ip }); if (r.j && r.j.app) apps.push(r.j.app.clientId); return r; };
   const WALK_REDIRECT = 'http://127.0.0.1:' + walkPort + '/cb';
   const rPub = await mkApp(devA, { name: 'Send Racer', homepage: 'https://racer.example', redirectUris: ['https://racer.example/cb', 'http://localhost:5173/cb', WALK_REDIRECT], kind: 'public', description: 'A racing game for senders.' });
   const PUB = rPub.j && rPub.j.app ? { clientId: rPub.j.app.clientId, redirect: 'https://racer.example/cb' } : null;
@@ -233,7 +244,18 @@ try {
   check('a bad or unknown app, a missing redirect_uri and every near miss of the registered one (prefix, slash, traversal, case, fragment, userinfo, query, port, host) get an error page and NO redirect — never cached, never framed', noRedirect.length === 0, noRedirect.join(' | '));
   check('  ...the page says why, and that nothing was shared', /never registered/.test(twoRedirects.text) && /Nothing was shared/.test(twoRedirects.text));
 
-  /* ═══ 5. ...then every other problem goes back to the app, with its state ═══ */
+  /* ═══ 5. ...then every other problem goes back to the app, with its state: at once for a reviewed app, by the member's press for any other ═══ */
+  const reviewedSet = (app, yes) => db.prepare('UPDATE oauth_clients SET reviewed_at = ?, reviewed_by = NULL WHERE client_id = ?').run(yes ? Date.now() : null, app.clientId);
+  // an app nobody reviewed: a page (never a redirect) that says what went wrong, with one link back to its own address carrying the answer
+  const linkBack = (r) => { const m = /<a class="btn btn-primary" href="([^"]+)" rel="noreferrer nofollow" data-tip="[^"]{8,}">Go back to ([^<]+)<\/a>/.exec(r.text || ''); try { return m ? { u: new URL(m[1].replace(/&amp;/g, '&')), host: m[2] } : null; } catch { return null; } };
+  const unrev = [];
+  for (const [why, p, want] of [['response_type=token', authzPath(PUB, { ...base0, extra: { response_type: 'token' }, state: 'U1' }), 'unsupported_response_type'], ['plain PKCE', authzPath(PUB, { ...base0, method: 'plain' }), 'invalid_request'],
+    ['no client data but its ID and address', '/oauth/authorize?client_id=' + PUB.clientId + '&redirect_uri=' + encodeURIComponent(PUB.redirect), 'unsupported_response_type'], ['prompt=none signed out', authzPath(PUB, { ...base0, prompt: 'none' }), 'login_required']]) {
+    const r = await req('GET', p, why.includes('signed out') ? {} : { cookie: alice.cookie }), l = linkBack(r);
+    if (!(r.status === 400 && !r.loc && /<html/.test(r.text) && l && l.u.origin + l.u.pathname === 'https://racer.example/cb' && l.u.searchParams.get('error') === want && l.u.searchParams.get('iss') === BASE && l.host === 'racer.example' && /has not been reviewed by Just Send It/.test(r.text))) unrev.push(why + ' → ' + r.status + ' ' + r.loc);
+  }
+  check('an app nobody here reviewed is never sent an error on its own (its address is whatever its developer typed): the member gets a page saying what went wrong and a link back that carries the answer — so this site is no redirector anyone can aim', unrev.length === 0, unrev.join(' | '));
+  reviewedSet(PUB, true);   // ...and a reviewed one is answered at once, as RFC 6749 §4.1.2.1 says
   const back = async (why, p, want) => { const r = await req('GET', p, { cookie: alice.cookie }); const u = locOf(r); const ok = r.status === 302 && u && u.origin + u.pathname === 'https://racer.example/cb' && u.searchParams.get('error') === want && u.searchParams.get('iss') === BASE && !u.searchParams.get('code'); return { ok, why, r, u }; };
   const errs = [
     await back('response_type=token', authzPath(PUB, { ...base0, extra: { response_type: 'token' }, state: 'S1' }), 'unsupported_response_type'),
@@ -246,8 +268,9 @@ try {
     await back('a repeated parameter', authzPath(PUB, base0) + '&scope=openid', 'invalid_request'),
     await back('a request object', authzPath(PUB, { ...base0, extra: { request: 'eyJ' } }), 'request_not_supported'),
     await back('prompt=none with another prompt', authzPath(PUB, { ...base0, prompt: 'none consent' }), 'invalid_request'),
+    await back('a max_age that is not a number of seconds', authzPath(PUB, { ...base0, extra: { max_age: '1h' } }), 'invalid_request'),
   ];
-  check('every other problem goes back to the app\'s registered address as an error (RFC 6749 §4.1.2.1) with iss: response_type, no state, no PKCE, plain PKCE, no method, a malformed challenge, no openid, a repeated parameter, a request object',
+  check('for a reviewed app every other problem goes back to its registered address as an error (RFC 6749 §4.1.2.1) with iss: response_type, no state, no PKCE, plain PKCE, no method, a malformed challenge, no openid, a repeated parameter, a request object, a bad max_age',
     errs.every((e) => e.ok), errs.filter((e) => !e.ok).map((e) => e.why + ' → ' + e.r.status + ' ' + e.r.loc).join(' | '));
   check('  ...with the app\'s state echoed when it sent one, and none invented when it did not (state is required)', errs[0].u && errs[0].u.searchParams.get('state') === 'S1' && errs[1].u && !errs[1].u.searchParams.has('state') && /state is required/.test(errs[1].u.searchParams.get('error_description')));
   check('  ...PKCE S256 is required of every app: plain is refused by name', /plain is refused/.test(errs[3].u && errs[3].u.searchParams.get('error_description')));
@@ -266,7 +289,8 @@ try {
   check('  ...an unknown id is an error page with no redirect, and an id with a return address added is not a way back (no redirect anywhere)', bogus.status === 400 && !bogus.loc && smuggle.status === 400 && !smuggle.loc, bogus.status + ' ' + smuggle.status + ' ' + smuggle.loc);
   const pn = await req('GET', authzPath(PUB, { ...base0, prompt: 'none', state: 'pn-1' }));
   const pnU = locOf(pn);
-  check('prompt=none signed out answers login_required at once, with the state — nothing is shown', pn.status === 302 && pnU.searchParams.get('error') === 'login_required' && pnU.searchParams.get('state') === 'pn-1', pn.status + ' ' + pn.loc);
+  check('prompt=none signed out answers a reviewed app login_required at once, with the state — nothing is shown', pn.status === 302 && pnU.searchParams.get('error') === 'login_required' && pnU.searchParams.get('state') === 'pn-1', pn.status + ' ' + pn.loc);
+  reviewedSet(PUB, false);
 
   /* ═══ 7. the consent page ═══ */
   const ALL = ['send.handle', 'send.picture', 'send.id', 'send.power', 'send.boost', 'send.verified', 'offline_access'];
@@ -340,7 +364,7 @@ try {
   } catch (e) { sigOk = false; }
   check('the id_token verifies against the published JWKS with node:crypto (ES256, the kid named, no library)', sigOk && head.alg === 'ES256' && head.typ === 'JWT' && jwks.keys.some((k) => k.kid === head.kid), JSON.stringify(head));
   const t0 = Math.floor(Date.now() / 1000);
-  check('  ...iss, aud = the client ID, iat now, exp 10 minutes on, auth_time, the nonce echoed, at_hash for the access token', IDP.iss === BASE && IDP.aud === PUB.clientId && Math.abs(IDP.iat - t0) <= 5 && IDP.exp - IDP.iat === 600 && typeof IDP.auth_time === 'number' && IDP.auth_time <= IDP.iat && IDP.nonce === 'n-0S6_WzA2Mj'
+  check('  ...iss, aud = the client ID, iat now, exp 10 minutes on, auth_time (the sign-in floored to the UTC hour: never a per-session fingerprint), the nonce echoed, at_hash for the access token', IDP.iss === BASE && IDP.aud === PUB.clientId && Math.abs(IDP.iat - t0) <= 5 && IDP.exp - IDP.iat === 600 && typeof IDP.auth_time === 'number' && IDP.auth_time <= IDP.iat && IDP.auth_time % 3600 === 0 && IDP.auth_time > IDP.iat - 2 * 3600 && IDP.nonce === 'n-0S6_WzA2Mj'
     && IDP.at_hash === b64url(crypto.createHash('sha256').update(tok.access_token).digest().subarray(0, 16)), JSON.stringify(IDP));
   const A = aliceRow();
   check('  ...the claims are the consented ones, with the values in the database: handle, profile, Send ID, Send Power, level, title, Boost (the total), verified — and not the picture, which was not ticked',
@@ -364,7 +388,7 @@ try {
   })());
 
   const UI = await userinfo(tok.access_token);
-  check('userinfo answers the current values of the consented claims, with the same pairwise sub', UI.status === 200 && UI.j.sub === IDP.sub && keySet(UI.j) === 'preferred_username,profile,send_boost,send_id,send_level,send_power,send_title,send_verified,sub' && UI.j.send_power === 4321
+  check('userinfo answers the current values of the consented claims, with the same pairwise sub, and names the app the token was issued to (aud, client_id)', UI.status === 200 && UI.j.sub === IDP.sub && keySet(UI.j) === 'aud,client_id,preferred_username,profile,send_boost,send_id,send_level,send_power,send_title,send_verified,sub' && UI.j.send_power === 4321 && UI.j.aud === PUB.clientId && UI.j.client_id === PUB.clientId
     && UI.h.get('access-control-allow-origin') === '*' && !UI.h.get('access-control-allow-credentials') && /no-store/.test(UI.h.get('cache-control')), JSON.stringify(UI.j));
   db.prepare('UPDATE users SET points = 9999 WHERE id = ?').run(alice.id);
   const UI2 = await userinfo(tok.access_token, { method: 'POST' });
@@ -379,7 +403,10 @@ try {
   check('  ...and no table of it has a place for an IP, a device, a browser or a log of use', Object.values(cols).flat().every((c) => !/(^|_)(ip|ips|ip_idx|agent|ua|device|seen|last_seen|log|uses|use_count|last_use)(_|$)/i.test(c)), JSON.stringify(cols));
   const noTok = await userinfo(null), cookieOnly = await userinfo(null, { headers: { Cookie: alice.cookie } });
   const inQuery = await fetch(BASE + '/oauth/userinfo?access_token=' + tok.access_token, { headers: { 'X-Forwarded-For': nextIp() } });
-  check('  ...without a Bearer token it is 401 invalid_token with WWW-Authenticate — a session cookie is not a token, and neither is ?access_token=', noTok.status === 401 && /Bearer/.test(noTok.h.get('www-authenticate') || '') && cookieOnly.status === 401 && inQuery.status === 401);
+  const badTok = await userinfo('not-a-live-token');
+  check('  ...without a Bearer token it is 401 with WWW-Authenticate — a session cookie is not a token, and neither is ?access_token=', noTok.status === 401 && /Bearer/.test(noTok.h.get('www-authenticate') || '') && cookieOnly.status === 401 && inQuery.status === 401);
+  check('  ...RFC 6750 §3.1: a request with no credentials at all is challenged without an error code; one with a bad token is told invalid_token',
+    /^Bearer realm="[^"]+"$/.test(noTok.h.get('www-authenticate') || '') && /^Bearer realm="[^"]+", error="invalid_token"$/.test(badTok.h.get('www-authenticate') || '') && badTok.status === 401, noTok.h.get('www-authenticate') + ' | ' + badTok.h.get('www-authenticate'));
   check('no session cookie ever reaches an app: none set by the token endpoint, none in any token, and the token endpoint ignores cookies', !(T1.h.getSetCookie ? T1.h.getSetCookie() : []).length && !tok.id_token.includes(alice.sid) && tok.access_token !== alice.sid
     && (await tokenReq({ grant_type: 'refresh_token', refresh_token: 'x' }, { headers: { Cookie: alice.cookie } })).status === 401);
 
@@ -389,6 +416,8 @@ try {
   check('a refresh token gets a new access token, a NEW refresh token and a fresh id_token (no nonce) with the same sub', R1.status === 200 && r1.access_token && r1.refresh_token && r1.refresh_token !== tok.refresh_token && r1.access_token !== tok.access_token && jwtParts(r1.id_token).payload.sub === IDP.sub && !('nonce' in jwtParts(r1.id_token).payload), R1.text.slice(0, 200));
   const rtRow = db.prepare('SELECT * FROM oauth_tokens WHERE token_hash = ?').get(sha(r1.refresh_token)), rt0 = db.prepare('SELECT * FROM oauth_tokens WHERE token_hash = ?').get(sha(tok.refresh_token));
   check('  ...rotation never extends the chain: the new refresh token ends when the first did, 30 days from the sign-in', rtRow && rt0 && rtRow.expires_at === rt0.expires_at && Math.abs(rt0.expires_at - rt0.created_at - 30 * 864e5) < 1000 && rt0.used_at > 0);
+  check('  ...and keeps no timeline: the spent token is only flagged (used_at = 1, no time), and every refresh token of the chain carries the chain\'s start as its date, not its own',
+    rt0.used_at === 1 && rtRow.created_at === rt0.created_at && rtRow.used_at == null, JSON.stringify({ spent: rt0.used_at, c0: rt0.created_at, c1: rtRow.created_at }));
   const narrow = await tokenReq({ grant_type: 'refresh_token', refresh_token: r1.refresh_token, client_id: PUB.clientId, scope: 'openid send.handle send.picture' });
   check('  ...a refresh can narrow the scopes but never add one (the picture was not granted)', narrow.status === 400 && narrow.j.error === 'invalid_scope', narrow.text);
   const R2 = await tokenReq({ grant_type: 'refresh_token', refresh_token: r1.refresh_token, client_id: PUB.clientId });
@@ -429,7 +458,11 @@ try {
   const dup = await tokenReq('grant_type=authorization_code&code=a&code=b&client_id=' + PUB.clientId);
   const json = await fetch(BASE + '/oauth/token', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': nextIp() }, body: JSON.stringify({ grant_type: 'authorization_code' }) });
   const gtBad = await tokenReq({ grant_type: 'password', username: 'a', password: 'b', client_id: PUB.clientId });
+  const gtNone = await tokenReq({ client_id: PUB.clientId, code: 'x' });
   check('the token endpoint takes a form body only, no repeated parameter, and the two grant types only', dup.status === 400 && dup.j.error === 'invalid_request' && json.status === 400 && gtBad.status === 400 && gtBad.j.error === 'unsupported_grant_type');
+  check('  ...and a request with no grant_type at all is invalid_request (RFC 6749 §5.2: a missing parameter), not unsupported_grant_type', gtNone.status === 400 && gtNone.j.error === 'invalid_request' && /grant_type is required/.test(gtNone.j.error_description), gtNone.text);
+  const spentCode = db.prepare('SELECT used_at FROM oauth_codes WHERE code_hash = ?').get(sha(c3.code));
+  check('  ...a spent code is only flagged (used_at = 1), with no time of its use', spentCode && spentCode.used_at === 1, JSON.stringify(spentCode));
 
   /* ═══ 12. confidential apps: the secret, Basic or post, hashed and compared in constant time ═══ */
   const cc1 = await getCode(alice, CONF, { scopes: ['send.handle'], tick: ['send.handle'] });
@@ -468,6 +501,9 @@ try {
   const rvOther = await tokenReq({ token: T9.access_token, client_id: TWO.clientId }, { path: '/oauth/revoke' });
   const rvUnknown = await tokenReq({ token: 'nothing-of-ours', client_id: PUB.clientId }, { path: '/oauth/revoke' });
   check('  ...an unknown token and another app\'s token are both answered 200 — and another app\'s token is left alone', rvOther.status === 200 && rvUnknown.status === 200 && (await userinfo(T9.access_token)).status === 200);
+  const rvBadBasic = await tokenReq({ token: 'x' }, { path: '/oauth/revoke', basic: [CONF.clientId, 'not-the-secret'] }), tkBadBasic = await tokenReq({ grant_type: 'refresh_token', refresh_token: 'x' }, { basic: [CONF.clientId, 'not-the-secret'] });
+  check('  ...a wrong secret sent by Basic is 401 invalid_client with the Basic challenge (RFC 6749 §5.2), at revoke as at the token endpoint', rvBadBasic.status === 401 && rvBadBasic.j.error === 'invalid_client' && /^Basic realm="/.test(rvBadBasic.h.get('www-authenticate') || '')
+    && /^Basic realm="/.test(tkBadBasic.h.get('www-authenticate') || ''), rvBadBasic.status + ' ' + rvBadBasic.h.get('www-authenticate'));
 
   /* ═══ 14. the pairwise sub ═══ */
   const cA = await getCode(alice, TWO, { scopes: ['send.handle'] });
@@ -485,7 +521,7 @@ try {
   const cFew = await getCode(bob, XSS, { scopes: ['send.handle', 'send.id', 'send.power', 'offline_access'], tick: ['send.handle'] });
   const TF = await exchange(XSS, cFew);
   const pF = jwtParts(TF.j.id_token).payload, uF = await userinfo(TF.j.access_token);
-  check('ticking one box of four: the token and userinfo carry that one only, the scope says so, and no refresh token (offline_access was not ticked)', TF.status === 200 && TF.j.scope === 'openid send.handle' && !TF.j.refresh_token && keySet(uF.j) === 'preferred_username,profile,sub'
+  check('ticking one box of four: the token and userinfo carry that one only, the scope says so, and no refresh token (offline_access was not ticked)', TF.status === 200 && TF.j.scope === 'openid send.handle' && !TF.j.refresh_token && keySet(uF.j) === 'aud,client_id,preferred_username,profile,sub'
     && pF.preferred_username === '__oi_bob__' && !('send_id' in pF) && !('send_power' in pF), JSON.stringify(TF.j).slice(0, 200) + ' ' + JSON.stringify(uF.j));
   const cPic = await getCode(alice, XSS, { scopes: ['send.picture'], tick: ['send.picture'] });
   const pPic = jwtParts((await exchange(XSS, cPic)).j.id_token).payload;
@@ -497,10 +533,19 @@ try {
   const pnOk = await req('GET', authzPath(PUB, { scopes: ALL, challenge: pkce().challenge, prompt: 'none', state: 'pn-2' }), { cookie: alice.cookie });
   check('prompt=none, signed in and already answered: a code at once, no page', pnOk.status === 302 && locOf(pnOk).searchParams.get('code') && locOf(pnOk).searchParams.get('state') === 'pn-2', pnOk.status + ' ' + pnOk.loc);
   const carol = mkUser('__oi_carol__');
+  reviewedSet(PUB, true);
   const pnNo = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge, prompt: 'none', state: 'pn-3' }), { cookie: carol.cookie });
-  check('  ...and for a member who has not answered yet: consent_required, nothing shown', pnNo.status === 302 && locOf(pnNo).searchParams.get('error') === 'consent_required' && locOf(pnNo).searchParams.get('state') === 'pn-3', pnNo.status + ' ' + pnNo.loc);
+  check('  ...and for a member who has not answered yet: consent_required, nothing shown (a reviewed app)', pnNo.status === 302 && locOf(pnNo).searchParams.get('error') === 'consent_required' && locOf(pnNo).searchParams.get('state') === 'pn-3', pnNo.status + ' ' + pnNo.loc);
+  reviewedSet(PUB, false);
+  const pnNoU = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge, prompt: 'none', state: 'pn-4' }), { cookie: carol.cookie }), pnL = linkBack(pnNoU);
+  check('  ...(an app nobody reviewed gets that answer only by the member\'s press on the page that says so)', pnNoU.status === 400 && !pnNoU.loc && pnL && pnL.u.searchParams.get('error') === 'consent_required' && pnL.u.searchParams.get('state') === 'pn-4', pnNoU.status + ' ' + pnNoU.loc);
+  const consentAt = db.prepare('SELECT updated_at FROM oauth_consents WHERE user_id = ? AND client_id = ?').get(alice.id, PUB.clientId).updated_at;
   const pc = await req('GET', authzPath(PUB, { scopes: ALL, challenge: pkce().challenge, prompt: 'consent' }), { cookie: alice.cookie });
-  check('prompt=consent shows the page again even with an answer on file — with the member\'s own earlier ticks ticked', pc.status === 200 && /name="scope" value="send\.handle" checked/.test(pc.text) && !/name="scope" value="send\.picture" checked/.test(pc.text));
+  check('prompt=consent shows the page again even with an answer on file — and every box starts unticked, as the page and the docs say', pc.status === 200 && (pc.text.match(/name="scope"/g) || []).length === 7 && !/name="scope" value="[^"]+" checked/.test(pc.text) && /Nothing is ticked for you/.test(pc.text));
+  await sleep(5);
+  const pcSame = await post([['pending', field(pc.text, 'pending')], ['csrf', field(pc.text, 'csrf')], ['decision', 'allow'], ...['send.handle', 'send.id', 'send.power', 'send.boost', 'send.verified', 'offline_access'].map((x) => ['scope', x])]);
+  check('  ...and answering it the same way again changes nothing on file: the consent\'s "last changed" stays (it is never a "last signed in")', pcSame.status === 302 && !!locOf(pcSame).searchParams.get('code')
+    && db.prepare('SELECT updated_at FROM oauth_consents WHERE user_id = ? AND client_id = ?').get(alice.id, PUB.clientId).updated_at === consentAt, pcSame.status + ' ' + pcSame.loc);
   const more = await req('GET', authzPath(TWO, { scopes: ['send.handle', 'send.power'], challenge: pkce().challenge }), { cookie: alice.cookie });
   check('  ...and a request for a scope the member has not answered for shows the page (an answer on file covers only what it answered)', more.status === 200 && /Your Send Power/.test(more.text));
   const cancel = await post({ pending: field(more.text, 'pending'), csrf: field(more.text, 'csrf'), decision: 'cancel' });
@@ -531,6 +576,9 @@ try {
   check('  ...marks an app reviewed, and the consent page says so (and that it is still run by its own developer)', revd.status === 200 && revd.j.app.reviewed === true && /Reviewed by Just Send It on /.test(pageRev.text) && /still run by its own developer/.test(pageRev.text) && !/Not reviewed/.test(pageRev.text));
   const edit = await api('/api/oauth/apps/' + PUB.clientId, { method: 'POST', cookie: devA.cookie, body: { homepage: 'https://racer.example/new' } });
   check('  ...an edit to what members are shown (the website) clears the review', edit.status === 200 && edit.j.reviewCleared === true && edit.j.app.reviewed === false && edit.j.app.homepage === 'https://racer.example/new');
+  await api('/api/admin/oauth/apps/' + PUB.clientId, { method: 'POST', cookie: admin.cookie, body: { reviewed: true } });
+  const descEdit = await api('/api/oauth/apps/' + PUB.clientId, { method: 'POST', cookie: devA.cookie, body: { description: 'Karts, now with boost pads.' } });
+  check('  ...and so does an edit to its description alone (members read it on the consent page, right under the review)', descEdit.status === 200 && descEdit.j.reviewCleared === true && descEdit.j.app.reviewed === false, descEdit.text.slice(0, 200));
   const kindChange = await api('/api/oauth/apps/' + PUB.clientId, { method: 'POST', cookie: devA.cookie, body: { kind: 'confidential' } });
   check('  ...(an app\'s kind cannot change)', kindChange.status === 400);
   const bobLive = (await exchange(PUB, await getCode(bob, PUB, { scopes: ['send.handle'] }))).j;
@@ -548,10 +596,18 @@ try {
   db.prepare('UPDATE users SET restricted_until = ?, restrict_level = 1 WHERE id = ?').run(Date.now() + 864e5, dave.id);
   const dUi = await userinfo(daveTok.access_token);
   const dPage = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge }), { cookie: dave.cookie });
-  const dNone = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge, prompt: 'none' }), { cookie: dave.cookie });
-  check('a restricted account cannot sign in to apps: its tokens die (userinfo 401, refresh refused, the rows gone), the page says why without a code, prompt=none is access_denied',
+  check('a restricted account cannot sign in to apps: its tokens die (userinfo 401, refresh refused, the rows gone), the page says why without a code',
     dUi.status === 401 && (await tokenReq({ grant_type: 'refresh_token', refresh_token: daveTok.refresh_token, client_id: PUB.clientId })).status === 400 && !db.prepare('SELECT 1 FROM oauth_tokens WHERE user_id = ?').get(dave.id)
-    && dPage.status === 403 && /read-only mode/.test(dPage.text) && !dPage.loc && locOf(dNone).searchParams.get('error') === 'access_denied', dPage.status + ' ' + dNone.loc);
+    && dPage.status === 403 && /read-only mode/.test(dPage.text) && !dPage.loc, dPage.status);
+  // prompt=none tells an app nothing about moderation: a restricted member is answered exactly as a signed-out visitor, even by an app they once allowed
+  reviewedSet(PUB, true);
+  const dNone = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge, prompt: 'none', state: 'd-1' }), { cookie: dave.cookie });
+  const outNone = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge, prompt: 'none', state: 'd-1' }));
+  const sysNone = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge, prompt: 'none', state: 'd-1' }), { cookie: mkUser('__oi_system2__', { system: true }).cookie });
+  const same = (r) => { const u = locOf(r); return u ? [u.searchParams.get('error'), u.searchParams.get('error_description'), u.searchParams.get('state')].join('|') : r.status + ''; };
+  reviewedSet(PUB, false);
+  check('  ...and prompt=none answers a restricted (or system) account exactly as it answers a signed-out visitor — login_required, the same words — so no app learns a moderation status',
+    dNone.status === 302 && same(dNone) === same(outNone) && same(sysNone) === same(outNone) && /^login_required\|/.test(same(outNone)), [same(dNone), same(outNone), same(sysNone)].join(' / '));
   check('  ...and the restriction itself revokes at once (the admin\'s and the automatic one), not only at the next use', /oidcRevokeUser\(uid\);   \/\/ a restricted account/.test(SRC) && /if \(typeof oidcRevokeUser === 'function'\) oidcRevokeUser\(userId\);   \/\/ read-only accounts/.test(SRC));
   const sys = mkUser('__oi_system__', { system: true });
   const sysPage = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge }), { cookie: sys.cookie });
@@ -595,7 +651,7 @@ try {
   const uiLim = await hammer(() => userinfo('nope', { ip: NET + '22' }).then((r) => r.status), 310);
   const azLim = await hammer(() => req('GET', '/oauth/authorize?client_id=x', { ip: NET + '23' }).then((r) => r.status), 130);
   const rvLim = await hammer(() => tokenReq({ token: 'x', client_id: PUB.clientId }, { ip: NET + '24', path: '/oauth/revoke' }).then((r) => r.status), 130);
-  check('the token, userinfo, authorize and revoke endpoints are rate-limited per address (120/min, 300/min, 120 per 10 min, 120/min)', tokLim === 121 && uiLim === 301 && azLim === 121 && rvLim === 121, [tokLim, uiLim, azLim, rvLim].join(' '));
+  check('refused requests are rate-limited per address: 120 token requests a minute that carry nothing real, 300 userinfo requests without a live token, 120 sign-in pages in 10 minutes, 120 revokes a minute', tokLim === 121 && uiLim === 301 && azLim === 121 && rvLim === 121, [tokLim, uiLim, azLim, rvLim].join(' '));
 
   /* ═══ 22. CORS only where it belongs ═══ */
   const azC = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge }), { cookie: alice.cookie, headers: { Origin: 'https://racer.example' } });
@@ -605,16 +661,254 @@ try {
   const framed = await Promise.all([req('POST', '/oauth/token', { form: {} }), userinfo(null), req('POST', '/oauth/revoke', { form: {} }), req('GET', '/oauth/authorize?client_id=x')]);
   check('every answer under /oauth/ is unframeable (X-Frame-Options and frame-ancestors \'none\') and uncached', framed.every((r) => r.h.get('x-frame-options') === 'DENY' && /frame-ancestors 'none'/.test(r.h.get('content-security-policy') || '') && /no-store/.test(r.h.get('cache-control') || '')), framed.map((r) => r.status + ' ' + r.h.get('x-frame-options')).join(' | '));
 
-  /* ═══ 23. the browser walk: the sign-in and consent pages at 320, 390 and 1280 px ═══ */
-  await walk(alice, PUB, WALK_REDIRECT);
+  /* ═══ 23. "Confirm it's you" on a member's first Allow for an app (the owner's fold-in) ═══ */
+  const confirmOf = (html) => { const m = /<fieldset class="oa-confirm" id="oa-confirm">([\s\S]*?)<\/fieldset>/.exec(html || ''); return m ? m[1] : null; };
+  const fay = mkUser('__oi_fay__', { sudo: false, points: 11 }); givePassword(fay.id, 'fay-password-1');
+  const fPage = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge, state: 'fay-1' }), { cookie: fay.cookie });
+  const fBox = confirmOf(fPage.text);
+  check('a member\'s first Allow for an app asks "Confirm it\'s you" (the site\'s own step) on the consent page: the password field this account needs, said to go to Just Send It only',
+    fPage.status === 200 && /data-confirm="first"/.test(fPage.text) && fBox && /name="password" autocomplete="current-password"/.test(fBox) && !/name="code"/.test(fBox) && /first time you are letting Send Racer in/.test(fBox) && /never to Send Racer/.test(fBox), fPage.status + ' ' + (fBox || '').slice(0, 200));
+  const fForm = (extra) => [['pending', field(fPage.text, 'pending')], ['csrf', field(fPage.text, 'csrf')], ['decision', 'allow'], ['scope', 'send.handle'], ...extra];
+  const fNone = await post(fForm([]), { cookie: fay.cookie }), fWrong = await post(fForm([['password', 'not-it']]), { cookie: fay.cookie });
+  check('  ...Allow with no proof, or the wrong password, is refused (401) on the same page, saying why, keeping what was ticked: no code, nothing saved',
+    fNone.status === 401 && !fNone.loc && /class="oa-err" role="alert"/.test(fNone.text) && /name="scope" value="send\.handle" checked/.test(fNone.text) && fWrong.status === 401 && /password/.test(confirmOf(fWrong.text) || '')
+    && !db.prepare('SELECT 1 FROM oauth_consents WHERE user_id = ?').get(fay.id) && !db.prepare('SELECT 1 FROM oauth_codes WHERE user_id = ?').get(fay.id), fNone.status + ' ' + fWrong.status);
+  const fOk = await post(fForm([['password', 'fay-password-1']]), { cookie: fay.cookie });
+  check('  ...with the right password it goes through: a code, and the consent saved', fOk.status === 302 && !!locOf(fOk).searchParams.get('code') && locOf(fOk).searchParams.get('state') === 'fay-1' && !!db.prepare('SELECT 1 FROM oauth_consents WHERE user_id = ? AND client_id = ?').get(fay.id, PUB.clientId), fOk.status + ' ' + fOk.loc);
+  const fay2 = newSession(fay.id, { sudo: false });
+  const fAgain = await getCode({ ...fay, ...fay2 }, PUB, { scopes: ['send.handle'], prompt: 'consent', tick: ['send.handle'] });
+  check('  ...and once the app is allowed, asking again (prompt=consent) needs no second proof', fAgain.first.status === 200 && !confirmOf(fAgain.page) && !!fAgain.code, fAgain.first.status + ' ' + fAgain.r.status);
+  // the reported attack: a copied session cookie (no unlocked window) lets an app of the thief's own in with one press
+  const spin = await mkApp(devC, { name: 'Spin Palace', homepage: 'https://spin.example', redirectUris: ['https://spin.example/cb'], kind: 'public' });
+  const SPIN = { clientId: spin.j.app.clientId, redirect: 'https://spin.example/cb' };
+  const stolen = newSession(alice.id, { sudo: false });
+  const sPage = await req('GET', authzPath(SPIN, { scopes: ['send.handle', 'send.id', 'send.power', 'offline_access'], challenge: pkce().challenge }), { cookie: stolen.cookie });
+  const sAllow = await post([['pending', field(sPage.text, 'pending')], ['csrf', field(sPage.text, 'csrf')], ['decision', 'allow'], ...['send.handle', 'send.id', 'send.power', 'offline_access'].map((x) => ['scope', x])], { cookie: stolen.cookie });
+  check('  ...so a copied session cookie cannot connect an app to the account with one press: no code, no consent, no tokens', sPage.status === 200 && !!confirmOf(sPage.text) && sAllow.status === 401 && !sAllow.loc
+    && !db.prepare('SELECT 1 FROM oauth_consents WHERE user_id = ? AND client_id = ?').get(alice.id, SPIN.clientId), sPage.status + ' ' + sAllow.status + ' ' + sAllow.loc);
+  const ivy = mkUser('__oi_ivy__', { sudo: false });   // no password, no two-factor, no wallet: her sign-in is her only proof
+  const iPage = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge }), { cookie: ivy.cookie }), iBox = confirmOf(iPage.text);
+  check('  ...an account whose only proof is signing in is asked to sign in again (a button that does it), with no password field to fill', iBox && /id="oa-again" data-tip="[^"]{8,}">Sign in again</.test(iBox) && !/name="password"/.test(iBox), (iBox || '').slice(0, 200));
+  const jo = mkUser('__oi_jo__', { sudo: false });
+  db.prepare("INSERT INTO identities (user_id, type, identifier, identifier_enc, linked_at) VALUES (?, 'wallet', ?, 'v1:test', ?)").run(jo.id, 'oi-wallet-' + crypto.randomBytes(8).toString('hex'), Date.now() - 40 * 864e5);
+  db.prepare('UPDATE users SET created_at = ? WHERE id = ?').run(Date.now() - 41 * 864e5, jo.id);
+  const jPage = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge }), { cookie: jo.cookie }), jBox = confirmOf(jPage.text);
+  check('  ...and a wallet account signs with a wallet old enough to vouch: the button, the two fields it fills, and the site\'s wallet script on the page (the same signature every security change takes)',
+    jBox && /id="oa-wallet" data-tip="[^"]{8,}">Sign with wallet</.test(jBox) && /name="address"/.test(jBox) && /name="signature"/.test(jBox) && /src="\/wallet\.js(\?v=[^"]+)?"/.test(jPage.text) && !/src="\/auth\.js/.test(jPage.text)
+    && /purpose=manage&address=/.test(readFileSync(path.join(ROOT, 'public', 'oauth.js'), 'utf8')), (jBox || '').slice(0, 200));
+
+  /* ═══ 24. max_age and prompt=login (OIDC Core 3.1.2.1): a fresh proof, or login_required ═══ */
+  const gus = mkUser('__oi_gus__', { sudo: false, ageMs: 3 * 36e5 }); givePassword(gus.id, 'gus-password-1');
+  const gPw = (page) => post([['pending', field(page, 'pending')], ['csrf', field(page, 'csrf')], ['decision', 'allow'], ['scope', 'send.handle'], ['password', 'gus-password-1']], { cookie: gus.cookie });
+  const g0 = await req('GET', authzPath(TWO, { scopes: ['send.handle'], challenge: pkce().challenge }), { cookie: gus.cookie });
+  await gPw(g0.text);   // his first Allow for TWO (a three-hour-old session, his password)
+  // a proof opens the site's "Confirm it's you" window, which is an authentication too: shut it, so each check below sees only the old sign-in
+  const shut = () => db.prepare('UPDATE sessions SET sudo_until = NULL, sudo_since = NULL WHERE token = ?').run(sha(gus.sid));
+  const tAt = async (o) => { shut(); const pk = pkce(); const r = await req('GET', authzPath(TWO, { scopes: ['send.handle'], challenge: pk.challenge, ...o }), { cookie: gus.cookie }); return { r, pk }; };
+  const ma0 = await tAt({ extra: { max_age: '0' } });
+  check('max_age=0 with a sign-in three hours old: no code at once — the consent page asks for a fresh proof ("Confirm it\'s you", not the open window)', ma0.r.status === 200 && /data-confirm="fresh"/.test(ma0.r.text) && /asked for a fresh sign-in/.test(confirmOf(ma0.r.text) || ''), ma0.r.status + ' ' + ma0.r.loc);
+  const t0s = Math.floor(Date.now() / 1000);
+  const ma0ok = await gPw(ma0.r.text), ma0c = locOf(ma0ok) && locOf(ma0ok).searchParams.get('code');
+  const ma0t = ma0c ? (await tokenReq({ grant_type: 'authorization_code', code: ma0c, redirect_uri: TWO.redirect, code_verifier: ma0.pk.verifier, client_id: TWO.clientId })).j : {};
+  const ma0p = ma0t && ma0t.id_token ? jwtParts(ma0t.id_token).payload : {};
+  check('  ...and after it, the ID token\'s auth_time is the proof\'s own time (what max_age asked about), not the old sign-in', ma0ok.status === 302 && ma0p.auth_time >= t0s - 2 && ma0p.auth_time <= t0s + 10, JSON.stringify({ s: ma0ok.status, at: ma0p.auth_time, t0s }));
+  reviewedSet(TWO, true);
+  const maNone = await tAt({ prompt: 'none', extra: { max_age: '60' } });
+  reviewedSet(TWO, false);
+  check('  ...prompt=none with a max_age the sign-in is older than answers login_required (nothing shown)', maNone.r.status === 302 && locOf(maNone.r).searchParams.get('error') === 'login_required' && !locOf(maNone.r).searchParams.get('code'), maNone.r.status + ' ' + maNone.r.loc);
+  const pl = await tAt({ prompt: 'login' });
+  const plNo = await post([['pending', field(pl.r.text, 'pending')], ['csrf', field(pl.r.text, 'csrf')], ['decision', 'allow'], ['scope', 'send.handle']], { cookie: gus.cookie });
+  check('prompt=login asks for a fresh proof too (never just the consent page), and Allow without one is refused', pl.r.status === 200 && /data-confirm="fresh"/.test(pl.r.text) && plNo.status === 401 && !plNo.loc, pl.r.status + ' ' + plNo.status);
+  const maBig = await tAt({ extra: { max_age: '86400' } }), maBigC = locOf(maBig.r) && locOf(maBig.r).searchParams.get('code');
+  const maBigP = maBigC ? jwtParts((await tokenReq({ grant_type: 'authorization_code', code: maBigC, redirect_uri: TWO.redirect, code_verifier: maBig.pk.verifier, client_id: TWO.clientId })).j.id_token).payload : {};
+  const gSid = db.prepare('SELECT created_at FROM sessions WHERE token = ?').get(sha(gus.sid)).created_at;
+  check('a max_age the sign-in meets: the code at once, and auth_time the sign-in floored to the hour — coarse, never later than the truth, still inside max_age', maBig.r.status === 302 && !!maBigC && maBigP.auth_time % 3600 === 0 && maBigP.auth_time * 1000 <= gSid && Date.now() / 1000 - maBigP.auth_time <= 86400, JSON.stringify({ at: maBigP.auth_time, sid: Math.floor(gSid / 1000) }));
+  const gus2 = newSession(gus.id, { sudo: false, ageMs: 3 * 36e5 - 20 * 60e3 });   // a sign-in a little under three hours ago
+  const maMid = await (async () => { const pk = pkce(); const r = await req('GET', authzPath(TWO, { scopes: ['send.handle'], challenge: pk.challenge, extra: { max_age: String(3 * 3600) } }), { cookie: gus2.cookie }); return { r, pk }; })();
+  const maMidC = locOf(maMid.r) && locOf(maMid.r).searchParams.get('code');
+  const maMidP = maMidC ? jwtParts((await tokenReq({ grant_type: 'authorization_code', code: maMidC, redirect_uri: TWO.redirect, code_verifier: maMid.pk.verifier, client_id: TWO.clientId })).j.id_token).payload : {};
+  const g2Sid = db.prepare('SELECT created_at FROM sessions WHERE token = ?').get(sha(gus2.sid)).created_at;
+  check('  ...and when the hour would break max_age, the coarsest step that keeps it (ten minutes, or a minute): what an OIDC library checks still passes', !!maMidC && maMidP.auth_time % 60 === 0 && maMidP.auth_time * 1000 <= g2Sid && Date.now() / 1000 - maMidP.auth_time + 60 <= 3 * 3600, JSON.stringify({ s: maMid.r.status, at: maMidP.auth_time, sid: Math.floor(g2Sid / 1000) }));
+  check('  ...discovery lists prompt=login now that it is honoured', D.prompt_values_supported && (await req('GET', '/.well-known/openid-configuration')).j.prompt_values_supported.includes('login'));
+
+  /* ═══ 25. auth_time is not a fingerprint: one session, two apps from two developers ═══ */
+  const kim = mkUser('__oi_kim__');
+  const kSid = db.prepare('SELECT created_at FROM sessions WHERE token = ?').get(sha(kim.sid)).created_at;
+  const k1 = jwtParts((await exchange(PUB, await getCode(kim, PUB, { scopes: ['send.handle'], tick: ['send.handle'] }))).j.id_token).payload;
+  const k2 = jwtParts((await exchange(SPIN, await getCode(kim, SPIN, { scopes: ['send.handle'], tick: ['send.handle'] }))).j.id_token).payload;
+  check('two apps signed in from one session get different subs and an auth_time no finer than the UTC hour: not the session\'s own second, which they could match a member up by',
+    k1.sub !== k2.sub && k1.auth_time % 3600 === 0 && k2.auth_time % 3600 === 0 && k1.auth_time === Math.floor(kSid / 1000) - (Math.floor(kSid / 1000) % 3600), JSON.stringify({ a: k1.auth_time, b: k2.auth_time, s: Math.floor(kSid / 1000) }));
+
+  /* ═══ 26. a password change, "end other sessions" and two-factor off: every app's grant ends ═══ */
+  const credEvents = [
+    ['"end other sessions"', (u) => api('/api/auth/sessions', { method: 'DELETE', cookie: u.cookie })],
+    ['a password change', (u) => api('/api/account/password', { method: 'POST', cookie: u.cookie, body: { password: 'a-new-password-2' } })],
+    ['two-factor turned off', (u) => api('/api/2fa/disable', { method: 'POST', cookie: u.cookie, body: {} })],
+  ];
+  for (const [what, act] of credEvents) {
+    const m = mkUser('__oi_cred_' + credEvents.findIndex((x) => x[0] === what) + '__', { points: 900 }); givePassword(m.id, 'cred-password-1');
+    const thief = { ...m, ...newSession(m.id) };   // a session the member is about to shut out, which let two apps in
+    const tp = (await exchange(PUB, await getCode(thief, PUB, { scopes: ['send.handle', 'send.power', 'offline_access'], tick: ['send.handle', 'send.power', 'offline_access'] }))).j;
+    const tc = (await exchange(CONF, await getCode(thief, CONF, { scopes: ['send.handle', 'offline_access'], tick: ['send.handle', 'offline_access'] }))).j;
+    const subBefore = db.prepare('SELECT sub FROM oauth_subjects WHERE user_id = ? AND client_id = ?').get(m.id, PUB.clientId);
+    const r = await act(m);
+    const after = [await tokenReq({ grant_type: 'refresh_token', refresh_token: tp.refresh_token, client_id: PUB.clientId }), await tokenReq({ grant_type: 'refresh_token', refresh_token: tc.refresh_token, client_id: CONF.clientId, client_secret: CONF.secret }),
+      await userinfo(tp.access_token), await userinfo(tc.access_token)].map((x) => x.status);
+    const left = ['oauth_consents', 'oauth_tokens', 'oauth_codes'].map((t) => db.prepare('SELECT COUNT(*) n FROM ' + t + ' WHERE user_id = ?').get(m.id).n);
+    const back2 = await getCode(m, PUB, { scopes: ['send.handle'], tick: ['send.handle'] });
+    const subAfter = db.prepare('SELECT sub FROM oauth_subjects WHERE user_id = ? AND client_id = ?').get(m.id, PUB.clientId);
+    check(what + ' ends every app\'s grant: the refresh tokens are refused, userinfo answers 401, no consent, code or token is left — and the next sign-in asks again, under the same private ID',
+      r.status === 200 && r.j.appsSignedOut === 2 && after.join(' ') === '400 400 401 401' && left.join(' ') === '0 0 0' && back2.first.status === 200 && !!back2.code && subBefore && subAfter && subBefore.sub === subAfter.sub,
+      JSON.stringify({ st: r.status, j: r.j, after, left, again: back2.first.status }));
+  }
+
+  /* ═══ 27. the rate limits: per app first, generous per address, and nobody spends an app's budget with junk ═══ */
+  const ccL = await getCode(alice, CONF, { scopes: ['send.handle'] });
+  const oneIp = NET + '31';
+  let confHit = 0; for (let i = 0; i < 130; i++) { const r = await tokenReq({ grant_type: 'authorization_code', code: 'junk-' + i, redirect_uri: CONF.redirect, code_verifier: 'v'.repeat(43) }, { ip: oneIp, basic: [CONF.clientId, CONF.secret], headers: { 'User-Agent': 'SendDiamondForge/1.0 (+https://sendy.gg)' } }); if (r.status === 429) { confHit = i + 1; break; } }
+  const confReal = await tokenReq({ grant_type: 'authorization_code', code: ccL.code, redirect_uri: CONF.redirect, code_verifier: ccL.verifier }, { ip: oneIp, basic: [CONF.clientId, CONF.secret] });
+  check('a server app that proved its secret is limited by its own budget (600 a minute), not by the 120 a minute one address may have refused: 130 from one address, then a real exchange works',
+    confHit === 0 && confReal.status === 200 && !!confReal.j.access_token, confHit + ' ' + confReal.status + ' ' + confReal.text.slice(0, 120));
+  const ccP = await getCode(alice, PUB, { scopes: ['send.handle'] });
+  let junk = 0;
+  await Promise.all([0, 1, 2, 3, 4, 5].map(async (k) => { for (let i = 0; i < 100; i++) { const r = await tokenReq({ grant_type: 'authorization_code', code: 'junk', client_id: PUB.clientId, redirect_uri: PUB.redirect, code_verifier: 'v'.repeat(43) }, { ip: NET + (40 + k) }); if (r.status === 400) junk++; } }));
+  const pubReal = await exchange(PUB, ccP, {}, { ip: NET + '47' });
+  check('600 junk exchanges naming a public app (its client_id is public) from six addresses do not lock it out: the member\'s real one goes through', junk === 600 && pubReal.status === 200 && !!pubReal.j.access_token, junk + ' ' + pubReal.status + ' ' + pubReal.text.slice(0, 120));
+  check('  ...the limits are per app with the per-address caps above them as backstops (token, userinfo, handles), and /developers says so',
+    OL.LIMITS.tokenAddr > OL.LIMITS.tokenApp && OL.LIMITS.uiAddr >= OL.LIMITS.uiApp && OL.LIMITS.handlesAddr > OL.LIMITS.handlesApp && /'oa-ui-client:' \+ b\.client\.client_id/.test(LIB) && /'oa-handles-client:' \+ c\.client_id/.test(LIB)
+    && /600 token requests a minute for one app/.test(readFileSync(path.join(ROOT, 'public', 'developers.html'), 'utf8')));
+
+  /* ═══ 28. a token says which app it was issued to: userinfo's aud, and introspection for an app's own tokens ═══ */
+  const subst = (await exchange(PUB, await getCode(alice, PUB, { scopes: ['send.handle', 'send.id', 'offline_access'] }))).j;
+  const ui28 = await userinfo(subst.access_token);
+  const introOwn = await tokenReq({ token: subst.access_token, client_id: PUB.clientId }, { path: '/oauth/introspect' });
+  const introOther = await tokenReq({ token: subst.access_token }, { path: '/oauth/introspect', basic: [CONF.clientId, CONF.secret] });
+  const introUnknown = await tokenReq({ token: 'nothing' }, { path: '/oauth/introspect', basic: [CONF.clientId, CONF.secret] });
+  check('a backend handed another app\'s token for the same member can tell: userinfo names the app it was issued to (aud, client_id)', ui28.status === 200 && ui28.j.aud === PUB.clientId && ui28.j.client_id === PUB.clientId, JSON.stringify(ui28.j));
+  check('  ...and introspection (RFC 7662, in discovery) describes an app\'s own token — and answers another app\'s exactly as an unknown one, { active: false }',
+    D.introspection_endpoint === BASE + '/oauth/introspect' && introOwn.status === 200 && introOwn.j.active === true && introOwn.j.client_id === PUB.clientId && introOwn.j.aud === PUB.clientId && introOwn.j.sub === ui28.j.sub && introOwn.j.token_type === 'Bearer'
+    && introOther.status === 200 && JSON.stringify(introOther.j) === '{"active":false}' && JSON.stringify(introUnknown.j) === '{"active":false}' && introOwn.h.get('access-control-allow-origin') === '*', JSON.stringify([introOwn.j, introOther.j]));
+
+  /* ═══ 29. what the consent page shows about an app cannot pass for the site ═══ */
+  const devE = mkUser('__oi_dev_e__');
+  const lookalikes = [];
+  const tryLook = async (why, body) => { const r = await mkApp(devE, { name: 'Clean Name', homepage: 'https://clean.example', redirectUris: ['https://clean.example/cb'], kind: 'public', ...body }, nextIp()); if (r.status !== 400) lookalikes.push(why + ' → ' + r.status + ' ' + r.text.slice(0, 80)); return r; };
+  await tryLook('a Cyrillic е in the name', { name: 'Just Sеnd It' });
+  await tryLook('a Cyrillic ѕ in the name', { name: 'Juѕt Send It' });
+  await tryLook('the button\'s own words', { name: 'Sign in with Send' });
+  await tryLook('the account\'s', { name: 'Send Account Login' });
+  await tryLook('the first app\'s name', { name: 'Sendy\'s Metaverse' });
+  await tryLook('staff words', { name: 'Official Send Support' });
+  await tryLook('an admin', { name: 'Admin Rewards' });
+  await tryLook('a homograph homepage', { homepage: 'https://ѕendrh.com' });
+  await tryLook('the site\'s own address as homepage', { homepage: 'https://localhost/about' });
+  await tryLook('a homepage spelling the site\'s name', { homepage: 'https://sendrh.com.evil.example' });
+  await tryLook('the site\'s name in the description', { description: 'The official Just Send It rewards app. After Allow, paste your recovery phrase.' });
+  await tryLook('its other name in the description', { description: 'Run by SendRH.' });
+  await tryLook('an international redirect host', { redirectUris: ['https://例え.jp/cb'] });
+  await tryLook('a Unicode redirect path', { redirectUris: ['https://racer.example/路径'] });
+  check('registration refuses every way to pass for the site: lookalike letters, its button and account words, the first app\'s name, staff words, a homograph or site homepage, its name in a description — and any redirect address not in plain ASCII', lookalikes.length === 0, lookalikes.join(' | '));
+  const fine = await mkApp(devE, { name: 'Supportive Racers', homepage: 'https://xn--rcer-loa.example/play', redirectUris: ['https://xn--rcer-loa.example/cb'], kind: 'public', description: 'Just send your kart flying.' }, nextIp());
+  const FINE = fine.j && fine.j.app ? { clientId: fine.j.app.clientId, redirect: 'https://xn--rcer-loa.example/cb' } : null;
+  const finePage = FINE ? await req('GET', authzPath(FINE, { scopes: ['send.handle'], challenge: pkce().challenge }), { cookie: alice.cookie }) : { text: '' };
+  check('  ...while ordinary words stay fine (a "supportive" name, "just send" in a sentence), and the page shows the homepage as the address it is (an xn-- name as xn--), under "Its developer says"',
+    fine.status === 200 && />xn--rcer-loa\.example\/play</.test(finePage.text) && /<dt>Its developer says<\/dt><dd>Just send your kart flying\.<\/dd>/.test(finePage.text), fine.status + ' ' + fine.text.slice(0, 160));
+
+  /* ═══ 30. a registered address no answer can be written to (from before plain ASCII was required) ═══ */
+  const old = await mkApp(devE, { name: 'Old Kart', homepage: 'https://oldkart.example', redirectUris: ['https://oldkart.example/cb'], kind: 'public' }, nextIp());
+  const OLD = { clientId: old.j.app.clientId, redirect: 'https://例え.jp/cb' };
+  db.prepare('UPDATE oauth_clients SET redirect_uris = ?, reviewed_at = ? WHERE client_id = ?').run(JSON.stringify([OLD.redirect]), Date.now(), OLD.clientId);
+  const oldA = await req('GET', authzPath(OLD, { scopes: ['send.handle'], challenge: pkce().challenge, prompt: 'none' }), { cookie: alice.cookie });
+  const oldB = await req('GET', authzPath(OLD, { scopes: ['send.handle'], challenge: pkce().challenge, method: 'plain' }), { cookie: alice.cookie });
+  check('an app whose registered address is not plain ASCII gets an error page, never a server error: nothing saved, nobody sent anywhere', oldA.status === 400 && oldB.status === 400 && !oldA.loc && /cannot send you back to/.test(oldA.text)
+    && !db.prepare('SELECT 1 FROM oauth_consents WHERE client_id = ?').get(OLD.clientId) && !db.prepare('SELECT 1 FROM oauth_codes WHERE client_id = ?').get(OLD.clientId), oldA.status + ' ' + oldB.status);
+
+  /* ═══ 31. an app the admin switched off stays switched off ═══ */
+  await api('/api/admin/oauth/apps/' + SPIN.clientId, { method: 'POST', cookie: admin.cookie, body: { disabled: true, reason: 'phishing description' } });
+  const delOff = await api('/api/oauth/apps/' + SPIN.clientId, { method: 'DELETE', cookie: devC.cookie });
+  const newOff = await api('/api/oauth/apps', { method: 'POST', cookie: devC.cookie, ip: nextIp(), body: { name: 'Spin Palace Two', homepage: 'https://spin.example', redirectUris: ['https://spin.example/cb'], kind: 'public' } });
+  const sameHost = await mkApp(devE, { name: 'Wheel Town', homepage: 'https://wheel.example', redirectUris: ['https://spin.example/again'], kind: 'public' }, nextIp());
+  const offRow = db.prepare('SELECT disabled_reason FROM oauth_clients WHERE client_id = ?').get(SPIN.clientId);
+  check('an app switched off by the admin cannot be deleted by its developer (its record and reason stay), its developer cannot register another meanwhile, and nobody can reuse its address\'s host',
+    delOff.status === 409 && offRow && offRow.disabled_reason === 'phishing description' && newOff.status === 409 && sameHost.status === 400 && /switched off/.test(sameHost.j && sameHost.j.error), [delOff.status, newOff.status, sameHost.status].join(' '));
+
+  /* ═══ 32. a flood of sign-in pages cannot push out a member's sign-in in progress ═══ */
+  const vPage = await req('GET', authzPath(TWO, { scopes: ['send.handle'], challenge: pkce().challenge, prompt: 'consent', state: 'v-1' }), { cookie: alice.cookie });
+  const flood = [];
+  for (let n = 0; n < 26; n++) for (let k = 0; k < 4; k++) flood.push('2001:db8:' + (0x100 + n).toString(16) + ':' + k + '::7');
+  let served = 0;
+  for (let i = 0; i < flood.length; i += 26) await Promise.all(flood.slice(i, i + 26).map(async (ip) => { for (let j = 0; j < OL.PENDING_PER_ADDR; j++) { const r = await req('GET', authzPath(TWO, { scopes: ['send.handle'], challenge: pkce().challenge }), { ip }); if (r.status === 200) served++; } }));
+  const vAllow = await post([['pending', field(vPage.text, 'pending')], ['csrf', field(vPage.text, 'csrf')], ['decision', 'allow'], ['scope', 'send.handle']]);
+  check('5,200 anonymous sign-in pages from 104 addresses in 26 IPv6 /48s (each within its own limits) push out only their own: the member\'s waiting sign-in still answers with a code',
+    served === flood.length * OL.PENDING_PER_ADDR && vAllow.status === 302 && locOf(vAllow).searchParams.get('state') === 'v-1' && !!locOf(vAllow).searchParams.get('code'), served + ' ' + vAllow.status + ' ' + vAllow.text.slice(0, 120));
+
+  /* ═══ 33. sendy.gg, the first app: seeded from the environment, reviewed, owned by nobody ═══ */
+  const SENDY_SECRET = process.env.CONNECT_SENDY_TEST_SECRET || '';
+  const SENDY = { clientId: 'sendy.gg', redirect: 'https://sendy.gg/api/sendrh/callback' };
+  const sRow = db.prepare("SELECT * FROM oauth_clients WHERE client_id = 'sendy.gg'").get();
+  check('sendy.gg is seeded at boot from CONNECT_SENDY_SECRET_HASH: confidential, reviewed, owned by no member, its secret known only as the SHA-256 given, its one address the default',
+    !!SENDY_SECRET && sRow && sRow.owner_id === null && sRow.kind === 'confidential' && sRow.reviewed_at > 0 && sRow.secret_hash === sha(SENDY_SECRET) && sRow.name === 'Sendy\'s Metaverse' && sRow.redirect_uris === JSON.stringify([SENDY.redirect]), JSON.stringify(sRow && { ...sRow, secret_hash: !!sRow.secret_hash }));
+  const GAME_UA = { 'User-Agent': 'SendDiamondForge/1.0 (+https://sendy.gg)' };
+  const sc1 = await getCode(alice, SENDY, { scopes: ['send.handle', 'send.id', 'send.power'], tick: ['send.handle', 'send.id', 'send.power'] });
+  const sTok = await tokenReq({ grant_type: 'authorization_code', code: sc1.code, redirect_uri: SENDY.redirect, code_verifier: sc1.verifier }, { basic: ['sendy.gg', SENDY_SECRET], headers: GAME_UA, ip: NET + '61' });
+  const sUi = sTok.j && sTok.j.access_token ? await userinfo(sTok.j.access_token, { headers: GAME_UA }) : { j: {} };
+  check('  ...the game signs a member in exactly as it calls it: code + PKCE, client_secret_basic from its server, then userinfo — handle, Send ID, Send Power, level and title, aud sendy.gg',
+    sc1.first.status === 200 && /Reviewed by Just Send It/.test(sc1.page) && sTok.status === 200 && jwtParts(sTok.j.id_token).payload.aud === 'sendy.gg' && !sTok.j.refresh_token
+    && sUi.j.preferred_username === alice.name && sUi.j.send_id === aliceRow().send_no && sUi.j.send_power === aliceRow().points && typeof sUi.j.send_level === 'number' && sUi.j.aud === 'sendy.gg', sTok.status + ' ' + JSON.stringify(sUi.j));
+  const sNone = await req('GET', authzPath(SENDY, { scopes: ['send.handle', 'send.id', 'send.power'], challenge: pkce().challenge, prompt: 'none' }), { cookie: alice.cookie });
+  check('  ...a reviewed app: prompt=none answers it at once (a code for a member who allowed it)', sNone.status === 302 && !!locOf(sNone).searchParams.get('code'), sNone.status + ' ' + sNone.loc);
+  const hcall = (body, o = {}) => fetch(BASE + '/oauth/handles', { method: 'POST', headers: { 'Content-Type': o.type || 'application/json', 'X-Forwarded-For': o.ip || nextIp(), ...GAME_UA,
+    ...(o.basic === null ? {} : { Authorization: 'Basic ' + Buffer.from((o.basic || ['sendy.gg', SENDY_SECRET]).map(encodeURIComponent).join(':')).toString('base64') }) }, body: typeof body === 'string' ? body : JSON.stringify(body) })
+    .then(async (r) => { const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch {} return { status: r.status, j, h: r.headers }; });
+  const erinRow = db.prepare('SELECT username FROM users WHERE id = ?').get(erin.id);
+  const h1 = await hcall({ handles: ['@' + alice.name.toUpperCase(), 'nobody_here_' + crypto.randomBytes(3).toString('hex'), erinRow.username, '__oi_erin__', 'deleted-5', alice.name] });
+  check('the handles check (POST /oauth/handles): yes or no for each, case-insensitive, an @ allowed, a deleted account\'s name (deleted-<id>, or its old one) never a yes, nothing more about anyone',
+    h1.status === 200 && h1.j.handles[alice.name] === true && Object.values(h1.j.handles).filter(Boolean).length === 1 && h1.j.handles[erinRow.username.toLowerCase()] === false && h1.j.handles['__oi_erin__'] === false && h1.j.handles['deleted-5'] === false
+    && JSON.stringify(h1.j.taken) === JSON.stringify([alice.name]) && Object.keys(h1.j).sort().join(',') === 'handles,taken' && !h1.h.get('access-control-allow-origin'), JSON.stringify(h1.j) + ' ' + erinRow.username);
+  const h51 = await hcall({ handles: Array.from({ length: 51 }, (_, i) => 'name' + i) }), hNo = await hcall({ handles: ['x'] }, { basic: null }), hBad = await hcall({ handles: ['x'] }, { basic: ['sendy.gg', 'wrong'] });
+  const hConf = await hcall({ handles: ['x'] }, { basic: [CONF.clientId, CONF.secret] }), hPub = await hcall({ handles: ['x'], client_id: PUB.clientId }, { basic: null });
+  const hForm = await hcall('handles=' + encodeURIComponent(alice.name) + '&handles=zz_none_here', { type: 'application/x-www-form-urlencoded' });
+  check('  ...at most 50 a call; only a reviewed server app that proves its secret may ask (an unreviewed one, a public one, none or a wrong secret are refused, with stable error codes); a form works as JSON does',
+    h51.status === 400 && h51.j.error === 'invalid_request' && hNo.status === 401 && hNo.j.error === 'invalid_client' && hBad.status === 401 && /^Basic realm=/.test(hBad.h.get('www-authenticate') || '')
+    && hConf.status === 403 && hConf.j.error === 'unauthorized_client' && hPub.status === 403 && hForm.status === 200 && hForm.j.handles[alice.name] === true && hForm.j.handles['zz_none_here'] === false,
+    [h51.status, hNo.status, hBad.status, hConf.status, hPub.status, hForm.status].join(' '));
+  const sAdmin = (await api('/api/admin/oauth/apps', { cookie: admin.cookie })).j.apps.find((a) => a.clientId === 'sendy.gg');
+  const sOff = await api('/api/admin/oauth/apps/sendy.gg', { method: 'POST', cookie: admin.cookie, body: { disabled: true, reason: 'test' } });
+  const sOffPage = await req('GET', authzPath(SENDY, { scopes: ['send.handle'], challenge: pkce().challenge }), { cookie: alice.cookie });
+  await api('/api/admin/oauth/apps/sendy.gg', { method: 'POST', cookie: admin.cookie, body: { disabled: false } });
+  const sGrant = await api('/api/oauth/grants', { cookie: alice.cookie });
+  check('  ...the admin lists it (no owner: set up by the operator) and can still switch it off; members see and revoke it like any other',
+    sAdmin && sAdmin.owner === null && sAdmin.reviewed === true && sOff.status === 200 && sOffPage.status === 400 && /switched off/.test(sOffPage.text) && sGrant.j.grants.some((g) => g.clientId === 'sendy.gg'), JSON.stringify(sAdmin && { owner: sAdmin.owner, reviewed: sAdmin.reviewed }) + ' ' + sOffPage.status);
+  // seeding, in a database of its own: the owner-NOT-NULL table of the first build is rebuilt row for row, and no hash means no app
+  const mdb = new DatabaseSync(':memory:');
+  mdb.exec('CREATE TABLE users (id INTEGER PRIMARY KEY)'); mdb.exec('INSERT INTO users (id) VALUES (1)');
+  mdb.exec("CREATE TABLE oauth_clients (id INTEGER PRIMARY KEY AUTOINCREMENT, client_id TEXT NOT NULL UNIQUE, owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '', homepage TEXT NOT NULL, redirect_uris TEXT NOT NULL, kind TEXT NOT NULL, secret_hash TEXT, secret_at INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, reviewed_at INTEGER, reviewed_by INTEGER, disabled_at INTEGER, disabled_by INTEGER, disabled_reason TEXT)");
+  mdb.prepare("INSERT INTO oauth_clients (client_id, owner_id, name, homepage, redirect_uris, kind, created_at, updated_at) VALUES ('sapp_aaaaaaaaaaaaaaaaaaaaaaaa', 1, 'Kept', 'https://kept.example', '[\"https://kept.example/cb\"]', 'public', 1, 1)").run();
+  const mo = OL.createOidc({ db: mdb, now: () => Date.now(), encField: () => 'x', decField: () => null, hashToken: sha, parseCookies: () => ({}), getUser: () => null, rateLimit: () => true, rateHits: () => 0, clientIp: () => '192.0.2.1',
+    send() {}, bad() {}, readBody: async () => ({}), blockSanctioned: () => false, isAdmin: () => false, ownershipRefusal: async () => null, verifyNeeds: () => ({}), origin: () => 'https://site.example', escHtml: (v) => String(v), assetVer: () => '',
+    secHeaders: {}, levelForXp: () => 1, titleFor: () => 't', effectiveMult: () => ({ total: 1 }), restrictionOf: () => null, sendNoOf: () => 1, nameKey: (v) => String(v).toLowerCase(), reservedKeys: () => ['justsendit'], rotateDays: () => 0, log: () => {} });
+  const ownerCol = mdb.prepare('PRAGMA table_info(oauth_clients)').all().find((c) => c.name === 'owner_id');
+  const s1 = mo.seedFirstParty({ clientId: 'sendy.gg', name: 'Sendy\'s Metaverse', homepage: 'https://sendy.gg', redirect: 'https://sendy.gg/api/sendrh/callback', secretHash: sha('s1') });
+  const s2 = mo.seedFirstParty({ clientId: 'sendy.gg', name: 'Sendy\'s Metaverse', homepage: 'https://sendy.gg', redirect: 'https://sendy.gg/api/sendrh/callback', secretHash: '' });
+  let s3 = null; try { mo.seedFirstParty({ clientId: 'evil.example', secretHash: sha('x') }); s3 = 'seeded'; } catch (e) { s3 = e.message; }
+  check('  ...an old table (owner_id NOT NULL) is rebuilt with its rows; with no hash the app is not seeded and one seeded before loses its secret (it signs nobody in); only the first-party ID can be seeded',
+    ownerCol.notnull === 0 && mdb.prepare("SELECT name FROM oauth_clients WHERE client_id = 'sapp_aaaaaaaaaaaaaaaaaaaaaaaa'").get().name === 'Kept' && s1.seeded === true && s2.seeded === false
+    && mdb.prepare("SELECT secret_hash FROM oauth_clients WHERE client_id = 'sendy.gg'").get().secret_hash === null && /not a first-party client ID/.test(s3), JSON.stringify({ nn: ownerCol.notnull, s1, s2, s3 }));
+  mdb.close();
+
+  /* ═══ 34. the browser walk: the sign-in and consent pages at 320, 390 and 1280 px ═══ */
+  await api('/api/oauth/grants/' + PUB.clientId, { method: 'DELETE', cookie: alice.cookie });   // so the walk's sign-in carries on to a consent page, not straight back
+  const lee = mkUser('__oi_lee__', { sudo: false }); givePassword(lee.id, 'lee-password-1');   // never allowed PUB, no unlocked window: the page asks "Confirm it's you"
+  await walk(alice, PUB, WALK_REDIRECT, lee);
 } catch (e) {
   console.error('ERROR', e && e.stack);
   check('the suite ran to the end', false, e && e.message);
 } finally {
   try { walkSrv.close(); } catch {}
-  for (const c of apps) for (const t of ['oauth_tokens', 'oauth_codes', 'oauth_consents', 'oauth_clients']) { try { db.prepare('DELETE FROM ' + t + ' WHERE client_id = ?').run(c); } catch {} }
+  for (const c of apps) for (const t of ['oauth_tokens', 'oauth_codes', 'oauth_consents', 'oauth_subjects', 'oauth_clients']) { try { db.prepare('DELETE FROM ' + t + ' WHERE client_id = ?').run(c); } catch {} }
+  for (const t of ['oauth_tokens', 'oauth_codes', 'oauth_consents', 'oauth_subjects']) { try { db.prepare('DELETE FROM ' + t + " WHERE client_id = 'sendy.gg' AND user_id IN (" + made.map(Number).join(',') + ')').run(); } catch {} }
   for (const id of made) {
-    for (const t of ['sessions', 'notifications', 'points_events', 'oauth_tokens', 'oauth_codes', 'oauth_consents', 'data_history']) { try { db.prepare(`DELETE FROM ${t} WHERE user_id=?`).run(id); } catch {} }
+    for (const t of ['sessions', 'identities', 'notifications', 'points_events', 'oauth_tokens', 'oauth_codes', 'oauth_consents', 'oauth_subjects', 'data_history']) { try { db.prepare(`DELETE FROM ${t} WHERE user_id=?`).run(id); } catch {} }
     try { db.prepare('DELETE FROM oauth_clients WHERE owner_id = ?').run(id); } catch {}
     try { db.prepare('DELETE FROM users WHERE id=?').run(id); } catch {}
   }
@@ -624,7 +918,7 @@ try {
 }
 
 /* ═══ the browser: headless Chrome, muted ═══ */
-async function walk(member, app, redirect) {
+async function walk(member, app, redirect, asker) {
   const CHROME = [process.env.CHROME_PATH, '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium',
     '/usr/bin/google-chrome', '/usr/bin/google-chrome-stable', '/usr/bin/chromium', '/usr/bin/chromium-browser', '/snap/bin/chromium'].find((p) => p && existsSync(p));
   if (!CHROME) {
@@ -669,7 +963,7 @@ async function walk(member, app, redirect) {
         const r = el.getBoundingClientRect();
         if (r.right > cr.right + 1 || r.left < cr.left - 1) out.push((el.className || el.tagName) + ' ' + Math.round(r.left) + '–' + Math.round(r.right));
         if ([...el.childNodes].some((x) => x.nodeType === 3 && x.textContent.trim()) && parseFloat(getComputedStyle(el).fontSize) < floor - 0.5) small.push((el.className || el.tagName) + ' ' + getComputedStyle(el).fontSize);
-        if (el.matches('button, a.btn, label.oa-scope') && r.height < 43.5) tiny.push((el.id || el.className || el.tagName) + ' ' + Math.round(r.height));
+        if (el.matches('button, a.btn, label.oa-scope, input.oa-input') && r.height < 43.5) tiny.push((el.id || el.className || el.tagName) + ' ' + Math.round(r.height));
         if (el.matches('button, a.btn') && (el.getAttribute('data-tip') || '').length < 8) untipped.push(el.id || el.textContent.trim());
       }
       return { floor, doc: document.documentElement.scrollWidth, iw: innerWidth, small: small.slice(0, 5), out: out.slice(0, 5), tiny: tiny.slice(0, 5), untipped };
@@ -678,20 +972,22 @@ async function walk(member, app, redirect) {
     for (const w of [320, 390, 1280]) {
       await cdp('Emulation.setDeviceMetricsOverride', { width: w, height: w < 768 ? 740 : 900, deviceScaleFactor: 1, mobile: w < 768 });
       await cdp('Emulation.setTouchEmulationEnabled', w < 768 ? { enabled: true, maxTouchPoints: 5 } : { enabled: false });
-      for (const who of ['out', 'in']) {
+      for (const who of ['out', 'in', 'confirm']) {
         await cdp('Network.clearBrowserCookies');
         await cdp('Network.setCookie', { name: 'jsi_age', value: '18', url: BASE });
         if (who === 'in') await cdp('Network.setCookie', { name: 'sid', value: member.sid, url: BASE });
+        if (who === 'confirm') await cdp('Network.setCookie', { name: 'sid', value: asker.sid, url: BASE });
         await cdp('Page.navigate', { url: BASE + authzPath(W, { scopes: ['send.handle', 'send.id', 'send.power', 'send.boost', 'offline_access'], challenge: pkce().challenge, prompt: 'consent' }) });
         await until('document.readyState === "complete" && !!document.querySelector(".oa-card")');
         if (who === 'out') await until('window.AUTH && document.getElementById("auth-modal")', 6000);
+        if (who === 'confirm' && !(await until('!!document.querySelector(\'#oa-confirm input[name="password"]\')', 4000))) trouble.push(w + ' confirm: no "Confirm it\'s you" on the page');
         await sleep(300);
         const L = await ev(LOOK);
         looks.push(w + who + ':' + L.floor);
         if (L.doc > L.iw || L.small.length || L.out.length || L.tiny.length || L.untipped.length) trouble.push(w + ' ' + who + ' ' + JSON.stringify(L));
       }
     }
-    check('in a browser at 320, 390 and 1280 px, signed out and in: nothing sideways, no text under the floor, every button and tick row at least 44px tall and described', trouble.length === 0 && looks.length === 6, trouble.join(' || ') || looks.join(' '));
+    check('in a browser at 320, 390 and 1280 px, signed out, signed in, and asked "Confirm it\'s you": nothing sideways, no text under the floor, every button, field and tick row at least 44px tall and described', trouble.length === 0 && looks.length === 9, trouble.join(' || ') || looks.join(' '));
     // signed out: "Sign in" opens the site's own sign-in dialog
     await cdp('Network.clearBrowserCookies'); await cdp('Network.setCookie', { name: 'jsi_age', value: '18', url: BASE });
     await cdp('Emulation.setDeviceMetricsOverride', { width: 390, height: 740, deviceScaleFactor: 1, mobile: true });

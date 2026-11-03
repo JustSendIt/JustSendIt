@@ -85,7 +85,7 @@
       <h2 class="ab-eng-h" id="dv-how-h">How it works</h2>
       <ol class="ab-mini-list dv-steps">
         <li><b>Register your app</b> below: its name, its homepage and the exact addresses members are sent back to. You get a client ID at once, and a client secret too if your app runs on a server.</li>
-        <li><b>Send people to Sign in with Send.</b> Your app opens <code>/oauth/authorize</code> with the scopes it wants, a <code>state</code> and a PKCE challenge. The member signs in here the way they always do, two-factor included, and sees your app’s name, its website and the address they will be sent back to, with one tick-box for each thing you asked for. Every box starts unticked.</li>
+        <li><b>Send people to Sign in with Send.</b> Your app opens <code>/oauth/authorize</code> with the scopes it wants, a <code>state</code> and a PKCE challenge. The member signs in here the way they always do, two-factor included, and sees your app’s name, its website and the address they will be sent back to, with one tick-box for each thing you asked for. Every box starts unticked. The first time a member lets your app in, they also confirm it’s them (their password, two-factor step or wallet), as for any security change here.</li>
         <li><b>They come back with a one-time code.</b> Your app swaps it at <code>/oauth/token</code> for an ID token (a signed JWT) and an access token. Nothing reaches your app before they press Allow, and only what they ticked.</li>
         <li><b>Keep it current.</b> Send Power, level and Boost move. <code>/oauth/userinfo</code> gives you today’s values, and when the member ticks it, a refresh token keeps them up to date for 30 days without a new sign-in.</li>
       </ol>
@@ -96,12 +96,12 @@
       <h2 class="ab-eng-h" id="dv-privacy-h">The privacy promise</h2>
       <ul class="ab-mini-list">
         <li><b>Your app gets only what the member ticks.</b> Every box starts unticked, and an unticked box is not shared: not in the ID token, not from userinfo.</li>
-        <li><b>A private ID for each app.</b> The <code>sub</code> your app receives is different in every app, so two apps cannot match a member up by it. The Send ID, which is the same everywhere, is shared only when the member ticks it, and its box says so.</li>
+        <li><b>A private ID for each app.</b> The <code>sub</code> your app receives is different in every app, so two apps cannot match a member up by it. It is made at random the first time the member lets your app in and kept, so it stays the same for your app, revokes included, until the account or your app is deleted. The Send ID, which is the same everywhere, is shared only when the member ticks it, and its box says so. <code>auth_time</code> is the sign-in time floored to the hour (finer only when you ask with <code>max_age</code> or <code>prompt=login</code>), so it cannot match a member up either.</li>
         <li><b>Never shared with any app:</b> email, wallets, IP address, sign-in history, holdings, OG tier and communities. No scope asks for them. The Send Boost is shared as its total only, never what it is made of, because its parts would reveal holdings and the OG tier.</li>
-        <li><b>What this site keeps:</b> your app’s registration; for each member who allowed it, what they ticked and when, until they revoke it; while your app is signed in, its tokens, each stored as a hash with when it was issued and deleted when it expires; and the signing keys, their private halves encrypted.</li>
-        <li><b>What it does not keep:</b> apart from those tokens, any record of when or how often anyone uses your app; your userinfo calls; IP addresses or devices, beyond the rate-limit counters the whole site keeps in memory for a few minutes.</li>
+        <li><b>What this site keeps:</b> your app’s registration; for each member who allowed it, what they ticked, when they first allowed it and when they last changed that, until they revoke it; the private ID your app knows them by; while your app is signed in, its tokens, each stored as a hash and deleted when it expires (a refresh token already used stays, with no time on it, until its sign-in ends, only so a second use is caught); and the signing keys, their private halves encrypted.</li>
+        <li><b>What it does not keep:</b> any record of when or how often anyone uses your app; your userinfo calls; IP addresses or devices, beyond the rate-limit counters the whole site keeps in memory for up to about an hour.</li>
         <li><b>Nothing from anywhere else on the sign-in pages.</b> The pages under <code>/oauth/</code> load no analytics, no beacon and nothing from another site, cannot be put in a frame, and are never cached.</li>
-        <li><b>Members stay in charge.</b> Settings, under Apps you’ve signed in to, lists every app, what it can see and since when. Revoke ends its tokens at once. Deleting the account revokes everything, and an account put in read-only mode is signed out of every app until it lifts.</li>
+        <li><b>Members stay in charge.</b> Settings, under Apps you’ve signed in to, lists every app, what it can see and since when. Revoke ends its tokens at once. Changing the password, ending other sessions or turning two-factor off signs the member out of every app too, and the next sign-in asks again. Deleting the account revokes everything, and an account put in read-only mode is signed out of every app until it lifts.</li>
         <li><b>Checkable without asking us again.</b> The ID token is signed (ES256) with a key published at <code>/.well-known/jwks.json</code>, so your server checks it on its own: a Send passport, in effect. A new sign-in needs this site to be up; a token you have already checked stays checked.</li>
       </ul>
     </section>
@@ -137,19 +137,25 @@
           <tr><td data-label="What">Token</td><td data-label="Address"><code>POST https://sendrh.com/oauth/token</code></td></tr>
           <tr><td data-label="What">Userinfo</td><td data-label="Address"><code>GET or POST https://sendrh.com/oauth/userinfo</code></td></tr>
           <tr><td data-label="What">Revoke</td><td data-label="Address"><code>POST https://sendrh.com/oauth/revoke</code></td></tr>
+          <tr><td data-label="What">Introspection (your own tokens)</td><td data-label="Address"><code>POST https://sendrh.com/oauth/introspect</code></td></tr>
+          <tr><td data-label="What">Handles check (reviewed server apps)</td><td data-label="Address"><code>POST https://sendrh.com/oauth/handles</code></td></tr>
         </tbody>
       </table>
       <h3 class="dv-h3">The rules</h3>
       <ul class="ab-mini-list">
         <li><code>response_type=code</code> only. PKCE with <code>code_challenge_method=S256</code> is required of every app; <code>plain</code> is refused. <code>state</code> is required and comes back with the answer, together with <code>iss</code>. A <code>nonce</code> you send is put in the ID token.</li>
-        <li><code>redirect_uri</code> is matched exactly, character for character: case, a trailing slash and the query all count. A wrong address or an unknown app is shown an error page and sent nowhere.</li>
+        <li><code>redirect_uri</code> is matched exactly, character for character: case, a trailing slash and the query all count. Register it in plain ASCII, an international domain in its <code>xn--</code> form, exactly as your app sends it. A wrong address or an unknown app is shown an error page and sent nowhere.</li>
         <li>A code works once, within 60 seconds, for the app, address and PKCE verifier it was made for. Using it a second time revokes every token issued from it.</li>
         <li>An access token lasts an hour and an ID token ten minutes. A refresh token changes at every use, a used one presented again revokes the whole chain, and the chain ends 30 days after the sign-in.</li>
         <li>Send <code>/oauth/token</code> and <code>/oauth/revoke</code> as <code>application/x-www-form-urlencoded</code>. A server app authenticates with <code>client_secret_basic</code> or <code>client_secret_post</code>; a browser or mobile app sends its <code>client_id</code> alone.</li>
         <li>Token, userinfo, revoke, discovery and the keys answer any origin (CORS, never with cookies), so a browser app can call them directly.</li>
-        <li><code>prompt=none</code> answers <code>login_required</code>, <code>consent_required</code> or <code>access_denied</code> without showing anything; <code>prompt=consent</code> asks the member again.</li>
-        <li>Errors are the standard OAuth ones, as JSON <code>{ error, error_description }</code>: <code>invalid_request</code>, <code>invalid_client</code> (401), <code>invalid_grant</code>, <code>invalid_scope</code>, <code>unsupported_grant_type</code> and <code>slow_down</code> (429). At your redirect address: <code>access_denied</code> (the member pressed Cancel), <code>login_required</code>, <code>consent_required</code>, <code>invalid_request</code>, <code>invalid_scope</code>, <code>unsupported_response_type</code>, <code>request_not_supported</code> and <code>request_uri_not_supported</code>. Write your code against the <code>error</code> value; the description is for people.</li>
-        <li>Limits: 120 token requests a minute from one address and 600 for one app, 300 userinfo requests a minute from one address and 120 with one token, and 120 sign-in pages in ten minutes from one address. Five apps per member, five redirect addresses per app.</li>
+        <li><code>prompt=none</code> answers <code>login_required</code> or <code>consent_required</code> without showing anything (a member whose account cannot sign in to apps is answered as one who is signed out); <code>prompt=consent</code> asks the member again; <code>prompt=login</code>, and a <code>max_age</code> the member’s sign-in is older than, ask for a fresh proof (or answer <code>login_required</code> with <code>prompt=none</code>).</li>
+        <li>Until an admin has reviewed your app, an error is not sent to your address on its own: the member is shown it, with a link back to your address that carries the same <code>error</code> and <code>state</code>. That keeps this site from being a redirector anyone could aim. Once reviewed, errors (and <code>prompt=none</code>’s answers) come back at once.</li>
+        <li>Use a full-page redirect: once a member has allowed your app it comes straight back without showing a page. A pop-up works with a library that does not need <code>window.opener</code> (the pages under <code>/oauth/</code> cut it). A hidden iframe with <code>prompt=none</code> never sees a member’s sign-in here (the site’s cookie is not sent to other sites’ frames), so it always answers <code>login_required</code>: to stay up to date in the background, ask for <code>offline_access</code> and use the refresh token.</li>
+        <li>Your server trusts only what it checked itself: an ID token whose signature, <code>iss</code> and <code>aud</code> (your client ID) it verified, or an access token whose userinfo answer (or introspection) names your client ID in <code>aud</code> and <code>client_id</code>. Never trust claims or a token a browser hands over without that check: another app’s token for the same member would pass.</li>
+        <li>Errors are the standard OAuth ones, as JSON <code>{ error, error_description }</code>: <code>invalid_request</code> (a missing <code>grant_type</code> included), <code>invalid_client</code> (401, with a <code>Basic</code> challenge when you sent Basic), <code>invalid_grant</code>, <code>invalid_scope</code>, <code>unsupported_grant_type</code>, <code>unauthorized_client</code> (403: the handles check, for an app that may not use it) and <code>slow_down</code> (429). At your redirect address: <code>access_denied</code> (the member pressed Cancel), <code>login_required</code>, <code>consent_required</code>, <code>invalid_request</code>, <code>invalid_scope</code>, <code>unsupported_response_type</code>, <code>request_not_supported</code> and <code>request_uri_not_supported</code>. Write your code against the <code>error</code> value; the description is for people.</li>
+        <li>Limits are per app, so a server calling from one address is not held back by it: 600 token requests a minute for one app (every request from a server app that proved its secret counts; for a browser app, only those carrying a real code or refresh token of its own), 3,000 userinfo requests a minute for one app and 120 with one token, and 120 handle checks a minute for one app. Refused requests count against their address: 120 token requests a minute and 300 userinfo requests without a live token. Every address has a backstop of 3,000 a minute, and 120 sign-in pages in ten minutes. Five apps per member, five redirect addresses per app.</li>
+        <li>The handles check, for reviewed server apps that keep members’ handles theirs in your app too: <code>POST /oauth/handles</code> with your client authentication and <code>{ "handles": ["alice", "@bob"] }</code> (up to 50) answers <code>{ handles: { alice: true, bob: false }, taken: ["alice"] }</code>: yes or no for each, whatever the capitals, and nothing more about anyone.</li>
       </ul>
     </section>
 
@@ -182,7 +188,7 @@ async function finishSignIn() {                      // run it on the page at RE
   const tokens = await res.json();
   if (!res.ok) throw new Error(tokens.error);
   const me = await fetch(ISSUER + '/oauth/userinfo', { headers: { Authorization: 'Bearer ' + tokens.access_token } });
-  return me.json();   // { sub, preferred_username, profile, send_id, send_power, send_level, send_title, send_boost }: what they ticked
+  return me.json();   // { sub, aud, client_id, preferred_username, profile, send_id, send_power, ... }: what they ticked
 }</code></pre>
       <div class="dk-actions"><button class="btn btn-ghost btn-sm" type="button" data-dv-copy="dv-ex-browser" data-tip="Copies the browser example to your clipboard">Copy the example</button></div>
       <p class="dk-note">The answer holds only the claims the member ticked: a box they left unticked is simply missing. Keep the access token in memory and ask userinfo again when you want fresh values; it lasts an hour.</p>
@@ -190,7 +196,8 @@ async function finishSignIn() {                      // run it on the page at RE
       <h3 class="dv-h3">A server, with an OpenID Connect library</h3>
       <p class="dk-note">A confidential app: register it as confidential and keep the secret on your server. Shown with <code>openid-client</code> 6 for Node; any OpenID Connect client works the same way from the discovery address.</p>
 <pre class="dk-pre dv-code" id="dv-ex-server"><code>import * as client from 'openid-client';
-const config = await client.discovery(new URL('https://sendrh.com'), 'sapp_your_client_id', 'ssec_your_client_secret');
+const config = await client.discovery(new URL('https://sendrh.com'), 'sapp_your_client_id', 'ssec_your_client_secret', undefined,
+  { execute: [client.enableNonRepudiationChecks] });   // so the ID token's signature is checked too, against the published keys
 
 // 1. your "Sign in with Send" route
 const verifier = client.randomPKCECodeVerifier(), state = client.randomState();
@@ -201,7 +208,7 @@ res.redirect(client.buildAuthorizationUrl(config, { redirect_uri: 'https://your.
 // 2. your callback route, at https://your.app/callback
 const { verifier: v, state: s } = req.session.sendSignIn;
 const tokens = await client.authorizationCodeGrant(config, new URL(req.url, 'https://your.app'), { pkceCodeVerifier: v, expectedState: s });
-const claims = tokens.claims();   // the ID token, checked: signature (ES256, from the published keys), issuer, audience, expiry
+const claims = tokens.claims();   // the ID token, checked: signature (ES256, the published keys), issuer, audience, expiry
 const fresh = await client.fetchUserInfo(config, tokens.access_token, claims.sub);   // today's Send Power, level and Boost</code></pre>
       <div class="dk-actions"><button class="btn btn-ghost btn-sm" type="button" data-dv-copy="dv-ex-server" data-tip="Copies the server example to your clipboard">Copy the example</button></div>
 
@@ -249,7 +256,7 @@ async function checkIdToken(idToken, nonce) {
 
     <section class="card gold-card reveal dv-sec" aria-labelledby="dv-apps-h" id="dv-apps">
       <h2 class="ab-eng-h" id="dv-apps-h">Your apps</h2>
-      <p class="dk-note">Any member can register up to five apps, free. An app works as soon as it is registered. Its sign-in page says “Not reviewed by Just Send It” until an admin has looked at it, and changing its name, homepage or addresses clears a review. An admin can switch off an app that misleads people: its sign-ins and tokens stop at once.</p>
+      <p class="dk-note">Any member can register up to five apps, free. An app works as soon as it is registered. Its sign-in page says “Not reviewed by Just Send It” until an admin has looked at it, and changing its name, homepage, description or addresses clears a review. Names, homepages and descriptions that pass for this site are refused: its names in any spelling, its address, its button’s and account’s words, staff words, and letters from other alphabets in a name. An admin can switch off an app that misleads people: its sign-ins and tokens stop at once, and it stays listed until the admin decides.</p>
       <p class="modal-note" id="dv-apps-status" role="status" aria-live="polite"></p>
       <div id="dv-apps-body"><p class="dk-note">Checking whether you are signed in.</p></div>
     </section>

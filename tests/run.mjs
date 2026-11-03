@@ -26,7 +26,7 @@ import http from 'node:http';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createHash } from 'node:crypto';
 import { ROOT } from './_paths.mjs';
 
 const HERE = path.dirname(new URL(import.meta.url).pathname);
@@ -96,6 +96,8 @@ await new Promise((ok) => fixture.listen(0, '127.0.0.1', ok));
 fixture.unref();
 const FIXTURE = 'http://127.0.0.1:' + fixture.address().port;
 const DEAD = 'http://127.0.0.1:9/';   // an address nothing listens on: a read there fails at once
+// Sign in with Send's first app, sendy.gg (lib/oidc.js seedFirstParty): a secret for this run only, which the server knows only by its SHA-256 — tests/oidc.mjs plays the game with it
+const SENDY_TEST_SECRET = randomBytes(32).toString('hex');
 const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DIR: dataDir,
               BASE_URL: 'http://localhost:' + PORT, NODE_ENV: 'test', SEED_INVITE_CODE: '12345', TOS_GATE: '1', VOICE_MEMOS: '1',   // the terms step and voice memos are hidden by default; the suites still cover both
               LEDGER_COOL_MS: '5000',    // the holder ledger stands down after a rate limit — for seconds here, not a minute, so a suite can wait it out
@@ -127,6 +129,7 @@ const env = { ...process.env, PORT: String(PORT), JSI_DATA_DIR: dataDir, DATA_DI
               MARKET_COLLECT: '0', MARKET_LLAMA_URL: DEAD, MARKET_LLAMA_COINS_URL: DEAD, MARKET_LLAMA_STABLES_URL: DEAD, MARKET_L2BEAT_URL: DEAD,
               MARKET_GROWTHEPIE_URL: DEAD, MARKET_GROWTHEPIE_METRICS_URL: DEAD, MARKET_GT_URL: DEAD, MARKET_DS_URL: DEAD, MARKET_CG_URL: DEAD, MARKET_ETH_RPC_URL: DEAD, MARKET_LOGO_ORIGIN: DEAD, MARKET_COINLORE_URL: DEAD,
               MARKET_RHJ_URL: DEAD, MARKET_CHAINLINK_URL: DEAD,   // the RWA tab's: Robinhood's Stock Token API, Chainlink's feed directory
+              CONNECT_SENDY_SECRET_HASH: createHash('sha256').update(SENDY_TEST_SECRET).digest('hex'), CONNECT_SENDY_REDIRECT: '', CONNECT_SENDY_TEST_SECRET: SENDY_TEST_SECRET,
               // no keyed explorer, whatever a .env says: the server then asks the explorer nothing (owner, 2026-10-27), which the guard below holds it to
               ...(process.env.CHAIN_LIVE === '1' ? {} : { BLOCKSCOUT_URL: '' }) };
 

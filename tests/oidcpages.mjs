@@ -53,7 +53,8 @@ function mkUser(name, o = {}) {
   db.prepare("UPDATE users SET points = ?, holder_state = ?, holder_verified_at = ?, onboard_state = 'done' WHERE id = ?").run(o.points || 0, o.holder || 'none', o.holder === 'ok' ? Date.now() : null, id);
   sendNoOf(db, id);
   const raw = 'tok_op_' + crypto.randomBytes(16).toString('hex');
-  db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed) VALUES (?,?,?,?,1)').run(sha(raw), id, Date.now() - 5000, Date.now() + 864e5);
+  // a session inside its "Confirm it's you" window, as a member who just confirmed it is them: a first Allow for an app passes (tests/oidc.mjs asks the step itself)
+  db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed, sudo_until, sudo_since) VALUES (?,?,?,?,1,?,?)').run(sha(raw), id, Date.now() - 5000, Date.now() + 864e5, Date.now() + 36e5, Date.now() - 5000);
   return { id, name, sid: raw, cookie: 'sid=' + raw };
 }
 async function get(p, o = {}) {
@@ -97,7 +98,8 @@ try {
   const promise = DEV.slice(DEV.indexOf('id="dv-privacy-h"'), DEV.indexOf('id="dv-scopes-h"'));
   check('the privacy promise names everything no app ever gets — email, wallets, IP address, sign-in history, holdings, OG tier, communities — and what is and is not kept',
     ['email', 'wallets', 'IP address', 'sign-in history', 'holdings', 'OG tier', 'communities'].every((w) => promise.includes(w)) && /What this site keeps:/.test(promise) && /What it does not keep:/.test(promise)
-    && /each stored as a hash with when it was issued and deleted when it expires/.test(promise) && /different in every app/.test(promise));
+    && /each stored as a hash and deleted when it expires/.test(promise) && /with no time on it/.test(promise) && /for up to about an hour/.test(promise) && /different in every app/.test(promise) && /made at random the first time/.test(promise)
+    && /Changing the password, ending other sessions or turning two-factor off signs the member out of every app too/.test(promise));
   check('  ...in honest words: run by this site\'s own server, checkable without asking us again, never "decentralised"',
     /Run by this site’s own server, not by a blockchain/.test(DEV) && /without asking us again/.test(DEV) && !/decentrali[sz]ed|trustless/i.test(DEV.replace(/<!--[\s\S]*?-->/g, '')));
   const EX = preOf(DEV, 'dv-ex-browser'), EXS = preOf(DEV, 'dv-ex-server'), EXV = preOf(DEV, 'dv-ex-verify');
@@ -106,6 +108,11 @@ try {
     EX && EX.split('\n').length);
   check('  ...and the server example and the ID-token check are there too (the check: ES256 only, the key by kid, iss, aud, exp and the nonce)',
     EXS && /client\.discovery\(/.test(EXS) && /expectedState/.test(EXS) && EXV && /head\.alg !== 'ES256'/.test(EXV) && /k\.kid === head\.kid/.test(EXV) && /claims\.aud !== CLIENT_ID/.test(EXV) && /claims\.nonce !== nonce/.test(EXV));
+  check('  ...the server example checks the ID token\'s signature as its comment says (openid-client checks it only with enableNonRepudiationChecks)', /\{ execute: \[client\.enableNonRepudiationChecks\] \}/.test(EXS) && /checked: signature/.test(EXS), EXS && EXS.split('\n')[1]);
+  const RULES = DEV.slice(DEV.indexOf('<h3 class="dv-h3">The rules</h3>'), DEV.indexOf('id="dv-example"'));
+  check('the rules say what the fixes changed: a full-page redirect (a pop-up loses window.opener, an iframe never sees the sign-in), what a backend may trust (aud = its client ID), no automatic error redirect before a review, prompt=login and max_age honoured, prompt=none\'s two answers only',
+    /Use a full-page redirect/.test(RULES) && /window\.opener/.test(RULES) && /always answers <code>login_required<\/code>/.test(RULES) && /Your server trusts only what it checked itself/.test(RULES) && /another app’s token for the same member would pass/.test(RULES)
+    && /Until an admin has reviewed your app, an error is not sent to your address on its own/.test(RULES) && /<code>prompt=login<\/code>, and a <code>max_age<\/code>/.test(RULES) && !/access_denied<\/code> without showing anything/.test(RULES) && /plain ASCII/.test(RULES));
   // the button: two SVG files and two HTML snippets, nothing loaded from anywhere, 44px tall
   const SVGS = ['signin-with-send.svg', 'signin-with-send-lime.svg'].map((f) => existsSync(path.join(PUBDIR, 'assets', f)) ? readFileSync(path.join(PUBDIR, 'assets', f), 'utf8') : '');
   const PATH_D = (/<path d="([^"]+)"/.exec(SVGS[0]) || [])[1];
@@ -152,8 +159,9 @@ try {
   const P11 = PRIV.slice(PRIV.indexOf('<section class="t-sec" id="p11">'), PRIV.indexOf('<section class="t-sec" id="p12">'));
   check('  ...saying what an app receives (a different ID in every app; the rest only when ticked), what it never receives, what this site keeps and does not, and how to revoke',
     /an ID for you that is different in every app/.test(P11) && /Only what you tick/.test(P11) && /An app never receives your email, your wallets, your IP address, your sign-in history, your holdings, your OG tier or your communities/.test(P11)
-    && /stored only as hashes and deleted soon after they expire/.test(P11) && /Backups are written without them/.test(P11) && /Apart from those tokens, each kept with when it was issued until it expires, we keep no record of when or how often you use an app/.test(P11)
-    && /Settings → Apps you’ve signed in to/.test(P11) && /deleting your account revokes every app and deletes any app you registered/.test(P11) && /This site’s own server runs it/.test(P11));
+    && /stored only as hashes and deleted soon after they expire/.test(P11) && /Backups are written without them/.test(P11) && /Apart from when the live codes and tokens were issued, we keep no record of when or how often you use an app/.test(P11) && /for up to about an hour/.test(P11) && /A refresh token the app has already used is kept, with no time on it/.test(P11)
+    && /Changing your password, ending your other sessions or turning two-factor off ends every app’s sign-in too/.test(P11) && /The private ID that app knows you by/.test(P11) && /rounded down to the hour/.test(P11) && /you also confirm it’s you/.test(P11)
+    && /Settings → Apps you’ve signed in to/.test(P11) && /deleting your account revokes every app, deletes the private IDs apps knew you by, and deletes any app you registered/.test(P11) && /This site’s own server runs it/.test(P11));
   check('  ...with its cookie (jsi_oidc), the two kinds of record in the table of what is stored, and the version moved to 2026-11-03',
     /<tr><td><code>jsi_oidc<\/code><\/td><td>Set only when an app sends you to Sign in with Send while you are signed out/.test(PRIV) && /<tr><td>Apps you sign in to with your Send account:/.test(PRIV)
     && /<tr><td>Apps you register as a developer:/.test(PRIV) && /Version 2026-11-03 · \$Send \/ JustSendIt/.test(PRIV) && /pendingCookie = \(id\) => PENDING_COOKIE \+ '=' \+ id \+ '; Path=\/; HttpOnly; SameSite=Lax; Max-Age=' \+ Math\.round\(PENDING_TTL_MS \/ 1000\)/.test(readFileSync(path.join(ROOT, 'lib', 'oidc.js'), 'utf8')) && OL.PENDING_TTL_MS === 600e3);
@@ -169,7 +177,7 @@ try {
   const disc = (await get('/.well-known/openid-configuration')).j || {};
   const listed = [...page.text.matchAll(/<td data-label="Address"><code>(?:GET or POST|GET|POST) (\S+)<\/code><\/td>/g)].map((m) => m[1]);
   check('the endpoints the page lists are the ones discovery publishes, at this site\'s issuer (the page is written against the placeholder origin and served with the real one)',
-    JSON.stringify(listed) === JSON.stringify([BASE + '/.well-known/openid-configuration', disc.jwks_uri, disc.authorization_endpoint, disc.token_endpoint, disc.userinfo_endpoint, disc.revocation_endpoint]) && disc.issuer === BASE
+    JSON.stringify(listed) === JSON.stringify([BASE + '/.well-known/openid-configuration', disc.jwks_uri, disc.authorization_endpoint, disc.token_endpoint, disc.userinfo_endpoint, disc.revocation_endpoint, disc.introspection_endpoint, BASE + '/oauth/handles']) && disc.issuer === BASE
     && preOf(page.text, 'dv-ex-browser').includes("const ISSUER = '" + disc.issuer + "';"), JSON.stringify(listed));
   const ajs = await Promise.all([get('/adminapps.js'), get('/adminapps.js', { cookie: member.cookie }), get('/AdminApps.js', { cookie: member.cookie }), get('/adminapps.js', { cookie: admin.cookie })]);
   check('adminapps.js is the admin\'s alone: the same 404 for nobody, a member and another spelling; the admin gets it, never cached',
@@ -379,7 +387,7 @@ async function walk({ dev, member, admin, disc, EX, SNIP, EXV }) {
     check('  ...and the app gets what was ticked, with the member\'s values: handle, profile, Send ID, Send Power, level, title — and not the Boost, asked for but left unticked',
       me && !me.err && me.preferred_username === M.username && me.profile === BASE + '/u/' + encodeURIComponent(M.username) && me.send_id === M.send_no && me.send_power === M.points
       && me.send_level === meM.level && me.send_title === meM.title && !('send_boost' in me) && /^[A-Za-z0-9_-]{43}$/.test(me.sub)
-      && Object.keys(me).sort().join(',') === 'preferred_username,profile,send_id,send_level,send_power,send_title,sub', JSON.stringify(me));
+      && me.aud === kart.client_id && me.client_id === kart.client_id && Object.keys(me).sort().join(',') === 'aud,client_id,preferred_username,profile,send_id,send_level,send_power,send_title,sub', JSON.stringify(me));
     const hit = appHits.map((u) => new URL(u, 'http://x')).find((u) => u.pathname === '/callback');
     check('  ...at its own exact address, with a code, its state and iss', !!hit && !!hit.searchParams.get('code') && !!hit.searchParams.get('state') && hit.searchParams.get('iss') === disc.issuer, hit && hit.search.slice(0, 80));
 
