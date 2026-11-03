@@ -271,8 +271,18 @@ try {
     for (const m of fs.readFileSync(file, 'utf8').matchAll(/\$\d[\d,.]*(?:k|M|B)?/g)) pageUsd.add(m[0].replace(/[.,]$/, ''));
   const invented = (a) => (a.match(/\$\d[\d,.]*(?:k|M|B)?/g) || []).filter((x) => !seededUsd.has(x.replace(/[.,]$/, '')) && !(/“[^”]*\$\d/.test(a) && pageUsd.has(x.replace(/[.,]$/, ''))));
 
+  /* The server seeds the open sandbox ($HOOD) once per start, 2.5 s after it listens (seedDemoCommunity, after the
+     official seeder's first pass), and this battery starts its server again between blocks. On a slow machine the
+     sandbox used to arrive in the middle of a block and change every community answer after it (2026-11-03: 14
+     conversation fixtures, under a load average of 65). So the sandbox is taken out before each start, its one seed
+     is waited for after it (the row can only come back from that insert), and it is taken out again: every block
+     reads the same two live communities. The sandbox's own answers are checked on their own database below. */
+  const noSandbox = () => sdb.prepare('DELETE FROM communities WHERE demo = 1').run();
+  const settleSandbox = async () => { for (let i = 0; i < 200 && !sdb.prepare('SELECT 1 FROM communities WHERE demo = 1').get(); i++) await sleep(150); noSandbox(); };
+  noSandbox();
   check('  ...seeded, and the server came up again on that database', await boot(), slog.slice(-400));
   for (let i = 0; i < 100; i++) { const l = await api('/api/sendy/live', { sid: admin.sid }); if (l.j.brain && l.j.brain.refresh.loadedAt) break; await sleep(150); }
+  await settleSandbox();
   const live0 = await api('/api/sendy/live', { sid: admin.sid });
   const kinds = (live0.j.brain && live0.j.brain.index.kinds) || {};
   check('at boot the brain holds every kind of public passage: the site map, the notes, the pages, the white paper, the README, the Terms, the Support board, posts, calls and communities',
@@ -314,8 +324,8 @@ try {
   await Q('"who is on top of the leaderboard?" — the all-time board, and where it is', 'who is on top of the leaderboard?', (a) => /#1 @zqalice — about 12,345, level \d+; #2 @zqbob — about 6,789/.test(a) && /\/arcade/.test(a));
   await Q('"How much Send Power does @zqbob have?" — the member\'s public figures and their wall', 'How much Send Power does @zqbob have?', (a, j) => /^@zqbob: about 6,789 Send Power, level \d+/.test(a) && /#2 on the all-time board/.test(a) && /\/u\/zqbob/.test(a) && j.sources.some((s) => s.href === '/u/zqbob'));
   await Q('"@nobodyzq" — no such member, said so', "what is @nobodyzq's level?", (a) => /couldn't find a member called @nobodyzq/.test(a));
-  // (the server seeds the open sandbox once its own account exists — on a retry about a minute after boot, so mid-battery on a
-  // slow machine: it may be listed, and then always as the sandbox, never as a Robinhood community)
+  // (the sandbox is taken out after each start — see settleSandbox — so these read two; the pattern still allows it, and
+  // when it is listed it is always as the sandbox, never as a Robinhood community)
   const SANDBOX = '(?:; \\$HOOD Robinhood Markets \\(the open sandbox, for trying the site out — not affiliated with Robinhood Markets\\) — 0 verified)?';
   await Q('"which communities are live?" — the live ones with their verified members, and the pending count', 'which communities are live?', (a) => new RegExp('[23] communities are live: \\$SEND SEND IT \\(official\\) — 42 verified; \\$GWC Generational Wealth Coin \\(official\\) — 17 verified' + SANDBOX + '\\. 1 more is still gathering').test(a) && /\/communities/.test(a));
   await Q('"tell me about the $GWC community"', 'tell me about the $GWC community', (a) => /^\$GWC Generational Wealth Coin is a live community run by the site with 17 verified members/.test(a) && a.includes('/community?id=' + cGwc));
@@ -419,7 +429,7 @@ try {
   await Q('NL: "how do i by send it token" — dictation: how to buy, from the guide', 'how do i by send it token', (a) => /\/guide/.test(a) && /nothing here tells anyone to buy/.test(a) && !/price about/.test(a));
   await Q('NL: "i wanna ape into $SEND how do i actually do that" — how to buy, in slang: the guide, not the refusal', 'i wanna ape into $SEND how do i actually do that', (a) => /\/guide/.test(a) && !/nobody can predict a price/.test(a));
   // the route allows 400 questions site-wide in ten minutes; the battery asks more, so its server starts again between blocks
-  const anew = async () => { await halt(); check('  (the server came up again for the next block of the battery)', await boot(), slog.slice(-300)); for (let i = 0; i < 100; i++) { const l = await api('/api/sendy/live', { sid: admin.sid }); if (l.j.brain && l.j.brain.refresh.loadedAt) break; await sleep(150); } };
+  const anew = async () => { await halt(); noSandbox(); check('  (the server came up again for the next block of the battery)', await boot(), slog.slice(-300)); for (let i = 0; i < 100; i++) { const l = await api('/api/sendy/live', { sid: admin.sid }); if (l.j.brain && l.j.brain.refresh.loadedAt) break; await sleep(150); } await settleSandbox(); };
   await anew();
   /* ═══ 2c. THE GUARD RAILS, AS PEOPLE PUT THEM (the adversarial review of 2026-10-28) ═══
      Every phrasing the review found that slipped a figure past a buy, a prediction, a seed phrase or a safety question — or
