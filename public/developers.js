@@ -203,7 +203,8 @@
       const j = await window.api('/api/oauth/apps/' + encodeURIComponent(id), { method: 'POST', body: valuesOf(pre) });
       apps = apps.map((a) => (a.clientId === id ? j.app : a)); editing = null;
       render();
-      say('Saved ' + j.app.name + '.' + (j.reviewCleared ? ' Its review was cleared, because members would now see a different name, homepage or address: it shows "Not reviewed" until an admin looks again.' : ''));
+      say('Saved ' + j.app.name + '.' + (j.reviewCleared ? ' Its review was cleared, because members would now see a different name, homepage or address: it shows "Not reviewed" until an admin looks again.' : '')
+        + (j.newHost ? ' It now sends members to a new address, so ' + (j.grantsEnded === 1 ? 'the 1 member who had allowed it is' : 'the ' + (j.grantsEnded || 0) + ' members who had allowed it are') + ' signed out of it and will be asked again.' : ''));
       focusIn(id, '[data-dv-act="edit"]');
     } catch (err) {
       go.disabled = false;

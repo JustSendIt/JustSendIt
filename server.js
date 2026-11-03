@@ -988,6 +988,7 @@ for (const col of [
   "ALTER TABLE api_keys ADD COLUMN consumed_wei TEXT",
   "CREATE INDEX IF NOT EXISTS idx_arcade_day ON arcade_rounds(day)",                                        // the hub counts today's flights every 8 s
   "CREATE INDEX IF NOT EXISTS idx_users_arcade_boost ON users(arcade_boost_until) WHERE arcade_boost > 1", // …and the pilots boosted right now
+  "CREATE INDEX IF NOT EXISTS idx_users_avatar_img ON users(avatar_img) WHERE avatar_img IS NOT NULL",   // /uploads asks whether a file is a member's picture (Sign in with Send's picture claim, served cross-origin)
 
   /* ── Multi-wallet, and the sybil ring that multi-wallet makes possible ──────────────────────────────
      An account may hold several wallets so that everything it owns counts toward one Send Power score.
@@ -15052,12 +15053,14 @@ function checkProbation(userId, sendTok) {
     if ((u.restrict_level || 0) >= 3) { // a broken PERMANENT buy-out hold → back to permanent (buy-out again costs $1000)
       db.prepare('UPDATE users SET restricted_until=?, restrict_reason=?, redeem_dur=0, redeem_base_send=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?')
         .run(PERM_UNTIL, 'You sold your $SEND before the hold was up — your permanent read-only is back.', sendTok, userId);
+      if (typeof oidcRevokeUser === 'function') oidcRevokeUser(userId);   // read-only accounts do not sign in to apps: every app's tokens end now, not when it lifts
       notify(userId, '🔇', 'You sold your $SEND before the hold was up — your permanent read-only is back. Buy & hold $SEND again to lift it.', 'restriction');
       return;
     }
     const newDur = Math.max(DAY_MS, (u.redeem_dur || DAY_MS) * 2); // timed → returns doubled
     db.prepare('UPDATE users SET restricted_until=?, restrict_reason=?, redeem_dur=?, redeem_base_send=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?')
       .run(now() + newDur, 'You sold your $SEND before the hold was up — read-only is back, and the timer is doubled.', newDur, sendTok, userId);
+    if (typeof oidcRevokeUser === 'function') oidcRevokeUser(userId);   // read-only accounts do not sign in to apps: every app's tokens end now, not when it lifts
     notify(userId, '🔇', 'You sold your $SEND before the hold was up — read-only is back, and doubled. Buy & hold again to lift it.', 'restriction');
   }
 }
@@ -20391,7 +20394,10 @@ const server = http.createServer(async (req, res) => {
       const f = path.normalize(p.replace('/uploads/', ''));
       if (f.includes('..') || f.includes('/') || f.endsWith('.part')) return bad(res, 'nope', 400); // never serve in-progress temp uploads
       // uploaded media is content-addressed by a random name → its bytes never change → cache it forever (immutable, no revalidation)
-      return serveFile(req, res, path.join(UPLOAD_DIR, f), { 'Cache-Control': 'public, max-age=86400' });   // F119: a day, not a year — a takedown must reach the CDN edge in hours, not months
+      /* a member's current profile picture is what Sign in with Send's picture claim points at, so an app's own page may show
+         it (Cross-Origin-Resource-Policy: cross-origin); every other upload stays same-origin, as SEC_HEADERS has it */
+      const corp = OIDC.isMemberPicture(f) ? { 'Cross-Origin-Resource-Policy': 'cross-origin' } : {};
+      return serveFile(req, res, path.join(UPLOAD_DIR, f), { 'Cache-Control': 'public, max-age=86400', ...corp });   // F119: a day, not a year — a takedown must reach the CDN edge in hours, not months
     }
     /* ===== /t/<sendId> — the ticket share page ========================================================
        The ONE page on this site built entirely per-request rather than served from disk, and it exists for a

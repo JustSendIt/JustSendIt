@@ -92,13 +92,15 @@ try {
   check('the scopes table on /developers is lib/oidc.js\'s list, in its order, each row naming exactly the claims that scope adds',
     rows.length === OL.SCOPES.length && rows.every((r, i) => r.scope === OL.SCOPES[i].scope && JSON.stringify(r.claims) === JSON.stringify(OL.SCOPES[i].claims)),
     JSON.stringify(rows.map((r) => r.scope + ':' + r.claims.join('+'))));
-  check('  ...the Send ID\'s row says it is the same in every app (it lets apps recognise a member across each other), the Boost\'s that it is the total only, and the holder check\'s that it is not which wallet',
-    /same number in every app[^<]*recognise them across each other/.test(rows.find((r) => r.scope === 'send.id').shown) && /never what it is made of/.test(rows.find((r) => r.scope === 'send.boost').shown)
+  check('  ...the Send ID\'s row says it is the same in every app (it lets apps recognise a member across each other), the Boost\'s what it is made of (an app can estimate holdings from it), the Power\'s and the picture\'s that they find the handle, and the holder check\'s that it is not which wallet',
+    /same number in every app[^<]*recognise them across each other/.test(rows.find((r) => r.scope === 'send.id').shown) && /made of their holdings, OG tier, communities and boosts, so an app can estimate their holdings from it/.test(rows.find((r) => r.scope === 'send.boost').shown)
+    && /public next to their handle on their Send Wall, so they find the handle/.test(rows.find((r) => r.scope === 'send.power').shown) && /next to their handle on their public Send Wall, so it finds the handle/.test(rows.find((r) => r.scope === 'send.picture').shown)
+    && OL.SCOPES.find((x) => x.scope === 'send.boost').plain.includes('estimate your holdings') && /find your handle/.test(OL.SCOPES.find((x) => x.scope === 'send.power').plain) && /find your handle/.test(OL.SCOPES.find((x) => x.scope === 'send.picture').plain)
     && /not which wallet, not how much/.test(rows.find((r) => r.scope === 'send.verified').shown) && /different in every app/.test(rows.find((r) => r.scope === 'openid').shown));
   const promise = DEV.slice(DEV.indexOf('id="dv-privacy-h"'), DEV.indexOf('id="dv-scopes-h"'));
   check('the privacy promise names everything no app ever gets — email, wallets, IP address, sign-in history, holdings, OG tier, communities — and what is and is not kept',
     ['email', 'wallets', 'IP address', 'sign-in history', 'holdings', 'OG tier', 'communities'].every((w) => promise.includes(w)) && /What this site keeps:/.test(promise) && /What it does not keep:/.test(promise)
-    && /each stored as a hash and deleted when it expires/.test(promise) && /with no time on it/.test(promise) && /for up to about an hour/.test(promise) && /different in every app/.test(promise) && /made at random the first time/.test(promise)
+    && /each stored as a hash and deleted when it expires/.test(promise) && /a used refresh token is not kept/.test(promise) && /the Send Boost is made of them/.test(promise) && /an app given either can find the handle/.test(promise) && !/never what it is made of/.test(DEV) && /for up to about an hour/.test(promise) && /different in every app/.test(promise) && /made at random the first time/.test(promise)
     && /Changing the password, ending other sessions or turning two-factor off signs the member out of every app too/.test(promise));
   check('  ...in honest words: run by this site\'s own server, checkable without asking us again, never "decentralised"',
     /Run by this site’s own server, not by a blockchain/.test(DEV) && /without asking us again/.test(DEV) && !/decentrali[sz]ed|trustless/i.test(DEV.replace(/<!--[\s\S]*?-->/g, '')));
@@ -158,8 +160,9 @@ try {
     JSON.stringify(heads.map((h) => h.join(':'))));
   const P11 = PRIV.slice(PRIV.indexOf('<section class="t-sec" id="p11">'), PRIV.indexOf('<section class="t-sec" id="p12">'));
   check('  ...saying what an app receives (a different ID in every app; the rest only when ticked), what it never receives, what this site keeps and does not, and how to revoke',
-    /an ID for you that is different in every app/.test(P11) && /Only what you tick/.test(P11) && /An app never receives your email, your wallets, your IP address, your sign-in history, your holdings, your OG tier or your communities/.test(P11)
-    && /stored only as hashes and deleted soon after they expire/.test(P11) && /Backups are written without them/.test(P11) && /Apart from when the live codes and tokens were issued, we keep no record of when or how often you use an app/.test(P11) && /for up to about an hour/.test(P11) && /A refresh token the app has already used is kept, with no time on it/.test(P11)
+    /an ID for you that is different in every app/.test(P11) && /Only what you tick/.test(P11) && /An app never receives your email, your wallets, your IP address or your sign-in history, and it is never sent your holdings, your OG tier or your communities as such \(your Send Boost is made of them, as above\)/.test(P11)
+    && /so an app given it can estimate your holdings from it/.test(P11) && /an app given it can find your handle by it/.test(P11)
+    && /stored only as hashes and deleted soon after they expire/.test(P11) && /Backups are written without them/.test(P11) && /Apart from when the live codes and tokens were issued, we keep no record of when or how often you use an app/.test(P11) && /for up to about an hour/.test(P11) && /A refresh token the app has already used is not kept/.test(P11)
     && /Changing your password, ending your other sessions or turning two-factor off ends every app’s sign-in too/.test(P11) && /The private ID that app knows you by/.test(P11) && /rounded down to the hour/.test(P11) && /you also confirm it’s you/.test(P11)
     && /Settings → Apps you’ve signed in to/.test(P11) && /deleting your account revokes every app, deletes the private IDs apps knew you by, and deletes any app you registered/.test(P11) && /This site’s own server runs it/.test(P11));
   check('  ...with its cookie (jsi_oidc), the two kinds of record in the table of what is stored, and the version moved to 2026-11-03',
@@ -169,6 +172,20 @@ try {
     /^\| \*\*🔑 Sign in with Send\*\* \| [^\n]*`\/developers`[^\n]*§3\.13b\. \|$/m.test(README) && /### 3\.13b Sign in with Send/.test(README)
     && ['/.well-known/openid-configuration', '/.well-known/jwks.json', '/oauth/authorize', '/oauth/token', '/oauth/userinfo', '/oauth/revoke'].every((p) => README.includes('`' + (p.startsWith('/oauth/authorize') ? 'GET|POST ' : p.startsWith('/oauth/userinfo') ? 'GET|POST ' : p.startsWith('/oauth') ? 'POST ' : 'GET ') + p))
     && OL.SCOPES.every((s) => README.includes('`' + s.scope + '`')) && /`OIDC_KEY_ROTATE_DAYS`/.test(README));
+  // the first app's own settings: the game's built-in names sign nobody in, so the docs give the ones this provider uses, checked against it
+  const ENVX = readFileSync(path.join(ROOT, '.env.example'), 'utf8'), gameScope = (/SENDRH_SCOPE="([^"]+)"/.exec(README) || [])[1], gameScopeEnv = (/SENDRH_SCOPE="([^"]+)"/.exec(ENVX) || [])[1];
+  check('README and .env.example say exactly what the game sendy.gg must be set to — scopes this provider knows, /oauth/handles, a 64-hex secret from openssl rand -hex 32 and its shasum — and that its built-in defaults sign nobody in',
+    gameScope === 'openid send.handle send.id send.power' && gameScopeEnv === gameScope && gameScope.split(' ').every((x) => OL.SCOPES.some((y) => y.scope === x))
+    && /SENDRH_HANDLES_PATH=\/oauth\/handles/.test(README) && /SENDRH_HANDLES_PATH=\/oauth\/handles/.test(ENVX) && /oauth\/handles/.test(readFileSync(path.join(ROOT, 'lib', 'oidc.js'), 'utf8'))
+    && /openssl rand -hex 32/.test(README) && /SECRET=\$\(openssl rand -hex 32\)/.test(ENVX) && /printf %s "\$SECRET" \| shasum -a 256 \| cut -d' ' -f1/.test(ENVX) && /64 lowercase hex/.test(ENVX) && /sign nobody in/.test(README), gameScope + ' / ' + gameScopeEnv);
+  const HOW = DEV.slice(DEV.indexOf('id="dv-how-h"'), DEV.indexOf('id="dv-privacy-h"'));
+  check('/developers says the ID token is ES256 only and how to tell a library that expects RS256 (openid-client 5 / next-auth 4, Spring Security), names the libraries tried, and never promises "any OpenID Connect library"',
+    /ES256, the only algorithm used here/.test(HOW) && /id_token_signed_response_alg: 'ES256'/.test(HOW) && /client: \{ id_token_signed_response_alg: 'ES256' \}/.test(HOW) && /Spring Security/.test(HOW) && /openid-client 6 and 5, oidc-client-ts 3 and Auth\.js/.test(HOW)
+    && !/any OpenID Connect (library|client)/.test(DEV) && !/any OIDC library/.test(README));
+  check('  ...that until an app is reviewed a hidden-iframe prompt=none gets no answer at all (the library times out), that tokens are dropped after expires_in, and what a refresh does to the tokens it replaces',
+    /until then it gets no answer at all/.test(RULES) && /automaticSilentRenew/.test(RULES) && /stop using a token once its <code>expires_in<\/code> has passed/.test(RULES) && /the one you sent stops working at once/.test(RULES)
+    && /One member keeps at most 20 sign-ins in one app/.test(RULES) && /up to 2,048 characters/.test(RULES) && /weighed against the sign-in floored to ten minutes/.test(RULES) && /No one member can use up an app’s minute/.test(RULES)
+    && /Changing an app’s redirect addresses or homepage, making it a new secret and deleting it each ask you to confirm it’s you/.test(DEV) && /an <code>&lt;img&gt;<\/code> on your site loads it/.test(DEV));
 
   /* ═══ 2. the server ═══ */
   const dev = mkUser('__op_dev__', { points: 1500 }), member = mkUser('__op_member__', { points: 15200, holder: 'ok' }), admin = mkUser('__op_admin__', { id: ADMIN_ID, points: 10 });

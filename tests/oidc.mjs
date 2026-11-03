@@ -11,14 +11,14 @@
    Chrome, muted) at 320, 390 and 1280 px: the text floor, nothing sideways, every button described, the keyboard.
    Everything it creates it deletes. */
 import { DatabaseSync } from 'node:sqlite';
-import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync, unlinkSync } from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { createRequire } from 'node:module';
-import { ROOT, DB_PATH, SERVER_JS } from './_paths.mjs';
+import { ROOT, DB_PATH, SERVER_JS, DATA_DIR } from './_paths.mjs';
 import { sendNoOf } from './_sendno.mjs';
 
 const require = createRequire(import.meta.url);
@@ -35,7 +35,7 @@ const sha = (t) => crypto.createHash('sha256').update(String(t)).digest('hex');
 const b64url = (b) => Buffer.from(b).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 const b64dec = (s) => Buffer.from(String(s).replace(/-/g, '+').replace(/_/g, '/'), 'base64');
 const ADMIN_ID = 987654;
-const made = [], apps = [];
+const made = [], apps = [], madeFiles = [];
 // this suite's own addresses (the throwaway server trusts X-Forwarded-For from loopback), so no other suite's budget is spent
 const NET = '198.51.' + (100 + Math.floor(Math.random() * 50)) + '.';
 const IP = NET + '10';
@@ -300,10 +300,12 @@ try {
   check('the consent page names the app, its website, the host it sends you back to, and "Not reviewed by Just Send It"', cp.status === 200 && /Send Racer/.test(H) && /href="https:\/\/racer\.example" target="_blank" rel="noopener noreferrer nofollow"/.test(H) && /<code>racer\.example<\/code>/.test(H) && /Not reviewed by Just Send It/.test(H), cp.status);
   check('  ...one box per scope asked for, each with the member\'s own value in plain words',
     /Your handle: @__oi_alice__/.test(H) && new RegExp('Your Send ID: #' + sendNo + '<').test(H) && /the same number in every app you share it with, so apps can recognise you across each other/.test(H)
-    && /Your Send Power: 4,321 · level \d+ · /.test(H) && /Your Send Boost: 2\.5×/.test(H) && /the total only, never what it is made of/.test(H) && /Whether your wallet passed the holder check: yes/.test(H) && /not which wallet, and not how much it holds/.test(H)
+    && /Your Send Power: 4,321 · level \d+ · /.test(H) && /Your Send Boost: 2\.5×/.test(H) && /made of how much \$SEND and \$GWC your wallets hold[^<]*the app can estimate your holdings from it/.test(H) && !/never what it is made of/.test(H)
+    && /your exact Send Power is public on your Send Wall and the leaderboards next to your handle, so the app can find your handle by it/.test(H) && /it is public there next to your handle, so the app can find your handle by it/.test(H) && /Whether your wallet passed the holder check: yes/.test(H) && /not which wallet, and not how much it holds/.test(H)
     && /Keep these up to date for 30 days/.test(H) && (H.match(/name="scope"/g) || []).length === 7);
   check('  ...nothing is ticked for the member: what they leave unticked is not shared', !/name="scope" value="[^"]+" checked/.test(H) && /Nothing is ticked for you/.test(H));
-  check('  ...the ID that is always shared is said to be different in every app; what is never shared is listed; what the site keeps is said', /Every app gets a different one, so apps cannot match you up by it/.test(H) && /Never shared with any app:<\/b> your email, your wallets, your IP address, your sign-in history, your holdings, your OG tier and your communities/.test(H) && /No log of when or how you use Send Racer/.test(H));
+  check('  ...the ID that is always shared is said to be different in every app; what is never shared is listed; what the site keeps is said', /Every app gets a different one, so apps cannot match you up by it/.test(H) && /Never shared with any app:<\/b> your email, your wallets, your IP address and your sign-in history\. Your holdings, OG tier and communities are not sent as such, but your Send Boost, if you tick it, is made from them/.test(H)
+    && /Leaving your handle unticked keeps it out of what is sent, but your Send Power and your picture are public on your Send Wall next to it\./.test(H) && /No log of when or how you use Send Racer/.test(H));
   const buttons = [...H.matchAll(/<button\b[^>]*>/g)].map((m) => m[0]);
   check('  ...Allow and Cancel (and every other button) carry a description; the POST carries a CSRF token', /value="allow" data-tip="[^"]{8,}"/.test(H) && /value="cancel" data-tip="[^"]{8,}"/.test(H) && buttons.length >= 4 && buttons.every((b) => /data-tip="[^"]{8,}"/.test(b)) && /^[A-Za-z0-9_-]{43}$/.test(field(H, 'csrf') || ''), buttons.filter((b) => !/data-tip/.test(b)).join(' '));
   const csp = cp.h.get('content-security-policy') || '';
@@ -343,16 +345,18 @@ try {
   const wrongV = await tokenReq({ grant_type: 'authorization_code', code: code1, redirect_uri: PUB.redirect, code_verifier: pkce().verifier, client_id: PUB.clientId });
   check('PKCE is verified: a wrong code_verifier is invalid_grant', wrongV.status === 400 && wrongV.j.error === 'invalid_grant' && /PKCE/.test(wrongV.j.error_description), wrongV.text);
   const after = await tokenReq({ grant_type: 'authorization_code', code: code1, redirect_uri: PUB.redirect, code_verifier: pkA.verifier, client_id: PUB.clientId });
-  check('  ...and that spent the code: single use, the right verifier is too late now', after.status === 400 && after.j.error === 'invalid_grant', after.text);
+  const again = await tokenReq({ grant_type: 'authorization_code', code: code1, redirect_uri: PUB.redirect, code_verifier: pkA.verifier, client_id: PUB.clientId });
+  check('  ...a wrong verifier does not use the code up (whoever holds a code without its verifier cannot spend it); the right one then works, once',
+    after.status === 200 && !!(after.j && after.j.access_token) && again.status === 400 && again.j.error === 'invalid_grant' && /already used/.test(again.j.error_description), after.status + ' ' + again.text);
   // a fresh code for the main flow (alice has answered for these scopes, so the page is skipped)
   const c2 = await getCode(alice, PUB, { scopes: ALL, nonce: 'n-0S6_WzA2Mj', state: 'flow-2' });
   check('a second sign-in for the same scopes skips the page: straight back with a code (the member already answered)', c2.first.status === 302 && !!c2.code && c2.gotState === 'flow-2', c2.first.status + ' ' + c2.first.loc);
   const T1 = await exchange(PUB, c2);
   const tok = T1.j || {};
-  check('the token endpoint answers access_token (opaque), Bearer, 3600 s, an id_token, a refresh_token (offline_access was ticked) and the granted scope', T1.status === 200 && /^[A-Za-z0-9_-]{43}$/.test(tok.access_token) && tok.token_type === 'Bearer' && tok.expires_in === 3600 && typeof tok.id_token === 'string' && /^[A-Za-z0-9_-]{43}$/.test(tok.refresh_token || '')
+  check('the token endpoint answers access_token (opaque), Bearer, 3600 s, an id_token, a refresh_token (offline_access was ticked) and the granted scope', T1.status === 200 && /^[A-Za-z0-9_-]{43}$/.test(tok.access_token) && tok.token_type === 'Bearer' && tok.expires_in === 3600 && typeof tok.id_token === 'string' && /^[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43}$/.test(tok.refresh_token || '')
     && tok.scope === 'openid send.handle send.id send.power send.boost send.verified offline_access', T1.text.slice(0, 300));
   check('  ...no-store, CORS for any origin and never with credentials', /no-store/.test(T1.h.get('cache-control')) && T1.h.get('access-control-allow-origin') === '*' && !T1.h.get('access-control-allow-credentials') && T1.h.get('x-frame-options') === 'DENY');
-  check('  ...the tokens are 256 random bits and stored only as SHA-256', b64dec(tok.access_token).length === 32 && b64dec(tok.refresh_token).length === 32 && !!db.prepare("SELECT 1 FROM oauth_tokens WHERE token_hash = ? AND kind = 'access'").get(sha(tok.access_token)) && !!db.prepare("SELECT 1 FROM oauth_tokens WHERE token_hash = ? AND kind = 'refresh'").get(sha(tok.refresh_token))
+  check('  ...the tokens are 256 random bits and stored only as SHA-256', b64dec(tok.access_token).length === 32 && /^[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43}$/.test(tok.refresh_token || '') && b64dec(tok.refresh_token.split('.')[1]).length === 32 && !!db.prepare("SELECT 1 FROM oauth_tokens WHERE token_hash = ? AND kind = 'access'").get(sha(tok.access_token)) && !!db.prepare("SELECT 1 FROM oauth_tokens WHERE token_hash = ? AND kind = 'refresh'").get(sha(tok.refresh_token))
     && !db.prepare('SELECT 1 FROM oauth_tokens WHERE token_hash = ? OR token_hash = ?').get(tok.access_token, tok.refresh_token));
   const jwks = (await req('GET', '/.well-known/jwks.json')).j;
   const { head, payload: IDP } = tok.id_token ? jwtParts(tok.id_token) : { head: {}, payload: {} };
@@ -394,10 +398,11 @@ try {
   const UI2 = await userinfo(tok.access_token, { method: 'POST' });
   check('  ...live: Send Power changed is read as it is now (GET or POST)', UI2.status === 200 && UI2.j.send_power === 9999, JSON.stringify(UI2.j));
   db.prepare('UPDATE users SET points = 4321 WHERE id = ?').run(alice.id);
-  const rowsBefore = ['oauth_tokens', 'oauth_codes', 'oauth_consents', 'oauth_clients'].map((t) => db.prepare('SELECT COUNT(*) n, MAX(rowid) m FROM ' + t).get()).map((r) => r.n + ':' + r.m).join(',');
+  const tablesNow = () => ['oauth_tokens', 'oauth_codes', 'oauth_consents', 'oauth_clients'].map((t) => sha(JSON.stringify(db.prepare('SELECT * FROM ' + t + ' ORDER BY 1').all()))).join(',');
+  const rowsBefore = tablesNow();
   const consBefore = JSON.stringify(db.prepare('SELECT * FROM oauth_consents WHERE user_id = ?').all(alice.id)), tokBefore = JSON.stringify(db.prepare('SELECT * FROM oauth_tokens WHERE user_id = ? ORDER BY token_hash').all(alice.id));
   for (let i = 0; i < 3; i++) await userinfo(tok.access_token);
-  check('  ...and a userinfo call writes nothing down: no row added or changed anywhere (no usage log)', rowsBefore === ['oauth_tokens', 'oauth_codes', 'oauth_consents', 'oauth_clients'].map((t) => db.prepare('SELECT COUNT(*) n, MAX(rowid) m FROM ' + t).get()).map((r) => r.n + ':' + r.m).join(',')
+  check('  ...and a userinfo call writes nothing down: no row added or changed anywhere (no usage log)', rowsBefore === tablesNow()
     && consBefore === JSON.stringify(db.prepare('SELECT * FROM oauth_consents WHERE user_id = ?').all(alice.id)) && tokBefore === JSON.stringify(db.prepare('SELECT * FROM oauth_tokens WHERE user_id = ? ORDER BY token_hash').all(alice.id)));
   const cols = Object.fromEntries(['oauth_clients', 'oauth_consents', 'oauth_codes', 'oauth_tokens', 'oauth_keys'].map((t) => [t, db.prepare('PRAGMA table_info(' + t + ')').all().map((c) => c.name)]));
   check('  ...and no table of it has a place for an IP, a device, a browser or a log of use', Object.values(cols).flat().every((c) => !/(^|_)(ip|ips|ip_idx|agent|ua|device|seen|last_seen|log|uses|use_count|last_use)(_|$)/i.test(c)), JSON.stringify(cols));
@@ -411,23 +416,30 @@ try {
     && (await tokenReq({ grant_type: 'refresh_token', refresh_token: 'x' }, { headers: { Cookie: alice.cookie } })).status === 401);
 
   /* ═══ 10. refresh: rotating, the chain revoked on reuse ═══ */
+  const rt0Row = db.prepare('SELECT * FROM oauth_tokens WHERE token_hash = ?').get(sha(tok.refresh_token));
   const R1 = await tokenReq({ grant_type: 'refresh_token', refresh_token: tok.refresh_token, client_id: PUB.clientId });
   const r1 = R1.j || {};
   check('a refresh token gets a new access token, a NEW refresh token and a fresh id_token (no nonce) with the same sub', R1.status === 200 && r1.access_token && r1.refresh_token && r1.refresh_token !== tok.refresh_token && r1.access_token !== tok.access_token && jwtParts(r1.id_token).payload.sub === IDP.sub && !('nonce' in jwtParts(r1.id_token).payload), R1.text.slice(0, 200));
   const rtRow = db.prepare('SELECT * FROM oauth_tokens WHERE token_hash = ?').get(sha(r1.refresh_token)), rt0 = db.prepare('SELECT * FROM oauth_tokens WHERE token_hash = ?').get(sha(tok.refresh_token));
-  check('  ...rotation never extends the chain: the new refresh token ends when the first did, 30 days from the sign-in', rtRow && rt0 && rtRow.expires_at === rt0.expires_at && Math.abs(rt0.expires_at - rt0.created_at - 30 * 864e5) < 1000 && rt0.used_at > 0);
-  check('  ...and keeps no timeline: the spent token is only flagged (used_at = 1, no time), and every refresh token of the chain carries the chain\'s start as its date, not its own',
-    rt0.used_at === 1 && rtRow.created_at === rt0.created_at && rtRow.used_at == null, JSON.stringify({ spent: rt0.used_at, c0: rt0.created_at, c1: rtRow.created_at }));
+  check('  ...rotation never extends the chain: the new refresh token ends when the first did, 30 days from the sign-in, and names the same chain', rtRow && rt0Row && rtRow.expires_at === rt0Row.expires_at && Math.abs(rt0Row.expires_at - rt0Row.created_at - 30 * 864e5) < 1000
+    && r1.refresh_token.split('.')[0] === tok.refresh_token.split('.')[0] && rtRow.grant_id === r1.refresh_token.split('.')[0]);
+  check('  ...and keeps no timeline: the used refresh token is not kept at all (no spent row to count), and every refresh token of the chain carries the chain\'s start as its date, not its own',
+    !rt0 && rtRow.created_at === rt0Row.created_at && rtRow.used_at == null && db.prepare("SELECT COUNT(*) n FROM oauth_tokens WHERE grant_id = ? AND kind = 'refresh'").get(rtRow.grant_id).n === 1, JSON.stringify({ gone: !rt0, c0: rt0Row && rt0Row.created_at, c1: rtRow && rtRow.created_at }));
   const narrow = await tokenReq({ grant_type: 'refresh_token', refresh_token: r1.refresh_token, client_id: PUB.clientId, scope: 'openid send.handle send.picture' });
   check('  ...a refresh can narrow the scopes but never add one (the picture was not granted)', narrow.status === 400 && narrow.j.error === 'invalid_scope', narrow.text);
   const R2 = await tokenReq({ grant_type: 'refresh_token', refresh_token: r1.refresh_token, client_id: PUB.clientId });
+  const accessKept = db.prepare("SELECT COUNT(*) n FROM oauth_tokens WHERE grant_id = ? AND kind = 'access'").get(rtRow.grant_id).n;
+  const uiPrev = await userinfo(r1.access_token), uiOld = await userinfo(tok.access_token);
+  check('  ...a chain holds at most two access tokens: after two refreshes the newest and the one it replaced work (the replaced one keeps its hour), the oldest has ended', R2.status === 200 && accessKept === 2 && uiPrev.status === 200 && uiOld.status === 401, accessKept + ' ' + uiPrev.status + ' ' + uiOld.status);
   const reuse = await tokenReq({ grant_type: 'refresh_token', refresh_token: tok.refresh_token, client_id: PUB.clientId });
-  check('reusing an old refresh token is refused and revokes the whole chain: the newest refresh and access tokens die with it', R2.status === 200 && reuse.status === 400 && reuse.j.error === 'invalid_grant'
+  check('reusing an old refresh token (two rotations back: it is no longer stored, but it names its chain) is refused and revokes the whole chain: the newest refresh and access tokens die with it', R2.status === 200 && reuse.status === 400 && reuse.j.error === 'invalid_grant' && /already used/.test(reuse.j.error_description)
     && (await tokenReq({ grant_type: 'refresh_token', refresh_token: R2.j.refresh_token, client_id: PUB.clientId })).status === 400 && (await userinfo(R2.j.access_token)).status === 401 && (await userinfo(tok.access_token)).status === 401, reuse.text);
   const otherApp = await getCode(alice, TWO, { scopes: ['send.handle', 'offline_access'], tick: ['send.handle', 'offline_access'] });
   const TO = await exchange(TWO, otherApp);
   const crossRt = await tokenReq({ grant_type: 'refresh_token', refresh_token: TO.j && TO.j.refresh_token, client_id: PUB.clientId });
-  check('  ...a refresh token presented by another app is refused (and its chain revoked)', TO.status === 200 && crossRt.status === 400 && crossRt.j.error === 'invalid_grant' && (await userinfo(TO.j.access_token)).status === 401, crossRt.text);
+  const crossOld = await tokenReq({ grant_type: 'refresh_token', refresh_token: (TO.j && TO.j.refresh_token || '').split('.')[0] + '.' + b64url(crypto.randomBytes(32)), client_id: PUB.clientId });
+  check('  ...a refresh token presented by another app is refused as none of ours, and nothing is done to it: its own app\'s tokens still work (RFC 6749 §4.1.3, as for codes)', TO.status === 200 && crossRt.status === 400 && crossRt.j.error === 'invalid_grant' && /not one of ours/.test(crossRt.j.error_description)
+    && crossOld.status === 400 && /not one of ours/.test(crossOld.j.error_description) && (await userinfo(TO.j.access_token)).status === 200 && (await tokenReq({ grant_type: 'refresh_token', refresh_token: TO.j.refresh_token, client_id: TWO.clientId })).status === 200, crossRt.text + ' ' + crossOld.text);
 
   const cE = await getCode(alice, PUB, { scopes: ALL }), TE = (await exchange(PUB, cE)).j;
   const asBearer = await userinfo(TE.refresh_token);
@@ -451,7 +463,18 @@ try {
   check('  ...redirect_uri must equal the one in the request (another registered one is not enough)', T5.status === 400 && T5.j.error === 'invalid_grant' && /redirect_uri/.test(T5.j.error_description), T5.text);
   const c6 = await getCode(alice, PUB, { scopes: ALL });
   const T6 = await tokenReq({ grant_type: 'authorization_code', code: c6.code, redirect_uri: PUB.redirect, code_verifier: c6.verifier, client_id: TWO.clientId });
-  check('  ...and the code belongs to the app it was issued to', T6.status === 400 && T6.j.error === 'invalid_grant', T6.text);
+  const T6own = await exchange(PUB, c6);
+  check('  ...and the code belongs to the app it was issued to: presented by another app it is answered as none of ours and left alone — its own app then swaps it', T6.status === 400 && T6.j.error === 'invalid_grant' && /not one of ours/.test(T6.j.error_description) && T6own.status === 200, T6.text + ' ' + T6own.status);
+  // a code that leaked (they travel in the callback URL): presented under ANY other public client_id, with no verifier, it neither burns the code nor revokes what its own app was given
+  const cLeak = await getCode(alice, CONF, { scopes: ['send.handle'], tick: ['send.handle'] }), TLeak = await exchange(CONF, cLeak);
+  const leakAfter = await tokenReq({ grant_type: 'authorization_code', code: cLeak.code, redirect_uri: 'x', code_verifier: 'x', client_id: TWO.clientId });
+  const cLeak2 = await getCode(alice, CONF, { scopes: ['send.handle'] });
+  const leakFirst = await tokenReq({ grant_type: 'authorization_code', code: cLeak2.code, redirect_uri: 'x', code_verifier: 'x', client_id: TWO.clientId });
+  const leakFirstPub = await tokenReq({ grant_type: 'authorization_code', code: cLeak2.code, redirect_uri: CONF.redirect, code_verifier: 'x'.repeat(43), client_id: CONF.clientId, client_secret: CONF.secret });
+  const TLeak2 = await exchange(CONF, cLeak2);
+  check('a leaked code presented under another app\'s client_id, used or not, changes nothing: the real app\'s tokens still work and its own exchange still goes through (a wrong verifier does not spend it either)',
+    TLeak.status === 200 && leakAfter.status === 400 && /not one of ours/.test(leakAfter.j.error_description) && (await userinfo(TLeak.j.access_token)).status === 200
+    && leakFirst.status === 400 && leakFirstPub.status === 400 && /PKCE/.test(leakFirstPub.j.error_description) && TLeak2.status === 200, [TLeak.status, leakAfter.text, leakFirst.status, leakFirstPub.status, TLeak2.status].join(' '));
   const c7 = await getCode(alice, PUB, { scopes: ALL });
   const T7 = await tokenReq({ grant_type: 'authorization_code', code: c7.code, redirect_uri: PUB.redirect, client_id: PUB.clientId });
   check('  ...a code sent with no code_verifier is refused', T7.status === 400 && T7.j.error === 'invalid_grant', T7.text);
@@ -648,10 +671,11 @@ try {
   /* ═══ 21. the rate limits ═══ */
   const hammer = async (fn, n) => { for (let i = 1; i <= n; i++) { const s = await fn(i); if (s === 429) return i; } return 0; };
   const tokLim = await hammer(() => tokenReq({ grant_type: 'refresh_token', refresh_token: 'x', client_id: PUB.clientId }, { ip: NET + '21' }).then((r) => r.status), 130);
-  const uiLim = await hammer(() => userinfo('nope', { ip: NET + '22' }).then((r) => r.status), 310);
+  // 4,000 userinfo requests with a token this site does not know, from one address, then 429 (sent a hundred at a time: each is counted as it arrives)
+  let uiLim = 0; { let n401 = 0, n429 = 0; for (let i = 0; i < 4010; i += 100) for (const r of await Promise.all(Array.from({ length: Math.min(100, 4010 - i) }, () => userinfo('nope', { ip: NET + '22' })))) { if (r.status === 401) n401++; else if (r.status === 429) n429++; } uiLim = n401 === OL.LIMITS.uiRefused && n429 === 10 ? OL.LIMITS.uiRefused + 1 : -n401; }
   const azLim = await hammer(() => req('GET', '/oauth/authorize?client_id=x', { ip: NET + '23' }).then((r) => r.status), 130);
   const rvLim = await hammer(() => tokenReq({ token: 'x', client_id: PUB.clientId }, { ip: NET + '24', path: '/oauth/revoke' }).then((r) => r.status), 130);
-  check('refused requests are rate-limited per address: 120 token requests a minute that carry nothing real, 300 userinfo requests without a live token, 120 sign-in pages in 10 minutes, 120 revokes a minute', tokLim === 121 && uiLim === 301 && azLim === 121 && rvLim === 121, [tokLim, uiLim, azLim, rvLim].join(' '));
+  check('refused requests are rate-limited per address: 120 token requests a minute that carry nothing real, 4,000 userinfo requests with a token this site does not know, 120 sign-in pages in 10 minutes, 120 revokes a minute', tokLim === 121 && uiLim === 4001 && OL.LIMITS.uiRefused === 4000 && azLim === 121 && rvLim === 121, [tokLim, uiLim, azLim, rvLim].join(' '));
 
   /* ═══ 22. CORS only where it belongs ═══ */
   const azC = await req('GET', authzPath(PUB, { scopes: ['send.handle'], challenge: pkce().challenge }), { cookie: alice.cookie, headers: { Origin: 'https://racer.example' } });
@@ -722,7 +746,7 @@ try {
   const maBig = await tAt({ extra: { max_age: '86400' } }), maBigC = locOf(maBig.r) && locOf(maBig.r).searchParams.get('code');
   const maBigP = maBigC ? jwtParts((await tokenReq({ grant_type: 'authorization_code', code: maBigC, redirect_uri: TWO.redirect, code_verifier: maBig.pk.verifier, client_id: TWO.clientId })).j.id_token).payload : {};
   const gSid = db.prepare('SELECT created_at FROM sessions WHERE token = ?').get(sha(gus.sid)).created_at;
-  check('a max_age the sign-in meets: the code at once, and auth_time the sign-in floored to the hour — coarse, never later than the truth, still inside max_age', maBig.r.status === 302 && !!maBigC && maBigP.auth_time % 3600 === 0 && maBigP.auth_time * 1000 <= gSid && Date.now() / 1000 - maBigP.auth_time <= 86400, JSON.stringify({ at: maBigP.auth_time, sid: Math.floor(gSid / 1000) }));
+  check('a max_age the sign-in meets: the code at once, and auth_time the sign-in floored to ten minutes (the floor max_age was weighed against) — coarse, never later than the truth, still inside max_age', maBig.r.status === 302 && !!maBigC && maBigP.auth_time % 600 === 0 && maBigP.auth_time * 1000 <= gSid && Date.now() / 1000 - maBigP.auth_time <= 86400, JSON.stringify({ at: maBigP.auth_time, sid: Math.floor(gSid / 1000) }));
   const gus2 = newSession(gus.id, { sudo: false, ageMs: 3 * 36e5 - 20 * 60e3 });   // a sign-in a little under three hours ago
   const maMid = await (async () => { const pk = pkce(); const r = await req('GET', authzPath(TWO, { scopes: ['send.handle'], challenge: pk.challenge, extra: { max_age: String(3 * 3600) } }), { cookie: gus2.cookie }); return { r, pk }; })();
   const maMidC = locOf(maMid.r) && locOf(maMid.r).searchParams.get('code');
@@ -775,7 +799,7 @@ try {
   const pubReal = await exchange(PUB, ccP, {}, { ip: NET + '47' });
   check('600 junk exchanges naming a public app (its client_id is public) from six addresses do not lock it out: the member\'s real one goes through', junk === 600 && pubReal.status === 200 && !!pubReal.j.access_token, junk + ' ' + pubReal.status + ' ' + pubReal.text.slice(0, 120));
   check('  ...the limits are per app with the per-address caps above them as backstops (token, userinfo, handles), and /developers says so',
-    OL.LIMITS.tokenAddr > OL.LIMITS.tokenApp && OL.LIMITS.uiAddr >= OL.LIMITS.uiApp && OL.LIMITS.handlesAddr > OL.LIMITS.handlesApp && /'oa-ui-client:' \+ b\.client\.client_id/.test(LIB) && /'oa-handles-client:' \+ c\.client_id/.test(LIB)
+    OL.LIMITS.tokenAddr > OL.LIMITS.tokenApp && OL.LIMITS.uiAddr >= OL.LIMITS.uiApp && OL.LIMITS.handlesAddr > OL.LIMITS.handlesApp && /'oa-ui-client:' \+ cid/.test(LIB) && /'oa-handles-client:' \+ c\.client_id/.test(LIB)
     && /600 token requests a minute for one app/.test(readFileSync(path.join(ROOT, 'public', 'developers.html'), 'utf8')));
 
   /* ═══ 28. a token says which app it was issued to: userinfo's aud, and introspection for an app's own tokens ═══ */
@@ -896,6 +920,205 @@ try {
     && mdb.prepare("SELECT secret_hash FROM oauth_clients WHERE client_id = 'sendy.gg'").get().secret_hash === null && /not a first-party client ID/.test(s3), JSON.stringify({ nn: ownerCol.notnull, s1, s2, s3 }));
   mdb.close();
 
+  /* ═══ 35. review two: no member and no junk spends an app's budget; codes and tokens stay their own app's; nothing says more than it should ═══ */
+  const devF = mkUser('__oi_dev_f__');
+  const burnApp = await mkApp(devF, { name: 'Burn Racer', homepage: 'https://burn.example', redirectUris: ['https://burn.example/cb'], kind: 'public' }, nextIp());
+  const BURN = { clientId: burnApp.j.app.clientId, redirect: 'https://burn.example/cb' };
+  const mal = mkUser('__oi_mallory__', { points: 50 }), ann = mkUser('__oi_ann__', { points: 60 }), zed = mkUser('__oi_zed__', { points: 70 });
+  // (a) one spent code, replayed from five addresses (the code row is kept ten minutes, so one code would do for ten)
+  const mc = await getCode(mal, BURN, { scopes: ['offline_access'], tick: ['offline_access'] });
+  const mx = await exchange(BURN, mc);
+  const replays = {};
+  await Promise.all([1, 2, 3, 4, 5].map(async (k) => { for (let i = 0; i < 121; i++) { const r = await tokenReq({ grant_type: 'authorization_code', code: mc.code, redirect_uri: BURN.redirect, code_verifier: 'x'.repeat(43), client_id: BURN.clientId }, { ip: NET + (70 + k) }); replays[r.status] = (replays[r.status] || 0) + 1; } }));
+  const annX = await exchange(BURN, await getCode(ann, BURN, { scopes: ['send.handle'], tick: ['send.handle'] }));
+  check('one spent code replayed 605 times from five addresses is refused against those addresses only (120 each, then 429): the app\'s budget is untouched, and another member\'s exchange goes through',
+    mx.status === 200 && replays[400] === 600 && replays[429] === 5 && annX.status === 200 && !!annX.j.access_token, JSON.stringify(replays) + ' ' + annX.status + ' ' + annX.text.slice(0, 120));
+  // (b) one member rotating refresh tokens as fast as they can, on as many sign-ins as they like, from one address
+  const chains = [];
+  for (let i = 0; i < 4; i++) chains.push((await exchange(BURN, await getCode(mal, BURN, { scopes: ['offline_access'] }))).j.refresh_token);
+  let rotN = 0; const heldBy = {};
+  for (let round = 0; round < 10; round++) for (let k = 0; k < chains.length; k++) {
+    const r = await tokenReq({ grant_type: 'refresh_token', refresh_token: chains[k], client_id: BURN.clientId }, { ip: NET + '80' });
+    if (r.status === 200) { rotN++; chains[k] = r.j.refresh_token; } else { const w = r.status + ' ' + (r.j && r.j.error_description); heldBy[w] = (heldBy[w] || 0) + 1; }
+  }
+  const annX2 = await exchange(BURN, await getCode(ann, BURN, { scopes: ['send.handle'] }));
+  check('one member\'s refresh loop is held to their own share in the app (30 successful token requests a minute, their 5 exchanges included): 25 rotations, never the app\'s 600 — and another member\'s exchange goes through',
+    rotN === 25 && Object.keys(heldBy).length === 1 && /^429 too many token requests for this member in this app/.test(Object.keys(heldBy)[0]) && annX2.status === 200, rotN + ' ' + JSON.stringify(heldBy) + ' ' + annX2.status);
+  // (c) one sign-in chain refreshed again and again
+  const annRt = (await exchange(BURN, await getCode(ann, BURN, { scopes: ['send.handle', 'offline_access'], tick: ['send.handle', 'offline_access'], prompt: 'consent' }))).j;
+  let rt = annRt.refresh_token, okN = 0, last = null;
+  for (let i = 0; i < 11; i++) { const r = await tokenReq({ grant_type: 'refresh_token', refresh_token: rt, client_id: BURN.clientId }); if (r.status === 200) { okN++; rt = r.j.refresh_token; } else last = r; }
+  check('one sign-in chain refreshes at most 10 times a minute (and 120 an hour): the 11th is 429 before anything is spent, so the token still works afterwards',
+    okN === 10 && last && last.status === 429 && /too many refreshes of this sign-in/.test(last.j.error_description) && !!db.prepare("SELECT 1 FROM oauth_tokens WHERE token_hash = ? AND kind = 'refresh'").get(sha(rt))
+    && OL.LIMITS.refreshChain === 10 && OL.LIMITS.refreshChainHour === 120 && /'oa-token-chainh:' \+ grantId, LIMITS\.refreshChainHour, 36e5/.test(LIB), okN + ' ' + (last && last.text));
+  // (d) userinfo: one member with three tokens calls as fast as they can
+  const zt = [];
+  for (let i = 0; i < 3; i++) zt.push((await exchange(BURN, await getCode(zed, BURN, { scopes: ['send.handle'], tick: ['send.handle'] }))).j.access_token);
+  let z200 = 0; const z429 = {};
+  for (const t of zt) for (let i = 0; i < 200; i += 50) for (const r of await Promise.all(Array.from({ length: 50 }, () => userinfo(t, { ip: NET + '81' })))) { if (r.status === 200) z200++; else { const w = r.status + ' ' + (r.j && r.j.error_description); z429[w] = (z429[w] || 0) + 1; } }
+  const annUi = await userinfo(annX2.j.access_token);
+  check('userinfo: one member\'s calls are held to their share in the app across all their tokens (120 a minute), checked before the app\'s 3,000 and counted against it only when answered — so 600 calls on three tokens spend 120 of it, and another member\'s userinfo answers',
+    z200 === 120 && Object.keys(z429).every((w) => /^429 too many (userinfo requests for this member in this app|requests with this token)/.test(w)) && annUi.status === 200, z200 + ' ' + JSON.stringify(z429) + ' ' + annUi.status);
+  // (e) introspection junk naming a browser app, from six addresses, and a member introspecting their own token over and over
+  const intro = {};
+  await Promise.all([0, 1, 2, 3, 4, 5].map(async (k) => { for (let i = 0; i < 101; i++) { const r = await tokenReq({ token: 'junk-' + k + '-' + i, client_id: BURN.clientId }, { path: '/oauth/introspect', ip: NET + (90 + k) }); intro[r.status] = (intro[r.status] || 0) + 1; } }));
+  const introOne = {}; for (let i = 0; i < 122; i++) { const r = await tokenReq({ token: 'junk-one-' + i, client_id: BURN.clientId }, { path: '/oauth/introspect', ip: NET + '96' }); introOne[r.status] = (introOne[r.status] || 0) + 1; }
+  let zi = {}; for (let i = 0; i < 32; i++) { const r = await tokenReq({ token: zt[0], client_id: BURN.clientId }, { path: '/oauth/introspect', ip: NET + '97' }); zi[r.status + (r.j && r.j.active ? ':on' : '')] = (zi[r.status + (r.j && r.j.active ? ':on' : '')] || 0) + 1; }
+  const introAnn = await tokenReq({ token: annX2.j.access_token, client_id: BURN.clientId }, { path: '/oauth/introspect', ip: NET + '98' });
+  check('introspection: 606 junk tokens naming a browser app (its client_id is public) are { active: false } and count against their addresses (120 each, then 429), never the app\'s 600; a member introspecting their own token is held to 30 a minute; the app\'s own introspection of a live token still answers',
+    intro[200] === 606 && introOne[200] === 120 && introOne[429] === 2 && zi['200:on'] === 30 && zi['429'] === 2 && introAnn.status === 200 && introAnn.j.active === true, JSON.stringify({ intro, introOne, zi, ann: introAnn.text.slice(0, 80) }));
+  // (f) a server app polling, from its one address, tokens past their hour and tokens a member revoked
+  const players = [];
+  for (let i = 0; i < 3; i++) { const p = mkUser('__oi_player' + i + '__'); players.push((await exchange(CONF, await getCode(p, CONF, { scopes: ['send.handle'], tick: ['send.handle'] }))).j.access_token); }
+  for (const t of players) db.prepare('UPDATE oauth_tokens SET expires_at = ? WHERE token_hash = ?').run(Date.now() - 1000, sha(t));
+  const SERVER_IP = NET + '83';
+  let dead = 0;
+  for (const t of players) for (let i = 0; i < 100; i += 50) for (const r of await Promise.all(Array.from({ length: 50 }, () => userinfo(t, { ip: SERVER_IP })))) if (r.status === 401) dead++;
+  for (let i = 0; i < 300; i += 50) for (const r of await Promise.all(Array.from({ length: 50 }, (_, j) => userinfo('revoked-' + i + '-' + j, { ip: SERVER_IP })))) if (r.status === 401) dead++;
+  const livePlayer = (await exchange(CONF, await getCode(ann, CONF, { scopes: ['send.handle'], tick: ['send.handle'] }))).j;
+  const lp = await userinfo(livePlayer.access_token, { ip: SERVER_IP });
+  check('a server app polling 300 tokens past their hour and 300 it never had, from its one address, is answered 401 for each and its live player still gets 200: an expired token counts against its member\'s share, an unknown one against the address under a cap (4,000) above the app\'s budget',
+    dead === 600 && lp.status === 200 && OL.LIMITS.uiRefused > OL.LIMITS.uiApp && OL.LIMITS.uiAddr > OL.LIMITS.uiRefused, dead + ' ' + lp.status + ' ' + JSON.stringify(lp.j).slice(0, 100));
+  // (g) prompt=none and max_age: no silent oracle for when a member signed in
+  reviewedSet(BURN, true);
+  const pnAsk = async (u, ma) => { const r = await req('GET', authzPath(BURN, { scopes: ['send.handle'], challenge: pkce().challenge, prompt: 'none', extra: ma == null ? {} : { max_age: String(ma) } }), { cookie: u.cookie }); const l = locOf(r); return { r, a: l ? (l.searchParams.get('error') || 'code') : String(r.status), code: l && l.searchParams.get('code') }; };
+  const frank = mkUser('__oi_frank__', { sudo: false, ageMs: 5 * 36e5 + 17 * 60e3 + 23e3 });
+  const fr = [];
+  for (const ma of [0, 1, 60, 3600, 5 * 3600, 19000, 999999999, null]) fr.push((await pnAsk(frank, ma)).a);
+  check('prompt=none to a reviewed app the member has not let in answers consent_required whatever max_age says (and with none): no silent answer tells it when they signed in',
+    fr.every((x) => x === 'consent_required') && !db.prepare('SELECT 1 FROM oauth_consents WHERE user_id = ?').get(frank.id) && !db.prepare('SELECT 1 FROM oauth_codes WHERE user_id = ?').get(frank.id), fr.join(' '));
+  const gil = mkUser('__oi_gil__', { ageMs: 3 * 36e5 + 7 * 60e3 + 41e3 });
+  await getCode(gil, BURN, { scopes: ['send.handle'], tick: ['send.handle'] });
+  db.prepare('UPDATE sessions SET sudo_until = NULL, sudo_since = NULL WHERE token = ?').run(sha(gil.sid));
+  const gS = Math.floor(db.prepare('SELECT created_at FROM sessions WHERE token = ?').get(sha(gil.sid)).created_at / 1000), gF = gS - (gS % 600);
+  const T = Math.floor(Date.now() / 1000) - gF + 60;   // the max_age the ten-minute floor just meets
+  const below = await pnAsk(gil, T - 5), above = await pnAsk(gil, T + 5), exactly = await pnAsk(gil, Math.floor(Date.now() / 1000) - gS + 60 + 5);
+  const gPk = pkce(), gR = await req('GET', authzPath(BURN, { scopes: ['send.handle'], challenge: gPk.challenge, prompt: 'none', extra: { max_age: String(T + 5) } }), { cookie: gil.cookie });
+  const gTok = locOf(gR) ? (await tokenReq({ grant_type: 'authorization_code', code: locOf(gR).searchParams.get('code'), redirect_uri: BURN.redirect, code_verifier: gPk.verifier, client_id: BURN.clientId })).j : {};
+  const gAt = gTok && gTok.id_token ? jwtParts(gTok.id_token).payload.auth_time : null;
+  check('  ...and for a member who has: max_age is weighed against the sign-in floored to ten minutes, the same floor auth_time reports, so a binary search on max_age finds that floor and never the second (a max_age the exact time meets but the floor does not is login_required)',
+    below.a === 'login_required' && above.a === 'code' && (gS - gF < 15 || exactly.a === 'login_required') && gAt === gF && gAt % 600 === 0 && OL.AUTH_STEP_S === 600, JSON.stringify({ below: below.a, above: above.a, exactly: exactly.a, gAt, gF, gS }));
+  // (h) a repeated parameter with a made-up name, sent to a reviewed app's callback, and every description inside RFC 6749's characters
+  const weird = 'Your Send account was suspended — call +1 555 0100 "now" \\ ☎';
+  const wq = authzPath(BURN, { scopes: ['send.handle'], challenge: pkce().challenge, state: 'w-1' }) + '&' + encodeURIComponent(weird) + '=1&' + encodeURIComponent(weird) + '=2';
+  const wr = await req('GET', wq), wl = locOf(wr);
+  const pq = await req('GET', authzPath(BURN, { scopes: ['send.handle'], challenge: pkce().challenge, state: 'w-2' }) + '&prompt=none&prompt=login'), pl2 = locOf(pq);
+  const tw = await tokenReq(new URLSearchParams([['grant_type', 'refresh_token'], [weird, 'a'], [weird, 'b']]).toString(), { headers: {} });
+  const RFC = /^[\x20\x21\x23-\x5b\x5d-\x7e]*$/;
+  check('a repeated parameter is named only when it is one of the request\'s own: a made-up name never reaches the app\'s callback or the token answer, and every error_description keeps to RFC 6749\'s characters',
+    wr.status === 302 && wl && wl.searchParams.get('error') === 'invalid_request' && wl.searchParams.get('error_description') === 'a parameter was sent more than once' && wl.searchParams.get('state') === 'w-1'
+    && pl2 && pl2.searchParams.get('error_description') === 'prompt was sent more than once' && tw.status === 400 && tw.j.error_description === 'a parameter was sent more than once'
+    && [wl.searchParams.get('error_description'), pl2.searchParams.get('error_description'), tw.j.error_description].every((d) => RFC.test(d)) && OL.rfcText('a "quoted" \\ thing — ☎ ok') === 'a quoted thing ok', JSON.stringify([wl && wl.searchParams.get('error_description'), tw.text]));
+  // (i) a long state (Auth.js's encrypted one behind a preview deployment's proxy is about 550 characters)
+  const st1500 = 'S'.repeat(1500), lsR = await req('GET', authzPath(BURN, { scopes: ['send.handle'], challenge: pkce().challenge, state: st1500 }), { cookie: ann.cookie });
+  const lsBad = await req('GET', authzPath(BURN, { scopes: ['send.handle'], challenge: pkce().challenge, state: 'S'.repeat(2049) }), { cookie: ann.cookie });
+  check('state may be up to 2,048 characters: a 1,500-character one comes back with the code, one longer is invalid_request (and not echoed)',
+    lsR.status === 302 && locOf(lsR).searchParams.get('state') === st1500 && !!locOf(lsR).searchParams.get('code') && lsBad.status === 302 && locOf(lsBad).searchParams.get('error') === 'invalid_request' && !locOf(lsBad).searchParams.get('state') && OL.STATE_MAX === 2048 && OL.PARAM_MAX === 512,
+    lsR.status + ' ' + lsBad.status + ' ' + (locOf(lsBad) && locOf(lsBad).searchParams.get('error_description')));
+  // (j) a borrowed developer session cannot repoint an app, make it a new secret or delete it; a new host ends every member's grant
+  const devG = mkUser('__oi_dev_g__', { sudo: false }); givePassword(devG.id, 'devg-password-1');
+  const gApp = await mkApp(devG, { name: 'Repoint Kart', homepage: 'https://rk.example', redirectUris: ['https://rk.example/cb'], kind: 'confidential' }, nextIp());
+  const RK = { clientId: gApp.j.app.clientId, redirect: 'https://rk.example/cb', secret: gApp.j.clientSecret };
+  const annRk = (await exchange(RK, await getCode(ann, RK, { scopes: ['send.handle', 'offline_access'], tick: ['send.handle', 'offline_access'] }))).j;
+  const rp1 = await api('/api/oauth/apps/' + RK.clientId, { method: 'PATCH', cookie: devG.cookie, body: { redirectUris: ['https://collector.example/cb'] } });
+  const rh1 = await api('/api/oauth/apps/' + RK.clientId, { method: 'PATCH', cookie: devG.cookie, body: { homepage: 'https://collector.example' } });
+  const rs1 = await api('/api/oauth/apps/' + RK.clientId + '/secret', { method: 'POST', cookie: devG.cookie });
+  const rd1 = await api('/api/oauth/apps/' + RK.clientId, { method: 'DELETE', cookie: devG.cookie });
+  const rn = await api('/api/oauth/apps/' + RK.clientId, { method: 'PATCH', cookie: devG.cookie, body: { name: 'Repoint Kart Two' } });
+  const rkRow = db.prepare('SELECT * FROM oauth_clients WHERE client_id = ?').get(RK.clientId);
+  check('outside its "Confirm it\'s you" window, a developer\'s session cannot repoint an app\'s redirect addresses or homepage, make it a new secret or delete it (401 need_verify, nothing changed); a name change needs no proof',
+    [rp1, rh1, rs1, rd1].every((r) => r.status === 401 && r.j.code === 'need_verify') && rkRow && rkRow.redirect_uris === JSON.stringify([RK.redirect]) && rkRow.homepage === 'https://rk.example' && rkRow.secret_hash === sha(RK.secret) && rn.status === 200 && rkRow.name === 'Repoint Kart Two',
+    [rp1, rh1, rs1, rd1, rn].map((r) => r.status + ':' + (r.j && (r.j.code || r.j.error || '')).slice(0, 40)).join(' '));
+  const rpSame = await api('/api/oauth/apps/' + RK.clientId, { method: 'PATCH', cookie: devG.cookie, body: { redirectUris: [RK.redirect, 'https://rk.example/cb2'], password: 'devg-password-1' } });
+  const annStill = await userinfo(annRk.access_token);
+  const rp2 = await api('/api/oauth/apps/' + RK.clientId, { method: 'PATCH', cookie: devG.cookie, body: { redirectUris: [RK.redirect, 'https://collector.example/cb'] } });
+  const annAfter = await userinfo(annRk.access_token), annRf = await tokenReq({ grant_type: 'refresh_token', refresh_token: annRk.refresh_token, client_id: RK.clientId, client_secret: RK.secret });
+  const annNew = await req('GET', authzPath({ clientId: RK.clientId, redirect: 'https://collector.example/cb' }, { scopes: ['send.handle'], challenge: pkce().challenge }), { cookie: ann.cookie });
+  check('  ...with the proof it changes; an address on a host the app already had keeps every grant, one on a new host ends them all (the member is shown the consent page again, never sent there silently)',
+    rpSame.status === 200 && rpSame.j.newHost === false && rpSame.j.grantsEnded === 0 && annStill.status === 200 && rp2.status === 200 && rp2.j.newHost === true && rp2.j.grantsEnded === 1
+    && annAfter.status === 401 && annRf.status === 400 && !db.prepare('SELECT 1 FROM oauth_consents WHERE user_id = ? AND client_id = ?').get(ann.id, RK.clientId) && annNew.status === 200 && !annNew.loc && /data-mode="consent"/.test(annNew.text)
+    && /grantsEnded/.test(readFileSync(path.join(ROOT, 'public', 'developers.js'), 'utf8')), [rpSame.status, rpSame.j && rpSame.j.grantsEnded, rp2.status, rp2.j && rp2.j.grantsEnded, annAfter.status, annNew.status].join(' '));
+  // (k) the switched-off host, under another spelling, and as a homepage
+  const devH = mkUser('__oi_dev_h__'), devI = mkUser('__oi_dev_i__');
+  const claim = await mkApp(devH, { name: 'Free Claim Drop', homepage: 'https://claimer.example', redirectUris: ['https://claim-drop.example/cb'], kind: 'public' }, nextIp());
+  await api('/api/admin/oauth/apps/' + claim.j.app.clientId, { method: 'POST', cookie: admin.cookie, body: { disabled: true, reason: 'phishing' } });
+  const spellings = [];
+  for (const [why, body] of [['a trailing dot', { redirectUris: ['https://claim-drop.example./cb'] }], ['a port', { redirectUris: ['https://claim-drop.example:8443/cb'] }], ['capitals', { redirectUris: ['https://CLAIM-DROP.example/cb'] }],
+    ['www.', { redirectUris: ['https://www.claim-drop.example/cb'] }], ['the homepage', { homepage: 'https://claim-drop.example' }], ['the homepage with a dot and a port', { homepage: 'https://claim-drop.example.:444/' }]]) {
+    const r = await mkApp(devI, { name: 'Claim Two', homepage: 'https://fine-claim.example', redirectUris: ['https://fine-claim.example/cb'], kind: 'public', ...body }, nextIp());
+    if (r.status !== 400 || !/switched off/.test(r.j && r.j.error)) spellings.push(why + ' → ' + r.status);
+  }
+  const fineOne = await mkApp(devI, { name: 'Claim Two', homepage: 'https://claimer.example', redirectUris: ['https://fine-claim.example/cb'], kind: 'public' }, nextIp());
+  check('a switched-off app\'s redirect host is not reusable under another spelling (a trailing dot, a port, capitals, www.) nor as a homepage — while its homepage, which could name anybody\'s site, does not block anyone',
+    spellings.length === 0 && fineOne.status === 200, spellings.join(' | ') + ' / ' + fineOne.status);
+  // (l) the probation sweep, and what the token endpoint tells an app about a restricted member
+  const pat = mkUser('__oi_pat__'), quin = mkUser('__oi_quin__'), ros = mkUser('__oi_ros__');
+  const patT = (await exchange(BURN, await getCode(pat, BURN, { scopes: ['offline_access'], tick: ['offline_access'] }))).j;
+  const quinT = (await exchange(BURN, await getCode(quin, BURN, { scopes: ['offline_access'], tick: ['offline_access'] }))).j;
+  await exchange(BURN, await getCode(ros, BURN, { scopes: ['send.handle'], tick: ['send.handle'] }));
+  const rosCode = await getCode(ros, BURN, { scopes: ['send.handle'] });   // a code on its way to the app when the restriction lands
+  // exactly the UPDATE checkProbation's timed branch makes (this suite calls no revocation)
+  for (const u of [pat, ros]) db.prepare('UPDATE users SET restricted_until=?, restrict_reason=?, redeem_dur=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?').run(Date.now() + 2 * 864e5, 'You sold your $SEND before the hold was up — read-only is back, and the timer is doubled.', 2 * 864e5, u.id);
+  await api('/api/oauth/grants/' + BURN.clientId, { method: 'DELETE', cookie: quin.cookie });
+  const pR = await tokenReq({ grant_type: 'refresh_token', refresh_token: patT.refresh_token, client_id: BURN.clientId }), qR = await tokenReq({ grant_type: 'refresh_token', refresh_token: quinT.refresh_token, client_id: BURN.clientId });
+  const pC = await exchange(BURN, rosCode), uC = await tokenReq({ grant_type: 'authorization_code', code: 'nothing-of-ours', redirect_uri: BURN.redirect, code_verifier: 'v'.repeat(43), client_id: BURN.clientId });
+  check('the token endpoint answers a restricted member exactly as one who revoked the app (a refresh) and as a code that is not ours (an exchange): no app learns a moderation status',
+    pR.status === 400 && qR.status === 400 && pR.j.error_description === qR.j.error_description && pC.status === 400 && pC.j.error_description === uC.j.error_description && !/'this account cannot sign in to apps right now'/.test(LIB),
+    [pR.text, qR.text, pC.text].join(' | '));
+  const probation = SRC.slice(SRC.indexOf('function checkProbation('), SRC.indexOf('async function checkGateHold('));
+  check('  ...and the probation sweep\'s re-restriction (a held buy-out sold early: permanent, or timed and doubled) ends every app\'s tokens at once, as flagUser and the admin\'s restriction do',
+    (probation.match(/oidcRevokeUser\(userId\);/g) || []).length === 2 && /restricted_until=\?, restrict_reason=\?, redeem_dur=0[\s\S]*?oidcRevokeUser\(userId\);[\s\S]*?const newDur[\s\S]*?oidcRevokeUser\(userId\);/.test(probation), probation.length);
+  // (m) one member keeps at most 20 sign-ins in one app
+  const cap = mkUser('__oi_cap__');
+  const capFirst = (await exchange(BURN, await getCode(cap, BURN, { scopes: ['offline_access'], tick: ['offline_access'] }))).j;
+  for (let i = 0; i < OL.MAX_GRANTS; i++) await exchange(BURN, await getCode(cap, BURN, { scopes: ['offline_access'] }));
+  const grantsNow = db.prepare('SELECT COUNT(DISTINCT grant_id) n FROM oauth_tokens WHERE user_id = ? AND client_id = ?').get(cap.id, BURN.clientId).n;
+  const capOld = await tokenReq({ grant_type: 'refresh_token', refresh_token: capFirst.refresh_token, client_id: BURN.clientId });
+  check('one member keeps at most 20 sign-ins (token chains) in one app: the 21st ends the oldest, so signing in over and over cannot grow the table',
+    OL.MAX_GRANTS === 20 && grantsNow === 20 && capOld.status === 400 && (await userinfo(capFirst.access_token)).status === 401, grantsNow + ' ' + capOld.status);
+  // (n) the tables keep no order of writing
+  const noRowid = ['oauth_codes', 'oauth_tokens'].every((t) => /WITHOUT\s+ROWID\s*$/i.test(db.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(t).sql.trim()));
+  let rowidErr = ''; try { db.prepare('SELECT rowid FROM oauth_tokens LIMIT 1').get(); } catch (e) { rowidErr = e.message; }
+  const m2 = new DatabaseSync(':memory:');
+  m2.exec('CREATE TABLE users (id INTEGER PRIMARY KEY)'); m2.exec('INSERT INTO users (id) VALUES (1)');
+  m2.exec('CREATE TABLE oauth_codes (code_hash TEXT PRIMARY KEY, client_id TEXT NOT NULL, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, redirect_uri TEXT NOT NULL, scopes TEXT NOT NULL, challenge TEXT NOT NULL, nonce TEXT, auth_time INTEGER NOT NULL, grant_id TEXT NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER)');
+  m2.exec("CREATE TABLE oauth_tokens (token_hash TEXT PRIMARY KEY, kind TEXT NOT NULL, client_id TEXT NOT NULL, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, scopes TEXT NOT NULL, grant_id TEXT NOT NULL, auth_time INTEGER, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL, used_at INTEGER                           -- a refresh token once rotated\n)");
+  for (let i = 0; i < 3; i++) m2.prepare("INSERT INTO oauth_tokens (token_hash, kind, client_id, user_id, scopes, grant_id, created_at, expires_at, used_at) VALUES (?, 'refresh', 'sapp_x', 1, 'openid', 'g', 1, 9e15, ?)").run('h' + i, i ? 1 : null);
+  m2.prepare("INSERT INTO oauth_codes (code_hash, client_id, user_id, redirect_uri, scopes, challenge, auth_time, grant_id, expires_at) VALUES ('c1', 'sapp_x', 1, 'https://x.example/cb', 'openid', 'ch', 1, 'g', 9e15)").run();
+  const fake = (d) => ({ db: d, now: () => Date.now(), encField: () => 'x', decField: () => null, hashToken: sha, parseCookies: () => ({}), getUser: () => null, rateLimit: () => true, rateHits: () => 0, clientIp: () => '192.0.2.1',
+    send() {}, bad() {}, readBody: async () => ({}), blockSanctioned: () => false, isAdmin: () => false, ownershipRefusal: async () => null, verifyNeeds: () => ({}), origin: () => 'https://site.example', escHtml: (v) => String(v), assetVer: () => '',
+    secHeaders: {}, levelForXp: () => 1, titleFor: () => 't', effectiveMult: () => ({ total: 1 }), restrictionOf: () => null, sendNoOf: () => 1, nameKey: (v) => String(v).toLowerCase(), reservedKeys: () => ['justsendit'], rotateDays: () => 0, log: () => {} });
+  const mo2 = OL.createOidc(fake(m2));
+  const m2sql = ['oauth_codes', 'oauth_tokens'].map((t) => m2.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(t).sql.trim());
+  const m2idx = m2.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name IN ('oauth_codes', 'oauth_tokens') AND name LIKE 'idx_%' ORDER BY name").all().map((r) => r.name).join(',');
+  check('oauth_codes and oauth_tokens are WITHOUT ROWID (rows sit in the order of their random hashes, never in the order written): a table of an earlier build is rebuilt once with its rows and indexes',
+    noRowid && /no such column/.test(rowidErr) && m2sql.every((x) => /WITHOUT ROWID$/.test(x)) && m2.prepare('SELECT COUNT(*) n FROM oauth_tokens').get().n === 3 && m2.prepare('SELECT used_at FROM oauth_tokens WHERE token_hash = ?').get('h1').used_at === 1
+    && m2.prepare('SELECT COUNT(*) n FROM oauth_codes').get().n === 1 && m2idx === 'idx_oauth_codes_exp,idx_oauth_tokens_client,idx_oauth_tokens_exp,idx_oauth_tokens_grant,idx_oauth_tokens_user', JSON.stringify({ noRowid, rowidErr, m2idx }));
+  // (o) the admin's "Mark not reviewed" on the first-party app survives a restart (a fresh seed)
+  const seedSpec = { clientId: 'sendy.gg', name: 'Sendy\'s Metaverse', homepage: 'https://sendy.gg', redirect: 'https://sendy.gg/api/sendrh/callback', secretHash: sha('s1') };
+  mo2.seedFirstParty(seedSpec);
+  const firstReviewed = m2.prepare("SELECT reviewed_at FROM oauth_clients WHERE client_id = 'sendy.gg'").get().reviewed_at;
+  m2.prepare("UPDATE oauth_clients SET reviewed_at = NULL, reviewed_by = NULL WHERE client_id = 'sendy.gg'").run();
+  mo2.seedFirstParty(seedSpec); mo2.seedFirstParty({ ...seedSpec, description: 'changed', secretHash: sha('s2') });
+  check('the first-party app is reviewed when its row is first made, and the admin\'s "Mark not reviewed" survives every restart after (a seed, even one that changes it, never restores the review)',
+    firstReviewed > 0 && m2.prepare("SELECT reviewed_at FROM oauth_clients WHERE client_id = 'sendy.gg'").get().reviewed_at === null && m2.prepare("SELECT description FROM oauth_clients WHERE client_id = 'sendy.gg'").get().description === 'changed', String(firstReviewed));
+  m2.close();
+  // (p) the picture claim can be shown by the app's own page; every other upload stays same-origin
+  const UPL = path.join(DATA_DIR, 'uploads'), PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4b70000000049454e44ae426082', 'hex');
+  mkdirSync(UPL, { recursive: true });
+  for (const f of ['aaaaaaaaaaaaaaaaaaaaaaaa.png', 'cccccccccccccccccccccccc.png']) { writeFileSync(path.join(UPL, f), PNG); madeFiles.push(path.join(UPL, f)); }
+  const upA = await req('GET', '/uploads/aaaaaaaaaaaaaaaaaaaaaaaa.png'), upC = await req('GET', '/uploads/cccccccccccccccccccccccc.png');
+  check('a member\'s current picture (what the picture claim points at) is served with Cross-Origin-Resource-Policy: cross-origin, so an app\'s page can show it; any other upload stays same-origin',
+    upA.status === 200 && upA.h.get('cross-origin-resource-policy') === 'cross-origin' && upC.status === 200 && upC.h.get('cross-origin-resource-policy') === 'same-origin' && /idx_users_avatar_img ON users\(avatar_img\)/.test(SRC),
+    upA.status + ' ' + upA.h.get('cross-origin-resource-policy') + ' / ' + upC.status + ' ' + upC.h.get('cross-origin-resource-policy'));
+  // (q) the consent page says only what is true for what THIS app asked
+  const plain = await req('GET', authzPath(BURN, { scopes: ['send.handle', 'send.id'], challenge: pkce().challenge, prompt: 'consent' }), { cookie: ann.cookie });
+  const onlyPower = await req('GET', authzPath(BURN, { scopes: ['send.power'], challenge: pkce().challenge, prompt: 'consent' }), { cookie: ann.cookie });
+  check('the consent page\'s "never shared" line names holdings, the OG tier and communities only for an app that did not ask for the Boost, and says the Send Power (or picture) is public next to the handle whenever it is offered',
+    /Never shared with any app:<\/b> your email, your wallets, your IP address, your sign-in history, your holdings, your OG tier and your communities\.<\/p>/.test(plain.text) && !/Leaving your handle unticked/.test(plain.text)
+    && /your holdings, your OG tier and your communities\. Leaving your handle unticked keeps it out of what is sent, but your Send Power is public on your Send Wall next to it\./.test(onlyPower.text), plain.status + ' ' + onlyPower.status);
+  reviewedSet(BURN, false);
+
   /* ═══ 34. the browser walk: the sign-in and consent pages at 320, 390 and 1280 px ═══ */
   await api('/api/oauth/grants/' + PUB.clientId, { method: 'DELETE', cookie: alice.cookie });   // so the walk's sign-in carries on to a consent page, not straight back
   const lee = mkUser('__oi_lee__', { sudo: false }); givePassword(lee.id, 'lee-password-1');   // never allowed PUB, no unlocked window: the page asks "Confirm it's you"
@@ -905,6 +1128,7 @@ try {
   check('the suite ran to the end', false, e && e.message);
 } finally {
   try { walkSrv.close(); } catch {}
+  for (const f of madeFiles) { try { unlinkSync(f); } catch {} }
   for (const c of apps) for (const t of ['oauth_tokens', 'oauth_codes', 'oauth_consents', 'oauth_subjects', 'oauth_clients']) { try { db.prepare('DELETE FROM ' + t + ' WHERE client_id = ?').run(c); } catch {} }
   for (const t of ['oauth_tokens', 'oauth_codes', 'oauth_consents', 'oauth_subjects']) { try { db.prepare('DELETE FROM ' + t + " WHERE client_id = 'sendy.gg' AND user_id IN (" + made.map(Number).join(',') + ')').run(); } catch {} }
   for (const id of made) {
