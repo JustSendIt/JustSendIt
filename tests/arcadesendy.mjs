@@ -95,6 +95,8 @@ try {
   const seedName = ent(((/OIDC\.seedFirstParty\(\{ clientId: 'sendy\.gg', name: '((?:[^'\\]|\\.)*)'/.exec(SRV) || [])[1] || '').replace(/\\'/g, '’'));
   check('  ...under both of the game\'s names: its title (Send: Diamond Forge) and the name Sign in with Send shows on its consent page', seedName.length > 3 && /Send: Diamond Forge/.test(CARD_TEXT) && CARD_TEXT.includes(seedName), seedName + ' | ' + CARD_TEXT.slice(0, 160));
   check('  ...that you sign up to play (18 or over; free, no wallet) a shared practice world with free play money, or look round as a guest', /you can sign up \(18 or over; free, no wallet\) and play the shared practice world/.test(CARD_TEXT) && /free play money/.test(CARD_TEXT) && /as a guest without an account/.test(CARD_TEXT));
+  // the game's 3D world update (live on sendy.gg 2026-11-03, the game session's own words): the Moon, the sea, the ring race, AirDrop Parties
+  check('  ...and what the 3D world holds today, in the game\'s own words', CARD_TEXT.includes('Fly to the Moon, swim the sea, race for rings and catch AirDrop drops.'), CARD_TEXT);
   check('  ...not that anyone can play (playing needs a sign-up; a guest only looks around)', !/anyone can play/i.test(CARD_WORDS), CARD_WORDS);
   check('  ...that it is one world for everyone, so other players see your moves (PUBLIC.md: "anyone can see your moves")', /other players can see your moves/.test(CARD_TEXT));
   check('  ...a separate site this site\'s operator runs too, play money only, no real money, entertainment only', /separate site, not part of this one, though this site’s operator runs it too/.test(CARD_TEXT) && /no real money/.test(CARD_TEXT) && /Entertainment only/.test(CARD_TEXT), CARD_TEXT);
