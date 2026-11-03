@@ -14781,7 +14781,7 @@ function settleBeta() {
 
    Deliberately NOT a security boundary on private data — that is what sessions and the per-route guards
    are for. This decides who may make an account. */
-const TOS_VERSION = '2026-10-23';   // 2026-10-23: the swap paragraphs cover the Swap in my wallet button (Ethereum and Solana routers, Jupiter); 2026-10-22: §9(g) — a burn proof takes any amount; 2026-10-21: ETH as well as $SEND; 2026-10-14: the Arcade's slot machine joined Rocket Run in §§1, 2, 31 and 45
+const TOS_VERSION = '2026-11-03';   // 2026-11-03: §34 says we run sendy.gg too (the Arcade links to it); 2026-10-23: the swap paragraphs cover the Swap in my wallet button (Ethereum and Solana routers, Jupiter); 2026-10-22: §9(g) — a burn proof takes any amount; 2026-10-21: ETH as well as $SEND; 2026-10-14: the Arcade's slot machine joined Rocket Run in §§1, 2, 31 and 45
 /* The terms-acceptance step is HIDDEN unless TOS_GATE=1: the page, the scroll-to-the-end box and the
    need_tos refusal all sit behind this one switch. The tests run with it on so the flow stays covered. */
 const TOS_GATE = process.env.TOS_GATE === '1';

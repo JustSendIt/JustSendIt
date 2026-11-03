@@ -1178,7 +1178,7 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
 
 /* ─── The Arcade (arcade.html) ─── */
 /* ═══ Arcade (/arcade) — wide screens. Loaded after base.css. Every rule sits inside (min-width: 1280px).
-   Scope: the page's own ids (#arc-game, #slots, #cmp, #cmp-*), its own .arc-/.slot-/.cmp- classes under .arc-wrap,
+   Scope: the page's own ids (#arc-game, #slots, #sendygg, #cmp, #cmp-*), its own .arc-/.slot-/.sgg-/.cmp- classes under .arc-wrap,
    and the shared .np-hero header only where the page holds #arc-game. ═══ */
 @media (min-width: 1280px) {
   /* page-local spacing: the gap between the four blocks, the Rocket Run split (screen | side panel), the column gutter */
@@ -1197,10 +1197,10 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   }
 
   /* ---- shared: card titles sit left with a hairline running out to the edge ---- */
-  .arc-wrap > #arc-game > .arc-game-h, .arc-wrap > #slots > .arc-game-h, #cmp .cmp-h {
+  .arc-wrap > #arc-game > .arc-game-h, .arc-wrap > #slots > .arc-game-h, .arc-wrap > #sendygg > .arc-game-h, #cmp .cmp-h {
     display: flex; align-items: center; gap: 0.6rem; text-align: left;
   }
-  .arc-wrap > #arc-game > .arc-game-h::after, .arc-wrap > #slots > .arc-game-h::after, #cmp .cmp-h::after {
+  .arc-wrap > #arc-game > .arc-game-h::after, .arc-wrap > #slots > .arc-game-h::after, .arc-wrap > #sendygg > .arc-game-h::after, #cmp .cmp-h::after {
     content: ''; flex: 1 1 2rem; min-width: 2rem; height: 2px; border-radius: 2px;
     background: linear-gradient(90deg, var(--house-rule), transparent);
   }
@@ -1261,6 +1261,24 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   #slots .slot-howcard .arc-note-honest { margin-top: 0; }
   /* the machine's own labels in the house mono, like stencilled lettering on the cabinet */
   #slots .slot-led-lbl, #slots .slot-jp { font-family: var(--font-mono); font-weight: 600; }
+
+  /* ---- Send: Diamond Forge (sendy.gg): the lede across the top; the still at Rocket Run's split on the left, what the game is
+     and the way in beside it; the honest note across the foot. The side block's parts take their own places (display: contents),
+     and the still spans a spare flexible row, so whichever column is taller, the other never opens a gap in it. ---- */
+  .arc-wrap > #sendygg {
+    max-width: none; margin: 0 0 var(--arc-gap); padding: 1.5rem 1.8rem 1.7rem;
+    display: grid; grid-template-columns: var(--arc-split); grid-template-rows: auto auto auto auto auto 1fr auto;
+    column-gap: var(--arc-col-gap); align-items: start;
+  }
+  #sendygg > .arc-game-h { grid-column: 1 / -1; grid-row: 1; margin-bottom: 0.9rem; }
+  #sendygg > .sgg-lede { grid-column: 1 / -1; grid-row: 2; max-width: 78ch; margin: 0 0 1.2rem; text-align: left; font-family: var(--font-serif); line-height: 1.42; }
+  #sendygg > .sgg-preview { grid-column: 1; grid-row: 3 / 7; margin: 0; }
+  #sendygg .sgg-cap { text-align: left; }
+  #sendygg > .sgg-side { display: contents; }
+  #sendygg .sgg-what { grid-column: 2; grid-row: 3; max-width: none; text-align: left; }
+  #sendygg .sgg-play { grid-column: 2; grid-row: 4; max-width: none; margin-top: 1rem; }
+  #sendygg .sgg-out { grid-column: 2; grid-row: 5; max-width: none; margin-top: 0.6rem; text-align: left; }
+  #sendygg .sgg-side > .arc-note-honest { grid-column: 1 / -1; grid-row: 7; max-width: none; margin-top: 1.2rem; text-align: left; }
 
   /* ---- competitions: the heading and the jump chips share a line, the six boards sit three to a row ---- */
   .arc-wrap > #cmp {
