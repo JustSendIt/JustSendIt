@@ -63,6 +63,16 @@ and fields trimmed to what the code reads, never a value changed:
     xdce-crowd-sale (XDC, "XDC Network") from the /coins/markets answer above (its whole 199-coin answer, not the 32 here), and
     CoinLore's rows that are not under those symbols — "IOTA" as MIOTA (page start=100), "BitTorrent" as BTTC (start=1200) and
     "XinFin Network" as XDCE (start=0) — as its walk gave them, keyed by page.
+  mcap-lore-ltc.json — CoinLore /ticker/?id=1, read 2026-11-03 16:21 UTC with the honest User-Agent, as served (why the walk finds
+    no $LTC: its coin id 1, with Litecoin's 84M total and max supply, reads "x", symbol X, at $0.000045, circulating supply "0?";
+    /tickers/?start=1700 a minute later listed it at rank 1797, and /coin/markets/?id=1 at 16:29 named an X/USDT pair on Toobit).
+    The suite holds it beside CoinGecko's litecoin row from heatmap-cg-top100.json.
+  The symbol-and-price matches (owner, 2026-11-03) are tested on these same rows: BNB ("Binance Coin") and THETA ("Theta Token")
+    in the walk above; BNB's later read is CoinLore's row 2710 in heatmap-lore-top100.json (2026-10-30, $685.39), against CoinGecko's
+    $749.14 of 2026-10-28. The traps that need a second coin are built in the suite from measured rows, each changed in ONE field
+    and said so where it is built (never written here as if read): CoinLore's "Wrapped BNB" listed under the symbol BNB (two BNBs
+    within 10%), CoinLore's onbeam row named by its own nameid "onbeam" (a coin under another name beside a same-name coin at
+    another price), and CoinGecko's Krown Network given the ticker MODE (a different coin that only shares CoinLore's Mode's ticker).
   CoinPaprika's answers were measured for the comparison too, and are NOT here: its free plan is for personal use only, and
   passing its data on needs its Enterprise licence.
 
