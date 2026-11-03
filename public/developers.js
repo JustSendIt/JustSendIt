@@ -92,8 +92,9 @@
         '<div><dt>Members who allowed it</dt><dd>' + Number(a.members || 0).toLocaleString('en-US') + '</dd></div>' +
         '<div><dt>Registered</dt><dd>' + esc(day(a.createdAt)) + '</dd></div>' +
       '</dl>' +
-      (a.disabled ? '<p class="dv-off">Switched off by Just Send It on ' + esc(day(a.disabledAt)) + (a.disabledReason ? ': ' + esc(a.disabledReason) : '') + '. It cannot sign anyone in, and its tokens stopped working. Write to SendRH@Atomicmail.io about it.</p>' : '') +
-      (editing === a.clientId ? editForm(a) :
+      (a.disabled ? '<p class="dv-off">Switched off by Just Send It on ' + esc(day(a.disabledAt)) + (a.disabledReason ? ': ' + esc(a.disabledReason) : '') + '. It cannot sign anyone in, its tokens stopped working, and it stays as it is (no changes, no new secret, no delete) until the admin decides. Write to SendRH@Atomicmail.io about it.</p>' : '') +
+      // a switched-off app is kept exactly as it was for the admin: the server refuses every change to it, so none is offered
+      (a.disabled ? '' : editing === a.clientId ? editForm(a) :
         '<div class="dk-actions">' +
           '<button class="btn btn-ghost btn-sm" type="button" data-dv-act="edit" data-tip="Opens a form to change the name, homepage, redirect addresses or description">Edit</button>' +
           (a.kind === 'confidential' ? '<button class="btn btn-ghost btn-sm" type="button" data-dv-act="secret" data-tip="Makes a new client secret and shows it once; the old one stops working at once (tap twice)">New secret</button>' : '') +
