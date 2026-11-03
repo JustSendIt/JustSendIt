@@ -44,7 +44,13 @@ try {
   };
   const top = mk('__bl_Top_' + tag, 987654321), me = mk('__bl_me_' + tag, 987654320);
   const get = async (p, sid) => { const r = await fetch(BASE + p, { headers: { Origin: BASE, Cookie: 'jsi_age=18; sid=' + sid } }); let j = null; try { j = await r.json(); } catch {} return { status: r.status, j }; };
-  const lb = await get('/api/leaderboard', me.sid);
+  /* The server keeps the top 20 for 8 s (LB_TTL). A suite just before this one can fill that cache before these two rows exist
+     (CI, 2026-11-03: the Arcade suite's browser visit, then this suite inside the 8 s, read a board without them), so wait it out
+     — up to twice the TTL — before judging what the board sends. */
+  let lb = await get('/api/leaderboard', me.sid);
+  for (let i = 0; i < 16 && !((lb.j && lb.j.top) || []).some((r) => r.username === '__bl_Top_' + tag); i++) {
+    await new Promise((ok) => setTimeout(ok, 1000)); lb = await get('/api/leaderboard', me.sid);
+  }
   const row = lb.j && (lb.j.top || []).find(r => r.rank === 1);
   check('/api/leaderboard (Arena, Hall of Fame) sends each row\'s username, with its capitals', row && row.username === '__bl_Top_' + tag, lb.status + ' ' + JSON.stringify(row));
   const beta = await get('/api/beta', me.sid);
