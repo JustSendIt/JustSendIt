@@ -125,6 +125,14 @@
 }
 .inv-in:focus-visible { outline: 2px solid var(--g-green, var(--green)); outline-offset: 2px; border-color: var(--g-green, var(--green)); }
 
+/* The last step's name and optional email. The code box above is uppercase and tracked for a ticket
+   code; a username and a password are not, so they use the site's own field. */
+#inv-join-panel { width: min(100%, 28rem); text-align: left; }
+#inv-join-panel .addr-input { text-align: left; }
+#inv-join-extra { margin-top: 0.35rem; }
+#inv-join-extra summary { cursor: pointer; color: var(--g-text, #f2f6ec); font-weight: 700; }
+#inv-join-extra summary:focus-visible { outline: 2px solid var(--g-green, var(--green)); outline-offset: 2px; }
+
 /* ═══ the same codes, on the dashboard ═══════════════════════════════════════════════════════
    Uses the site's own surface tokens rather than the gate palette: this one lives on a page the
    person already knows, so it should look like the rest of it. */
