@@ -51,8 +51,16 @@
     /* The nudge shows itself once and then leaves. It is a fixed bubble over page content, so a nudge
        that never goes away is a nudge that permanently covers a link somebody wanted. */
     var hintTimer = null;
+    /* A personal wall's song is the sound on that page, whether or not it has managed to start. The theme
+       must not begin over it: the player often finishes loading after the wall has already asked, and a
+       later tap (the age answer, a returning listener's first click) would start both. */
+    function wallSongOn() {
+      const box = document.getElementById('wall-song');
+      const song = document.getElementById('wall-song-audio');
+      return !!(song && song.getAttribute('src') && box && !box.hidden);
+    }
     function showHint() {
-      if (optedOut()) return;
+      if (optedOut() || wallSongOn()) return;
       hint.hidden = false; btn.classList.add('wants');
       clearTimeout(hintTimer);
       hintTimer = setTimeout(hideHint, 12000);   // said once, then out of the way
@@ -61,13 +69,19 @@
 
     // only render "playing" once the browser actually starts audio
     async function tryPlay() {
-      try { await audio.play(); setUI(true); set('1'); hideHint(); return true; }
-      catch { return false; }
+      if (wallSongOn()) { if (!audio.paused) { audio.pause(); setUI(false); } return false; }
+      try {
+        await audio.play();
+        /* The wall song can arrive while this play() is still settling. Stop, and do not remember this
+           page as the listener having started the theme. */
+        if (wallSongOn()) { audio.pause(); setUI(false); return false; }
+        setUI(true); set('1'); hideHint(); return true;
+      } catch { return false; }
     }
 
     btn.addEventListener('click', async () => {
-      if (audio.paused) { if (!(await tryPlay()) && window.sendToast) sendToast('Browser blocked audio — tap again 🎵'); }
-      else { audio.pause(); setUI(false); set('0'); hideHint(); }
+      if (audio.paused) { if (!(await tryPlay()) && !wallSongOn() && window.sendToast) sendToast('Browser blocked audio — tap again 🎵'); }
+      else if (!audio.paused) { audio.pause(); setUI(false); set('0'); hideHint(); }
     });
     hint.addEventListener('click', () => tryPlay());
     vol.addEventListener('input', () => {
@@ -88,8 +102,9 @@
     const AGE = window.AGE;
     const afterAge = (fn) => { if (AGE && AGE.needed) AGE.whenOk(fn); else fn(); };
     document.addEventListener('jsi:age-open', () => { if (!audio.paused) audio.pause(); });
-    /* A personal wall's own song is the sound on that page. Pause the theme while it plays; do not
-       mark the theme opted out, so the next page without a wall song can resume it. */
+    /* Pause the theme when the wall song claims the page. Do not mark the theme opted out, so the next
+       page without a wall song can resume it. tryPlay also refuses while a song is up, including when
+       this event was dispatched before the player had finished loading. */
     document.addEventListener('jsi:wall-song', () => { if (!audio.paused) { audio.pause(); setUI(false); } });
 
     if (state === '0' || !resumeAllowed) {

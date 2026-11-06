@@ -166,10 +166,16 @@ try {
   const notWave = Buffer.alloc(64, 0); notWave.write('RIFF', 0); notWave.write('AVI ', 8);
   const avi = await uploadRaw(me, 'audio/wav', notWave);
   check('a RIFF file that is not a WAVE is refused', avi.status === 400, avi.t.slice(0, 120));
+  const PLAYER = read('player.js');
   check('the settings card and the wall both offer the song, and the site theme steps aside while it plays',
     /accept="\.mp3,\.wav,\.wave,audio\/mpeg,audio\/wav,audio\/wave,audio\/x-wav"/.test(WS)
     && /function paintSong\(src\)/.test(UP) && /paintSong\(t\.wall_audio\)/.test(UP)
-    && /jsi:wall-song/.test(read('player.js')));
+    && /jsi:wall-song/.test(PLAYER)
+    && /function wallSongOn\(\)/.test(PLAYER)
+    && /if \(wallSongOn\(\)\) \{ if \(!audio\.paused\) \{ audio\.pause\(\); setUI\(false\); \} return false; \}/.test(PLAYER)
+    && /await audio\.play\(\);\n        \/\* The wall song can arrive while this play\(\) is still settling/.test(PLAYER)
+    && /if \(wallSongOn\(\)\) \{ audio\.pause\(\); setUI\(false\); return false; \}/.test(PLAYER)
+    && /if \(optedOut\(\) \|\| wallSongOn\(\)\) return;/.test(PLAYER));
 } catch (e) {
   console.error('ERROR', e && e.stack);
   check('the suite ran to the end', false, e && e.message);
