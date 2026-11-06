@@ -312,12 +312,69 @@ function paintAvatar(src) {
   // a cached image can be complete before it is in the page, and then 'load' never fires
   if (src && img.complete && img.naturalWidth > 0) { img.hidden = false; emo.hidden = true; }
 }
+/* The wall's song. Browsers will not start sound until a gesture, so a blocked start waits for the next
+   click or key. The control stays on the page either way: anyone can pause it (WCAG 1.4.2). The site's
+   own theme steps aside while this is playing. A hidden tab pauses it and picks up again on return. */
+let wallSongWanted = false;
+let wallSongHold = false;   // a pause we asked for (tab hidden, age question) is not the visitor pressing pause
+function holdWallSong(audio) {
+  wallSongHold = true;
+  try { audio.pause(); } catch {}
+  queueMicrotask(() => { wallSongHold = false; });
+}
+function paintSong(src) {
+  const box = document.getElementById('wall-song');
+  const audio = document.getElementById('wall-song-audio');
+  if (!box || !audio) return;
+  if (!src) {
+    wallSongWanted = false;
+    holdWallSong(audio);
+    audio.removeAttribute('src');
+    try { audio.load(); } catch {}
+    box.hidden = true;
+    return;
+  }
+  if (audio.getAttribute('src') === src && !box.hidden) return;
+  audio.src = src;
+  box.hidden = false;
+  const start = () => {
+    document.dispatchEvent(new CustomEvent('jsi:wall-song'));
+    audio.play().then(() => { wallSongWanted = true; }).catch(() => armWallSong(audio));
+  };
+  if (window.AGE && AGE.needed) AGE.whenOk(start);
+  else start();
+}
+function armWallSong(audio) {
+  const fire = () => {
+    cleanup();
+    document.dispatchEvent(new CustomEvent('jsi:wall-song'));
+    audio.play().then(() => { wallSongWanted = true; }).catch(() => {});
+  };
+  const targets = [[document, 'pointerdown'], [document, 'keydown'], [document, 'touchstart']];
+  const cleanup = () => targets.forEach(([t, e]) => t.removeEventListener(e, fire, true));
+  targets.forEach(([t, e]) => t.addEventListener(e, fire, { capture: true, once: true, passive: true }));
+}
+document.addEventListener('jsi:age-open', () => {
+  const audio = document.getElementById('wall-song-audio');
+  if (audio && !audio.paused) { wallSongWanted = true; holdWallSong(audio); }
+});
+document.addEventListener('visibilitychange', () => {
+  const audio = document.getElementById('wall-song-audio');
+  if (!audio || !audio.getAttribute('src')) return;
+  if (document.hidden) { if (!audio.paused) holdWallSong(audio); }
+  else if (wallSongWanted) audio.play().catch(() => {});
+});
+document.addEventListener('play', (e) => { if (e.target && e.target.id === 'wall-song-audio') wallSongWanted = true; }, true);
+document.addEventListener('pause', (e) => {
+  if (e.target && e.target.id === 'wall-song-audio' && !wallSongHold && !document.hidden) wallSongWanted = false;
+}, true);
 function applyTheme(t) {
   if (!t) return;
   paintAccent(t.accent);
   paintBackground(t.wall_bg, t.bg_img);
   paintHeader(t.header_img);
   paintAvatar(t.avatar_img);
+  paintSong(t.wall_audio);
 }
 
 function paintSocials(u) {

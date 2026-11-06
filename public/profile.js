@@ -33,6 +33,9 @@ function drawSitePicker() {
 function renderImgSlot(kind, url) {
   WallStyle.imageSlot(document.getElementById('slot-' + kind), kind, url, (k, u) => { myTheme[IMG_KEY[k]] = u; });
 }
+function renderSongSlot(url) {
+  WallStyle.audioSlot(document.getElementById('slot-song'), url, (u) => { myTheme.wall_audio = u; });
+}
 
 /* ---------- account ---------- */
 let unameTimer;
@@ -722,6 +725,7 @@ window.onAuthReady = function (user) {
   renderImgSlot('avatar', myTheme.avatar_img);
   renderImgSlot('header', myTheme.header_img);
   renderImgSlot('background', myTheme.bg_img);
+  renderSongSlot(myTheme.wall_audio);
   initSitePrefs();
   loadMe();
   loadConnectedWallet();

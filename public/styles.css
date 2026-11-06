@@ -4211,6 +4211,11 @@ body::after {
 }
 /* a profile slot preview may hold a video too */
 .img-slot video { max-width: 100%; border-radius: var(--r-2); display: block; }
+.song-slot audio { width: min(100%, 22rem); height: 2.4rem; }
+.wall-song { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; margin: 0.35rem 0 0.15rem; }
+.wall-song[hidden] { display: none; }
+.wall-song-label { font-size: max(var(--text-floor), 0.8rem); font-weight: 700; color: var(--text); }
+.wall-song audio { width: min(100%, 22rem); height: 2.4rem; }
 @media (prefers-reduced-motion: reduce) { .wall-bg-video { display: none; } .wall-bg-scrim { background: var(--ink); } }
 
 /* ---------- 13. On-chain chart (replaces the embedded third-party chart) ---------- */

@@ -30,7 +30,7 @@
       case 'comments': case 'hop_comments': return esc(e.what[0].toUpperCase() + e.what.slice(1)) + ' #' + esc(o.id) + (gone ? ' deleted' : ' edited') + ' — it read “' + esc(clip(o.text, 160)) + '”';
       case 'calls': return 'Send Call #' + esc(o.id) + ' on $' + esc(o.symbol || '?') + (gone ? ' deleted' : ' changed') + ' — entry ' + esc(usd(o.entry_price)) + (o.entry_mc ? ' (market cap ' + esc(usd(o.entry_mc)) + ')' : '') + ' on ' + esc(day(o.created_at));
       case 'users': {
-        const keys = ['username', 'bio', 'avatar', 'avatar_img', 'header_img', 'bg_img', 'accent', 'wall_bg', 'twitter_handle', 'ig_handle'];
+        const keys = ['username', 'bio', 'avatar', 'avatar_img', 'header_img', 'bg_img', 'wall_audio', 'accent', 'wall_bg', 'twitter_handle', 'ig_handle'];
         const changed = keys.filter((k) => !e.now || String(e.now[k] == null ? '' : e.now[k]) !== String(o[k] == null ? '' : o[k]));
         return 'Profile changed — it was ' + (changed.length ? changed.map((k) => esc(k.replace(/_/g, ' ')) + ' “' + esc(clip(o[k], 60)) + '”').join(', ') : 'as it is now');
       }
