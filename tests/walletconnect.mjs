@@ -247,6 +247,33 @@ try {
       /const FEATURED = 8;/.test(WALLET_C) && /featured: i < FEATURED/.test(WALLET_C) && /k\.featured \|\| has\(k\) \|\| showAll/.test(strip(HOME)) && /'Show all ' \+ all\.length \+ ' wallets ▾'/.test(strip(HOME)));
     check('  ...and every entry goes through the one read-only path: no wallet SDK, no WalletConnect, no transaction', !/walletconnect|@walletconnect|sdk|eth_sendTransaction/i.test(WALLET_C));
   }
+
+  /* ═══════════ 5. create-account ends on a wallet signature, not a trip back to the homepage ═══════════
+     The last step closed the ticket, opened the sign-up dialog, and that dialog's "Create account" click
+     trusted a cached "no ticket" from before the code was redeemed. It closed itself onto the homepage and
+     reopened the ticket. The wallet was never asked to sign, so the only way through was an email. */
+  {
+    const INV = readFileSync(path.join(PUB, 'invite.js'), 'utf8');
+    const INV_C = strip(INV);
+    check('the wallet sign-up button cannot submit a form (a submit reloaded the page instead of signing)',
+      /<button type="button" class="btn btn-primary" id="btn-wallet-signin"/.test(AUTH));
+    check('a handoff from the ticket is trusted, so the segment clicks do not bounce back to it',
+      /if \(opts\.fromTicket\) signupTrusted = 2;/.test(AUTH_C) && /function signupTrust\(\)/.test(AUTH_C)
+      && /if \(signupTrust\(\)\) return;/.test(AUTH_C));
+    check('connecting a wallet to finish sign-up re-reads the ticket before it would close, then still asks the wallet to sign',
+      /const g = await gate\(true\);/.test(AUTH_C)
+      && /openInvite\(\{ then: \(\) => AUTH\.openSignup\(\{ tab: 'wallet', fromTicket: true \}\) \}\)/.test(AUTH_C)
+      && /setStatus\(status, 'Choose your wallet… 👛'\);\s*const \{ provider, address \} = await WALLET\.connect\(\{ burn: true \}\)/.test(AUTH_C));
+    check('a failed re-read does not wipe a ticket already confirmed',
+      /catch \{ if \(!gateState\) gateState = \{ access: false, signedIn: false \}; \}/.test(AUTH_C));
+    check('the last step of create-account is a read-only wallet sign-in, and an email is optional',
+      /id="inv-join"[^>]*>Sign in with wallet — read-only/.test(INV) && /An email is optional/.test(INV)
+      && /id="inv-join-emailbtn"/.test(INV) && /Use email instead/.test(INV));
+    check('that step starts the signature before it closes, so the homepage is not what they land on',
+      /AUTH\.openSignup\(\{[\s\S]*?connect: true[\s\S]*?\}\);[\s\S]{0,220}?close\(\);/.test(INV_C));
+    check('a sign-up already in progress (burn) still continues, instead of being sent through the wallet form',
+      /if \(typeof afterJoin === 'function'\)/.test(INV_C) && /fn\(\);/.test(INV_C));
+  }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join('\n'));
 }

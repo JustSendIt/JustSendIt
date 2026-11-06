@@ -103,12 +103,30 @@
           '</div>' +
         '</div>' +
 
-        /* step 4 — make the account */
+        /* step 4 — make the account. The wallet signature happens HERE: closing this first and opening
+           the sign-up dialog used to bounce straight back (a stale "no ticket"), which put the homepage
+           on screen again and never asked the wallet to sign. Email is a second way in, not a requirement. */
         '<div class="inv-step" id="step-join">' +
           '<h2 class="inv-title">🎟️ Your ticket is valid</h2>' +
-          '<p class="inv-sub">Last step: make your account. Your place in line — your <b>Send ID</b> — is set the moment you do, and it never changes.</p>' +
+          '<p class="inv-sub" id="inv-join-sub">Last step: sign in with your wallet. You sign one free message — <b>no transaction, no gas</b>, and it never lets this site move funds. Your place in line — your <b>Send ID</b> — is set the moment the account is made, and it never changes. <b>An email is optional.</b></p>' +
+          '<div class="inv-panel" id="inv-join-panel">' +
+            '<label class="inv-note" for="inv-join-user" style="display:block;margin-top:0;">Pick your @username <span class="f-hint">— your public name</span></label>' +
+            '<input class="addr-input" id="inv-join-user" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false">' +
+            '<p class="inv-err" id="inv-join-err" role="status" aria-live="polite"></p>' +
+            '<details id="inv-join-extra">' +
+              '<summary>Add an email &amp; password (optional)</summary>' +
+              '<p class="inv-note">A second way in, if you ever want one. Leave these empty to sign in with the wallet alone — you do not need an email, and you are not sent to the site to log in afterwards.</p>' +
+              '<label class="inv-note" for="inv-join-email" style="display:block;">Email</label>' +
+              '<input class="addr-input" id="inv-join-email" type="email" autocomplete="email" placeholder="you@example.com">' +
+              '<label class="inv-note" for="inv-join-pw" style="display:block;">Password <span class="f-hint">(8+ characters)</span></label>' +
+              '<input class="addr-input" id="inv-join-pw" type="password" autocomplete="new-password" placeholder="••••••••">' +
+              '<label class="inv-note" for="inv-join-pw2" style="display:block;">Confirm password</label>' +
+              '<input class="addr-input" id="inv-join-pw2" type="password" autocomplete="new-password" placeholder="••••••••">' +
+            '</details>' +
+          '</div>' +
           '<div class="inv-actions">' +
-            '<button class="g-btn g-btn-primary" id="inv-join" type="button" data-tip="Closes this and opens the sign-up form">Create my account 🚀</button>' +
+            '<button class="g-btn g-btn-primary" id="inv-join" type="button" data-tip="Asks your wallet to sign a free message and makes your account — nothing moves">Sign in with wallet — read-only 🦊</button>' +
+            '<button class="g-btn g-btn-ghost" id="inv-join-emailbtn" type="button" data-tip="Makes the account with an email and a password instead">Use email instead</button>' +
           '</div>' +
           '<button class="inv-browse" id="inv-browse3" type="button" data-tip="Closes this without making an account — your code is already used">Later — keep browsing →</button>' +
         '</div>' +
@@ -387,12 +405,28 @@
     root.querySelectorAll('.inv-step').forEach(s => s.removeAttribute('data-active'));
     const el = $(id); if (el) el.setAttribute('data-active', '');
     root.scrollTop = 0;
+    if (id === 'step-join') paintJoin();   // before focus: a continuing sign-up disables the username field so it is not the target
     // the terms step lands on the text itself, which is what the reader is told to read — the generic
     // pick took the first enabled control, the 18+ box beneath it (the agree box starts disabled)
     const f = (id === 'step-tos' && $('inv-tos')) || (el && el.querySelector('input:not([disabled]), button:not([disabled])'));
     if (f) { try { f.focus({ preventScroll: true }); } catch { f.focus(); } }
     if (id === 'step-tos') loadTerms();
     if (id === 'step-codes') paintCodes();
+  }
+  /* The last step is a wallet sign-in. A hand-off that already started somewhere else (Burn Verification
+     filled its form, then the ticket) keeps going with what was typed — the wallet fields would only get
+     in the way, and the button says Continue. */
+  function paintJoin() {
+    const cont = typeof afterJoin === 'function';
+    const b = $('inv-join'), alt = $('inv-join-emailbtn'), panel = $('inv-join-panel'), sub = $('inv-join-sub'), user = $('inv-join-user');
+    if (panel) panel.hidden = cont;
+    if (user) user.disabled = cont;   // a hidden field must not take the focus show() is about to place
+    if (alt) alt.hidden = cont;
+    if (sub) sub.hidden = cont;
+    if (b) {
+      b.textContent = cont ? 'Continue 🚀' : 'Sign in with wallet — read-only 🦊';
+      b.setAttribute('data-tip', cont ? 'Carries on with the sign-up you already started' : 'Asks your wallet to sign a free message and makes your account — nothing moves');
+    }
   }
 
   /* ---------- open / close ---------- */
@@ -430,7 +464,10 @@
     document.body.style.overflow = prevOverflow;
     stopScreen();
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
-    if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch {} }
+    // The sign-up dialog may already be up over this (the wallet signature). Putting focus back on the
+    // page underneath would yank it off that dialog and onto the homepage.
+    const authUp = document.getElementById('auth-modal') && !document.getElementById('auth-modal').hasAttribute('hidden');
+    if (!authUp && lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch {} }
     document.dispatchEvent(new CustomEvent('jsi:modalclose'));
   }
 
@@ -810,16 +847,70 @@
     on('inv-dl', downloadTicket);
     on('inv-share', shareOnX);
     on('inv-dash', () => { close(); location.href = '/profile#invites'; });
-    on('inv-join', async () => {
-      close();
-      // auth.js caches "does this visitor hold a ticket" for the page's life, and it was answered before
-      // this modal existed. Refresh it, or the Sign-up tab we are about to open would look at a stale no
-      // and bounce straight back here.
+    function joinFields() {
+      return {
+        username: ($('inv-join-user') && $('inv-join-user').value.trim()) || '',
+        email: ($('inv-join-email') && $('inv-join-email').value.trim()) || '',
+        password: ($('inv-join-pw') && $('inv-join-pw').value) || '',
+        password2: ($('inv-join-pw2') && $('inv-join-pw2').value) || '',
+      };
+    }
+    function joinFail(msg, field) {
+      const err = $('inv-join-err');
+      if (err) { err.className = 'inv-err'; err.textContent = msg; }
+      if (window.SFX) SFX.play('error');
+      const f = $(field || 'inv-join-user');
+      if (f && !f.closest('[hidden]')) f.focus();
+    }
+    // What was typed has to be a real sign-up before the wallet is asked. An empty email is the wallet-only path.
+    function joinReady(f) {
+      if (!/^[a-zA-Z0-9_.-]{3,24}$/.test(f.username)) { joinFail('Pick a @username first: 3–24 letters, numbers, _ . -', 'inv-join-user'); return false; }
+      if (f.email || f.password || f.password2) {
+        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email)) { joinFail('Enter a valid email — or leave the email and password empty to sign in with the wallet alone.', 'inv-join-email'); return false; }
+        if (f.password.length < 8) { joinFail('The password needs at least 8 characters — or leave it empty.', 'inv-join-pw'); return false; }
+        if (f.password !== f.password2) { joinFail('The two passwords don’t match.', 'inv-join-pw2'); return false; }
+      }
+      return true;
+    }
+    on('inv-join-emailbtn', async () => {
+      const f = joinFields();
+      if (f.username && !/^[a-zA-Z0-9_.-]{3,24}$/.test(f.username)) { joinFail('Pick a @username: 3–24 letters, numbers, _ . - — or leave it blank and choose it on the next screen.', 'inv-join-user'); return; }
       if (window.AUTH && AUTH.gate) { try { await AUTH.gate(true); } catch {} }
-      // hand off to the account modal the rest of the site uses — the ticket's job is done
-      if (window.AUTH && AUTH.openSignup) AUTH.openSignup();
+      if (window.AUTH && AUTH.openSignup) AUTH.openSignup({ tab: 'email', fromTicket: true, username: f.username, email: f.email, password: f.password });
       else if (window.AUTH && AUTH.open) AUTH.open();
-      if (typeof afterJoin === 'function') { try { afterJoin(); } catch {} }
+      close();
+    });
+    on('inv-join', async () => {
+      const go = $('inv-join');
+      if (go && go.disabled) return;
+      if (go) go.disabled = true;
+      try {
+        // A sign-up that already collected its details (Burn Verification) carries on with those.
+        if (typeof afterJoin === 'function') {
+          const fn = afterJoin; afterJoin = null;
+          if (window.AUTH && AUTH.gate) { try { await AUTH.gate(true); } catch {} }
+          try { fn(); } catch {}
+          close();
+          return;
+        }
+        const f = joinFields();
+        if (!joinReady(f)) return;
+        const err = $('inv-join-err');
+        if (err) { err.className = 'inv-err'; err.textContent = 'Opening your wallet…'; }
+        // Refresh the cached "do they hold a ticket?" BEFORE the sign-up dialog reads it. A stale no
+        // used to close that dialog and reopen this step, which is the homepage-and-back loop.
+        if (window.AUTH && AUTH.gate) { try { await AUTH.gate(true); } catch {} }
+        // Open the wallet sign-in — and start the read-only signature — BEFORE this closes, so the
+        // page underneath is covered the whole time. Email is only sent when they typed one.
+        if (window.AUTH && AUTH.openSignup) {
+          AUTH.openSignup({
+            tab: 'wallet', fromTicket: true, connect: true,
+            username: f.username,
+            email: f.email, password: f.password, password2: f.password2,
+          });
+        } else if (window.AUTH && AUTH.open) AUTH.open();
+        close();
+      } finally { if (go) go.disabled = false; }
     });
     on('inv-tos-go', async () => {
       const err = $('inv-tos-err'), go = $('inv-tos-go');

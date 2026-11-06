@@ -84,7 +84,7 @@
       </div>
       <p class="modal-note" id="w-lead">Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.</p>
       <details class="w-works" id="w-works" hidden><summary data-tip="Shows every wallet that works here, and how"></summary><ul class="w-works-list" aria-label="Wallets that work here"></ul></details>
-      <button class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
+      <button type="button" class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
       <p class="modal-note" id="wallet-status" aria-live="polite"></p>
       <p class="modal-note bp-alt">Wallet can’t sign (GMGN), or not on the list? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Switches to Burn Verification: prove the wallet by a burn of $SEND or ETH (any amount) instead of a signature">Use Burn Verification 🔥</button></p>
     </div>
@@ -304,25 +304,60 @@
   // Does this visitor already hold a ticket? Cached for the page's life — it only ever changes
   // through the ticket itself, which updates this when it does.
   let gateState = null;
+  /* How many of the sign-up segment clicks that follow may skip the "no ticket → close and reopen
+     the ticket" bounce. openSignup from the ticket sets this to 2 (email segment + wallet segment).
+     A stale cached "no ticket" used to close the dialog onto the homepage and reopen the ticket,
+     and the wallet signature never started. */
+  let signupTrusted = 0;
+  function signupTrust() {
+    if (signupTrusted > 0) { signupTrusted--; return true; }
+    return false;
+  }
   async function gate(force) {
     if (gateState && !force) return gateState;
-    try { gateState = await api('/api/gate/state'); } catch { gateState = { access: false, signedIn: false }; }
+    try { gateState = await api('/api/gate/state'); }
+    catch { if (!gateState) gateState = { access: false, signedIn: false }; }   // a blip must not wipe a ticket we already confirmed — that was the bounce back to the homepage
     return gateState;
   }
   AUTH.gate = gate;
   /* The one function the rest of the site calls to start a sign-up. A visitor holding a ticket goes
      straight to the account modal; one without sees the ticket first. */
   AUTH.openSignup = function (opts) {
+    opts = opts || {};
     openModal();
     // Burn Verification has its own sign-up (an email and a password, and the wallet): a sign-up opened on it stays there
     if (opts && opts.tab === 'burn') { const t = modal.querySelector('#tab-burn'); if (t) t.click(); }
     if (AUTH._burnMode) AUTH._burnMode(true);
+    // The ticket step already proved the pass. Those segment clicks must not re-read a stale "no ticket"
+    // and close this dialog — that put the homepage back on screen and opened the ticket again, in a loop,
+    // instead of asking the wallet to sign.
+    if (opts.fromTicket) signupTrusted = 2;
     const seg = modal.querySelector('#seg-signup');
     if (seg) seg.click();
     const wseg = modal.querySelector('#wseg-signup');   // the wallet tab too: @username first, then the wallet
     if (wseg) wseg.click();
     if (opts && opts.tab === 'wallet') { const t = modal.querySelector('#tab-wallet'); if (t) t.click(); }
     if (opts && opts.tab === 'email') { const t = modal.querySelector('#tab-email'); if (t) t.click(); }
+    const user = modal.querySelector('#w-username');
+    if (user && opts.username) user.value = opts.username;
+    const emailUser = modal.querySelector('#f-username');
+    if (emailUser && opts.username && opts.tab === 'email') emailUser.value = opts.username;
+    if (opts.email) {
+      const em = modal.querySelector('#w-email'), pw = modal.querySelector('#w-pw'), pw2 = modal.querySelector('#w-pw2');
+      if (em) em.value = opts.email;
+      if (pw) pw.value = opts.password || '';
+      if (pw2) pw2.value = opts.password2 || '';
+      const ex = modal.querySelector('#w-extra'); if (ex) ex.open = true;
+      if (opts.tab === 'email') {
+        const fe = modal.querySelector('#f-email'); if (fe) fe.value = opts.email;
+        const fp = modal.querySelector('#f-password'); if (fp && opts.password) fp.value = opts.password;
+      }
+    }
+    // The name is already chosen: go straight to the read-only signature. Email stays optional.
+    if (opts.connect) {
+      const go = modal.querySelector('#btn-wallet-signin');
+      if (go) go.click();
+    }
   };
   // the sign-in panel, on Burn Verification, set for a new account (join) or an existing one
   AUTH.openBurnSignup = function (join) {
@@ -584,7 +619,8 @@
        already holds a ticket never sees it. */
     segSignup.addEventListener('click', async () => {
       setRegMode(true);
-      const g = await gate();
+      if (signupTrust()) return;   // the ticket just handed us here — do not bounce back to it
+      const g = await gate(true);
       if (!g.signedIn && !g.access) { closeModal(); openInvite(); }
     });
     setRegMode(false); // login-first
@@ -870,7 +906,8 @@
     wSegLogin.addEventListener('click', () => setWalletMode(false));
     wSegSignup.addEventListener('click', async () => {
       setWalletMode(true);
-      const g = await gate();
+      if (signupTrust()) return;   // the ticket just handed us here — do not bounce back to it
+      const g = await gate(true);
       if (!g.signedIn && !g.access) { closeModal(); openInvite(); }
     });
     AUTH._resetModes = () => { setRegMode(false); setWalletMode(false); if (AUTH._burnMode) AUTH._burnMode(true); };
@@ -934,10 +971,17 @@
       try {
         let fields = null;
         if (wRegMode) {
+          setStatus(status, 'Checking your name…');
           fields = await walletSignupFields();
-          // making an account takes a ticket — ask before the wallet pops up, not after it has signed
-          const g = await gate();
-          if (!g.signedIn && !g.access) { closeModal(); openInvite(); return; }
+          // A fresh read. The cached answer is from before the ticket was redeemed, and trusting it
+          // closed this dialog onto the homepage and reopened the ticket — the signature never started.
+          const g = await gate(true);
+          if (!g.signedIn && !g.access) {
+            setStatus(status, '');
+            closeModal();
+            openInvite({ then: () => AUTH.openSignup({ tab: 'wallet', fromTicket: true }) });
+            return;
+          }
         }
         if (pendingSignup) {
           // the wallet already proved itself a moment ago: this only names the account
