@@ -101,6 +101,13 @@ try {
     && /<key>ExitTimeOut<\/key>\s*<integer>20<\/integer>/.test(site));
   check('update-live never cleans the tree, and the build worktree clean keeps data and .env',
     !/git clean/.test(updater) && !/rm\s+-rf/.test(updater) && /clean -fdq -e data -e \.env/.test(auto));
+  const doc = readFileSync(path.join(ROOT, 'DEPLOY.md'), 'utf8');
+  const installer = readFileSync(path.join(ROOT, 'ops', 'install-mac.sh'), 'utf8');
+  check('install reads the plists from origin/main, because a fetch does not put ops/ in the live folder',
+    doc.includes('git show origin/main:ops/install-mac.sh | bash')
+    && installer.includes('show origin/main:ops/com.sendrh.site.plist')
+    && installer.includes('show origin/main:ops/com.sendrh.deploy.plist')
+    && !doc.includes('cp ~/Desktop/JustSendIt/ops/'));
 
   {
     const w = world();

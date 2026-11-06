@@ -469,18 +469,18 @@ tunnel. The link to GitHub lives on this Mac instead, the same way sendy.gg's do
 - The log is `~/Library/Logs/sendrh-deploy/deploy.log`, with each attempt's full output beside it
   (`<commit>.log`); the state is in `~/.config/sendrh-deploy`.
 
+A fetch does not check the commit out, so `ops/` is not in the live folder until the first
+deploy. `ops/install-mac.sh` is read from `origin/main` and writes both plists the same way:
+
 ```sh
 ops/auto-deploy.sh --status              # live, GitHub, held or failed, the last lines of the log
 ops/auto-deploy.sh --hold "why"          # pushes still land on GitHub; nothing goes live
 ops/auto-deploy.sh --release             # the next pass deploys GitHub's main
-cd ~/Desktop/JustSendIt && git fetch origin main
-mkdir -p ~/Library/Logs/sendrh-site ~/Library/Logs/sendrh-deploy
-cp ~/Desktop/JustSendIt/ops/com.sendrh.site.plist ~/Library/LaunchAgents/
-cp ~/Desktop/JustSendIt/ops/com.sendrh.deploy.plist ~/Library/LaunchAgents/
-# Stop whatever already listens on 8642 first, so this agent is the one process the tunnel reaches.
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sendrh.site.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sendrh.deploy.plist
+cd ~/Desktop/JustSendIt && git fetch origin main && git show origin/main:ops/install-mac.sh | bash
 ```
+
+The first pass after that runs the full test suite before the live folder changes. On GitHub's
+runners that suite takes about 15 minutes. `cloudflared` stays up the whole time.
 
 The tunnel's ingress stays `service: http://127.0.0.1:8642`. Whoever can push to `main` decides what
 SendRH.com runs.
