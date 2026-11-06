@@ -443,14 +443,43 @@ deep-links straight to a scan of that token — the New Pairs page uses this for
 never written to a log line, and is never sent anywhere but Telegram. If it leaks, run `/revoke` in
 @BotFather immediately.
 
+## Publishing main through the tunnel
+
+The tunnel dials *out*. GitHub cannot open a connection to the box, and restarting `cloudflared` would only
+drop the hostname for a moment — it would not change the app. So the checkout on that box pulls `main` itself.
+
+Once, on the machine that runs the tunnel, after this commit is on `main`:
+
+```bash
+cd /opt/justsendit
+git fetch origin main
+git checkout main
+git merge --ff-only origin/main
+sudo bash scripts/install-live-updater.sh
+```
+
+That enables `justsendit-update.timer` and restarts the app onto the checkout you just pulled, so this code is what the tunnel is serving. A manual pull does not restart by itself. Every minute the timer fetches `origin/main`. When the commit is ahead of
+the checkout **and** the CI job named `check` has passed, `scripts/update-live.sh` fast-forwards, runs
+`npm ci --omit=dev` only if the lockfile changed, and `systemctl restart justsendit`. The app drains on
+SIGTERM and checkpoints SQLite, same as a manual restart. `cloudflared` is left running.
+
+It will not deploy a commit whose CI failed or has not finished, a history that is not a fast-forward, or a
+checkout with local edits. `data/`, `.env` and uploads are untracked and are not touched. If the new process
+does not answer `/healthz`, the script returns to the previous commit and restarts that. A force-push of
+`main` is refused; publish that by hand if you ever mean it.
+
+The repo is public, so the fetch needs no key. Set `JUSTSENDIT_GITHUB_TOKEN` only if GitHub's anonymous
+check-runs limit becomes the reason a finished build sits unpublished. Logs: `journalctl -u justsendit-update -f`.
+
 ## Operate
 
 - **Health:** `GET /healthz` → `200 {"ok":true}` (answered before any DB work — perfect for LB/uptime probes).
 - **Logs:** `journalctl -u justsendit -f` (VPS) or the platform's log view. Whenever the process looks like
   production (`NODE_ENV=production`, an `https` `BASE_URL`, or `COOKIE_SECURE`/`TRUST_PROXY` set) the boot prints
   `⚠️` warnings if `BASE_URL`/`COOKIE_SECURE`/`TRUST_PROXY` look misconfigured — including a forgotten `BASE_URL`.
-- **Restart / deploy:** `sudo systemctl restart justsendit`. The app catches SIGTERM, finishes in-flight
-  requests, checkpoints the WAL, and exits cleanly — no corruption, no WAL bloat.
+- **Restart:** `sudo systemctl restart justsendit`. The app catches SIGTERM, finishes in-flight
+  requests, checkpoints the WAL, and exits cleanly — no corruption, no WAL bloat. A push to `main` does this
+  on its own once the timer above is installed.
 - **Backups (built in):** `data/app.db` is your entire user base. The server itself writes one consistent snapshot
   per UTC day to `data/backups/app-YYYY-MM-DD.db` (SQLite's online backup API via `node:sqlite` — safe while
   running, never blocks requests; one a day, the last 3 kept inside the data directory, 7 when `BACKUP_DIR` points outside it; set `BACKUP_DIR` to move them). **Copy that directory
