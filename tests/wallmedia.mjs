@@ -172,9 +172,10 @@ try {
     && /function paintSong\(src\)/.test(UP) && /paintSong\(t\.wall_audio\)/.test(UP)
     && /jsi:wall-song/.test(PLAYER)
     && /function wallSongOn\(\)/.test(PLAYER)
-    && /if \(wallSongOn\(\)\) \{ if \(!audio\.paused\) \{ audio\.pause\(\); setUI\(false\); \} return false; \}/.test(PLAYER)
+    && /if \(wallSongOn\(\)\) \{ if \(!audio\.paused\) \{ audio\.pause\(\); setUI\(false\); \} hideHint\(\); return false; \}/.test(PLAYER)
     && /await audio\.play\(\);\n        \/\* The wall song can arrive while this play\(\) is still settling/.test(PLAYER)
-    && /if \(wallSongOn\(\)\) \{ audio\.pause\(\); setUI\(false\); return false; \}/.test(PLAYER)
+    && /if \(wallSongOn\(\)\) \{ audio\.pause\(\); setUI\(false\); hideHint\(\); return false; \}/.test(PLAYER)
+    && /jsi:wall-song', \(\) => \{ if \(!audio\.paused\) \{ audio\.pause\(\); setUI\(false\); \} hideHint\(\); \}/.test(PLAYER)
     && /if \(optedOut\(\) \|\| wallSongOn\(\)\) return;/.test(PLAYER));
 } catch (e) {
   console.error('ERROR', e && e.stack);

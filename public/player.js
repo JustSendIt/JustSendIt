@@ -69,12 +69,12 @@
 
     // only render "playing" once the browser actually starts audio
     async function tryPlay() {
-      if (wallSongOn()) { if (!audio.paused) { audio.pause(); setUI(false); } return false; }
+      if (wallSongOn()) { if (!audio.paused) { audio.pause(); setUI(false); } hideHint(); return false; }
       try {
         await audio.play();
         /* The wall song can arrive while this play() is still settling. Stop, and do not remember this
            page as the listener having started the theme. */
-        if (wallSongOn()) { audio.pause(); setUI(false); return false; }
+        if (wallSongOn()) { audio.pause(); setUI(false); hideHint(); return false; }
         setUI(true); set('1'); hideHint(); return true;
       } catch { return false; }
     }
@@ -105,7 +105,7 @@
     /* Pause the theme when the wall song claims the page. Do not mark the theme opted out, so the next
        page without a wall song can resume it. tryPlay also refuses while a song is up, including when
        this event was dispatched before the player had finished loading. */
-    document.addEventListener('jsi:wall-song', () => { if (!audio.paused) { audio.pause(); setUI(false); } });
+    document.addEventListener('jsi:wall-song', () => { if (!audio.paused) { audio.pause(); setUI(false); } hideHint(); });
 
     if (state === '0' || !resumeAllowed) {
       // CASE C: opted out (or resume disabled in prefs) — silent, no hint, no arming
