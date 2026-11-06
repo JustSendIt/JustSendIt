@@ -88,6 +88,9 @@
     const AGE = window.AGE;
     const afterAge = (fn) => { if (AGE && AGE.needed) AGE.whenOk(fn); else fn(); };
     document.addEventListener('jsi:age-open', () => { if (!audio.paused) audio.pause(); });
+    /* A personal wall's own song is the sound on that page. Pause the theme while it plays; do not
+       mark the theme opted out, so the next page without a wall song can resume it. */
+    document.addEventListener('jsi:wall-song', () => { if (!audio.paused) { audio.pause(); setUI(false); } });
 
     if (state === '0' || !resumeAllowed) {
       // CASE C: opted out (or resume disabled in prefs) — silent, no hint, no arming

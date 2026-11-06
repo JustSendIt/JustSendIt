@@ -822,6 +822,7 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN avatar_img TEXT",
   "ALTER TABLE users ADD COLUMN header_img TEXT",
   "ALTER TABLE users ADD COLUMN bg_img TEXT",
+  "ALTER TABLE users ADD COLUMN wall_audio TEXT",                 // /uploads filename of the wall's song (mp3 or wav); null when the wall is silent
   "ALTER TABLE users ADD COLUMN twofa_method TEXT",
   "ALTER TABLE users ADD COLUMN twofa_secret TEXT",
   "ALTER TABLE users ADD COLUMN twofa_pending TEXT", // TOTP secret staged by /setup; promoted to twofa_secret only when /enable proves a code
@@ -1478,8 +1479,8 @@ const HIST = {
      every call; not the snapshot either (display data, up to 40 KB, rewritten at call time) */
   calls:             { owner: 'user_id', key: ['id'], watch: ['user_id', 'token_addr', 'pair_addr', 'entry_price', 'entry_mc', 'entry_liq', 'entry_spend_usd', 'created_at', 'squad_id'], skip: ['wallet', 'snapshot'], label: 'Send Call' },
   users:             { owner: 'id', key: ['id'], noDelete: true, label: 'profile',
-                       only: ['id', 'username', 'auto_named', 'avatar', 'bio', 'accent', 'wall_bg', 'avatar_img', 'header_img', 'bg_img', 'twitter_handle', 'ig_handle'],
-                       watch: ['username', 'avatar', 'bio', 'accent', 'wall_bg', 'avatar_img', 'header_img', 'bg_img', 'twitter_handle', 'ig_handle'] },
+                       only: ['id', 'username', 'auto_named', 'avatar', 'bio', 'accent', 'wall_bg', 'avatar_img', 'header_img', 'bg_img', 'wall_audio', 'twitter_handle', 'ig_handle'],
+                       watch: ['username', 'avatar', 'bio', 'accent', 'wall_bg', 'avatar_img', 'header_img', 'bg_img', 'wall_audio', 'twitter_handle', 'ig_handle'] },
   holder_state:      { owner: 'user_id', key: ['user_id'], noDelete: true, label: 'Diamond Hands streak',
                        only: ['user_id', 'streak_start', 'base_bp', 'paused_at', 'paused_ms', 'gwc_streak_start', 'gwc_base_bp', 'gwc_paused_at', 'gwc_paused_ms'], watch: ['streak_start', 'gwc_streak_start'], restore: 'all' },   // a streak's fields only mean something together
   community_members: { owner: 'user_id', key: ['community_id', 'user_id'], watch: [], label: 'community membership' },
@@ -1576,6 +1577,7 @@ function histRestore(r, adminId) {
   if (h.key.some((c) => !cols.includes(c))) throw new Error('the entry does not name its row');
   const vals = Object.assign({}, old), notes = [];
   if (r.tbl === 'users') for (const c of ['avatar_img', 'header_img', 'bg_img']) if (vals[c] && !fs.existsSync(path.join(UPLOAD_DIR, String(vals[c])))) { vals[c] = null; notes.push('its ' + c.replace('_img', '') + ' picture is no longer on the server'); }
+  if (r.tbl === 'users' && vals.wall_audio && !fs.existsSync(path.join(UPLOAD_DIR, String(vals.wall_audio)))) { vals.wall_audio = null; notes.push('its wall song is no longer on the server'); }
   const keyVals = h.key.map((c) => vals[c]);
   const cur = histCurrent(r.tbl, old);
   const setCols = (r.op === 'update' && h.restore !== 'all' ? (h.watch || []).filter((c) => cols.includes(c)) : cols).filter((c) => !h.key.includes(c));
@@ -2037,6 +2039,7 @@ function themeOf(u) {
     avatar_img: u.avatar_img ? '/uploads/' + u.avatar_img : null,
     header_img: u.header_img ? '/uploads/' + u.header_img : null,
     bg_img: u.bg_img ? '/uploads/' + u.bg_img : null,
+    wall_audio: u.wall_audio ? '/uploads/' + u.wall_audio : null,
   };
 }
 function identityTypes(userId) {
@@ -11944,7 +11947,63 @@ function scrubMediaFile(file, mime) {
       return { ok: n >= 0, bytes: st.size };
     } finally { fs.closeSync(fd); }
   }
+  /* A wall song. ID3 (and a WAV LIST/INFO chunk) can carry a recording location and a device name, the same
+     class of thing the picture scrubbers remove. The audio frames stay; the tags do not. */
+  if (mime === 'audio/mpeg' || mime === 'audio/mp3') {
+    const n = scrubMp3File(file);
+    return { ok: n > 0, bytes: n > 0 ? n : st.size };
+  }
+  if (mime === 'audio/wav' || mime === 'audio/wave' || mime === 'audio/x-wav' || mime === 'audio/vnd.wave') {
+    const n = scrubWavFile(file);
+    return { ok: n > 0, bytes: n > 0 ? n : st.size };
+  }
   return { ok: false, bytes: st.size };
+}
+/* Drop ID3v2 from the front and ID3v1 from the end. What remains must open on an MPEG frame, or the file
+   was a tag with no song in it. Returns the kept length, or -1 when the bytes are not an MP3. */
+function scrubMp3File(file) {
+  let buf = fs.readFileSync(file);
+  if (buf.length >= 10 && buf.slice(0, 3).toString('latin1') === 'ID3') {
+    const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) | ((buf[8] & 0x7f) << 7) | (buf[9] & 0x7f);
+    const start = 10 + size + ((buf[5] & 0x10) ? 10 : 0);
+    if (start < 10 || start > buf.length) return -1;
+    buf = buf.subarray(start);
+  }
+  if (buf.length >= 128 && buf.slice(buf.length - 128, buf.length - 125).toString('latin1') === 'TAG') buf = buf.subarray(0, buf.length - 128);
+  if (buf.length < 4 || buf[0] !== 0xff || (buf[1] & 0xe0) !== 0xe0) return -1;
+  fs.writeFileSync(file, buf);
+  return buf.length;
+}
+/* Rebuild a WAVE file from its fmt and data (and fact, which some players need) and nothing else.
+   A .wav and a .wave are this same container. Returns the kept length, or -1. */
+function scrubWavFile(file) {
+  const buf = fs.readFileSync(file);
+  if (buf.length < 12 || buf.slice(0, 4).toString('latin1') !== 'RIFF' || buf.slice(8, 12).toString('latin1') !== 'WAVE') return -1;
+  const keep = [];
+  let o = 12, sawFmt = false, sawData = false;
+  while (o + 8 <= buf.length) {
+    const id = buf.slice(o, o + 4).toString('latin1');
+    const size = buf.readUInt32LE(o + 4);
+    const dataStart = o + 8;
+    if (size < 0 || dataStart + size > buf.length) return -1;
+    if (id === 'fmt ' || id === 'data' || id === 'fact') {
+      let chunk = buf.subarray(o, dataStart + size);
+      if (chunk.length % 2) chunk = Buffer.concat([chunk, Buffer.from([0])]);
+      keep.push(Buffer.from(chunk));
+      if (id === 'fmt ') sawFmt = true;
+      if (id === 'data' && size > 0) sawData = true;
+    }
+    o = dataStart + size + (size & 1);
+  }
+  if (!sawFmt || !sawData) return -1;
+  const body = Buffer.concat(keep);
+  const out = Buffer.alloc(12 + body.length);
+  out.write('RIFF', 0, 4, 'latin1');
+  out.writeUInt32LE(4 + body.length, 4);
+  out.write('WAVE', 8, 4, 'latin1');
+  body.copy(out, 12);
+  fs.writeFileSync(file, out);
+  return out.length;
 }
 function scrubMediaBuffer(buf, mime) {
   if (mime === 'image/jpeg') return scrubJpeg(buf);
@@ -12008,6 +12067,15 @@ const UPLOAD_KINDS = {
   'audio/webm': { ext: 'weba', kind: 'audio', cap: 8 * 1024 * 1024, magic: (b) => b[0] === 0x1a && b[1] === 0x45 && b[2] === 0xdf && b[3] === 0xa3 },
   'audio/mp4':  { ext: 'm4a',  kind: 'audio', cap: 8 * 1024 * 1024, magic: (b) => b.slice(4, 8).toString('latin1') === 'ftyp' },
   'audio/ogg':  { ext: 'ogg',  kind: 'audio', cap: 8 * 1024 * 1024, magic: (b) => b.slice(0, 4).toString('latin1') === 'OggS' },
+  /* A personal wall's song. Not a voice memo: these stay available when VOICE_MEMOS is off, they are claimed
+     onto the profile (kind 'song') rather than a post, and a .wave file is the same WAVE container as .wav.
+     16 MB is a few minutes of MP3, or about a minute and a half of CD-quality WAV. */
+  'audio/mpeg':     { ext: 'mp3', kind: 'song', cap: 16 * 1024 * 1024, magic: (b) => b.length >= 3 && (b.slice(0, 3).toString('latin1') === 'ID3' || (b[0] === 0xff && (b[1] & 0xe0) === 0xe0)) },
+  'audio/mp3':      { ext: 'mp3', kind: 'song', cap: 16 * 1024 * 1024, magic: (b) => b.length >= 3 && (b.slice(0, 3).toString('latin1') === 'ID3' || (b[0] === 0xff && (b[1] & 0xe0) === 0xe0)) },
+  'audio/wav':      { ext: 'wav', kind: 'song', cap: 16 * 1024 * 1024, magic: (b) => b.length >= 12 && b.slice(0, 4).toString('latin1') === 'RIFF' && b.slice(8, 12).toString('latin1') === 'WAVE' },
+  'audio/wave':     { ext: 'wav', kind: 'song', cap: 16 * 1024 * 1024, magic: (b) => b.length >= 12 && b.slice(0, 4).toString('latin1') === 'RIFF' && b.slice(8, 12).toString('latin1') === 'WAVE' },
+  'audio/x-wav':    { ext: 'wav', kind: 'song', cap: 16 * 1024 * 1024, magic: (b) => b.length >= 12 && b.slice(0, 4).toString('latin1') === 'RIFF' && b.slice(8, 12).toString('latin1') === 'WAVE' },
+  'audio/vnd.wave': { ext: 'wav', kind: 'song', cap: 16 * 1024 * 1024, magic: (b) => b.length >= 12 && b.slice(0, 4).toString('latin1') === 'RIFF' && b.slice(8, 12).toString('latin1') === 'WAVE' },
 };
 // Read the first N bytes of a file (for magic/dimension checks on a streamed upload without loading the whole file).
 function readHead(filePath, n) { try { const fd = fs.openSync(filePath, 'r'); try { const b = Buffer.allocUnsafe(n); const read = fs.readSync(fd, b, 0, n, 0); return b.slice(0, read); } finally { fs.closeSync(fd); } } catch { return Buffer.alloc(0); } } // allocUnsafe: we slice to `read`, so the uninitialized tail is never exposed
@@ -12113,8 +12181,9 @@ function resolvePostMedia(image, userId) {
   if (image.startsWith('/uploads/')) {
     const name = image.slice(9);
     if (!UPLOAD_EXT_RE.test(name)) throw new Error('bad media reference');   // F015: built from UPLOAD_KINDS, so audio is not left behind again
-    const row = db.prepare('SELECT user_id, claimed FROM uploads WHERE name=?').get(name);
+    const row = db.prepare('SELECT user_id, claimed, kind FROM uploads WHERE name=?').get(name);
     if (!row || row.user_id !== userId) throw new Error('that upload has expired — re-attach your media'); // can only post your OWN upload
+    if (row.kind === 'song') throw new Error('a wall song plays on your wall — attach a picture or a video to a post');
     // Atomic single-use claim: an upload backs AT MOST one post. Without the claimed=0 guard the same file could be
     // attached to two posts, and deleting one would unlink the file the other still references.
     const claim = db.prepare('UPDATE uploads SET claimed=1 WHERE name=? AND user_id=? AND claimed=0').run(name, userId);
@@ -12378,7 +12447,7 @@ async function oauthCallback(provider, code, verifier, res, ipIdxVal, gateReq) {
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript',
   '.png': 'image/png', '.jpg': 'image/jpeg', '.webp': 'image/webp', '.svg': 'image/svg+xml', '.gif': 'image/gif',
-  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime', '.m4a': 'audio/mp4', '.mp3': 'audio/mpeg', '.wav': 'audio/wav', '.wave': 'audio/wav',
   /* Voice memos. Without these two a recorded memo is served as application/octet-stream, and because
      every response carries X-Content-Type-Options: nosniff the browser refuses to play it rather than
      guessing — the memo would upload fine and be silent forever. */
@@ -16860,7 +16929,7 @@ const server = http.createServer(async (req, res) => {
           db.prepare('UPDATE posts SET image = NULL WHERE image = ?').run(name);
           /* the profile and squad pictures store the bare file name: clear every column that held this one, or the wall keeps
              pointing at a deleted file (a broken picture where the emoji should stand in). The column names are fixed here. */
-          for (const c of ['avatar_img', 'header_img', 'bg_img']) db.prepare('UPDATE users SET ' + c + ' = NULL WHERE ' + c + ' = ?').run(name);
+          for (const c of ['avatar_img', 'header_img', 'bg_img', 'wall_audio']) db.prepare('UPDATE users SET ' + c + ' = NULL WHERE ' + c + ' = ?').run(name);
           for (const c of ['avatar_img', 'banner_img']) db.prepare('UPDATE squads SET ' + c + ' = NULL WHERE ' + c + ' = ?').run(name);
           deleteUpload(name, row.user_id);
         } else return bad(res, 'kind must be post, comment, hopcomment or upload');
@@ -16937,7 +17006,7 @@ const server = http.createServer(async (req, res) => {
           for (const r of db.prepare('SELECT name FROM uploads WHERE user_id = ?').all(uid)) media.push(r.name);
           for (const r of db.prepare('SELECT image FROM posts WHERE user_id = ? AND image IS NOT NULL').all(uid)) media.push(r.image);
           // profile pictures saved from a data URI have no uploads row; they are this person's photos all the same
-          for (const k of ['avatar_img', 'header_img', 'bg_img']) if (me[k] && /^[0-9a-f]{24}\.[a-z0-9]+$/.test(me[k])) media.push(me[k]);
+          for (const k of ['avatar_img', 'header_img', 'bg_img', 'wall_audio']) if (me[k] && /^[0-9a-f]{24}\.[a-z0-9]+$/.test(me[k])) media.push(me[k]);
           db.exec('BEGIN');
           for (const q of db.prepare('SELECT community_id FROM community_members WHERE user_id = ? AND qualified = 1').all(uid))
             db.prepare('UPDATE communities SET qual_count = MAX(qual_count-1,0) WHERE id = ?').run(q.community_id);
@@ -16977,7 +17046,7 @@ const server = http.createServer(async (req, res) => {
              the whole statement, so every deletion rolled back and nobody's data was ever erased. */
           let tombstone = 'deleted-' + uid;   // compared through the NOCASE column, so "Deleted-7" counts as taken too
           while (db.prepare('SELECT 1 FROM users WHERE username = ? AND id <> ?').get(tombstone, uid)) tombstone = 'deleted-' + uid + '-' + rand(2);
-          db.prepare(`UPDATE users SET username = ?, avatar = '👻', avatar_img = NULL, header_img = NULL, bg_img = NULL, bio = '',
+          db.prepare(`UPDATE users SET username = ?, avatar = '👻', avatar_img = NULL, header_img = NULL, bg_img = NULL, wall_audio = NULL, bio = '',
             accent = '', wall_bg = '', tracker_prefs = '{}', site_prefs = '{}', twitter_handle = NULL, ig_handle = NULL,
             points = 0, og = 0, og_tier = 0, og_buy_ms = 0,
             twofa_method = NULL, twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = NULL, twofa_last_step = NULL,
@@ -17745,6 +17814,32 @@ const server = http.createServer(async (req, res) => {
         db.prepare(`UPDATE users SET ${kind} = ? WHERE id = ?`).run(name, me.id);
         awardPoints(me.id, 'customize', PTS.customize, 'customize:' + me.id + ':' + ymd());
         return send(res, 200, { ok: true, url: '/uploads/' + name });
+      }
+      /* The song on a personal Send Wall. The bytes arrive through /api/upload (audio/mpeg, or audio/wav for a
+         .wav or .wave file) and are claimed here, the same way a GIF or a video banner is claimed. */
+      if (p === '/api/profile/audio' && req.method === 'POST') {
+        if (!me) return bad(res, 'sign in first', 401);
+        if (blockReadOnly(res, me)) return;
+        if (!rateLimit('song:' + me.id, 10, 36e5)) return bad(res, 'too many uploads — try later', 429);
+        const b = await readBody(req);
+        if (b.remove) {
+          deleteUpload(me.wall_audio, me.id);
+          db.prepare('UPDATE users SET wall_audio = NULL WHERE id = ?').run(me.id);
+          return send(res, 200, { ok: true, url: null });
+        }
+        if (typeof b.audio !== 'string' || !b.audio.startsWith('/uploads/')) return bad(res, 'send an uploaded MP3, WAV, or WAVE file');
+        const ref = b.audio.slice('/uploads/'.length);
+        if (!/^[a-f0-9]{24}\.(mp3|wav)$/.test(ref)) return bad(res, 'a wall song is an MP3, WAV, or WAVE file');
+        const row = db.prepare('SELECT user_id, claimed, kind FROM uploads WHERE name = ?').get(ref);
+        if (!row || row.user_id !== me.id) return bad(res, 'that upload is not yours');
+        if (row.kind !== 'song') return bad(res, 'a wall song is an MP3, WAV, or WAVE file');
+        if (row.claimed && me.wall_audio !== ref) return bad(res, 'that upload was already used — upload the song again');
+        db.prepare('UPDATE uploads SET claimed = 1 WHERE name = ?').run(ref);
+        const prev = me.wall_audio;
+        db.prepare('UPDATE users SET wall_audio = ? WHERE id = ?').run(ref, me.id);
+        if (prev && prev !== ref) deleteUpload(prev, me.id);
+        awardPoints(me.id, 'customize', PTS.customize, 'customize:' + me.id + ':' + ymd());
+        return send(res, 200, { ok: true, url: '/uploads/' + ref });
       }
 
       /* ----- posts ----- */

@@ -10,10 +10,12 @@
  *   - picker(zone, P)       swatches + a hex box; a typed colour joins "your colours" in every picker on the page
  *   - wallPickers(…)        the wall's accent and background tint, held to the server's readability rule and saved as picked
  *   - imageSlot(zone, …)    the current picture with Upload / Replace and 🗑 (avatar, header, background)
+ *   - audioSlot(zone, …)    the wall's song: an MP3, WAV, or WAVE file, with Upload / Replace and 🗑
  *   - emojiPicker(zone, …)  the twelve avatar emoji
  *   - editor(container, …)  all of it for the wall's pop-up, plus the bio and links that show on the wall
- * Colours, pictures and the emoji save the moment they are picked (as the dashboard always has); the bio and links save with
- * their button, since they are typed. No new server routes: /api/profile and /api/profile/image, as before.
+ * Colours, pictures, the song and the emoji save the moment they are picked (as the dashboard always has); the bio and links
+ * save with their button, since they are typed. Pictures use /api/profile and /api/profile/image; the song uses /api/upload
+ * and /api/profile/audio.
  */
 (function () {
   'use strict';
@@ -300,8 +302,77 @@
     rd.readAsDataURL(f);
   }
 
+  /* ---------- the wall's song: an MP3, or a WAV (a .wave file is the same thing) ----------
+     The bytes stream through /api/upload, then /api/profile/audio claims them onto the wall. 16 MB matches the server. */
+  const SONG_CAP = 16 * 1024 * 1024;
+  function songMime(file) {
+    const n = String(file.name || '').toLowerCase();
+    const t = String(file.type || '').split(';')[0].trim().toLowerCase();
+    if (t === 'audio/mpeg' || t === 'audio/mp3' || n.endsWith('.mp3')) return 'audio/mpeg';
+    if (t === 'audio/wav' || t === 'audio/wave' || t === 'audio/x-wav' || t === 'audio/vnd.wave' || n.endsWith('.wav') || n.endsWith('.wave')) return 'audio/wav';
+    return '';
+  }
+  function audioSlot(zone, url, onChange) {
+    const had = zone.contains(document.activeElement);
+    zone.innerHTML = '';
+    if (url) {
+      const a = document.createElement('audio');
+      a.controls = true; a.preload = 'metadata'; a.src = url;
+      a.setAttribute('aria-label', 'Your wall song');
+      zone.appendChild(a);
+    } else {
+      const d = document.createElement('div');
+      d.className = 'none'; d.textContent = 'none';
+      zone.appendChild(d);
+    }
+    const up = document.createElement('label');
+    up.className = 'file-label';
+    up.innerHTML = '🎵 ' + (url ? 'Replace' : 'Upload') + '<input type="file" class="sr-only" aria-label="' + (url ? 'Replace' : 'Upload') + ' the wall song, an MP3, WAV, or WAVE file" accept=".mp3,.wav,.wave,audio/mpeg,audio/wav,audio/wave,audio/x-wav">';
+    up.querySelector('input').addEventListener('change', (e) => uploadSong(e.target, zone, onChange));
+    zone.appendChild(up);
+    if (url) {
+      const rm = document.createElement('button');
+      rm.type = 'button';
+      rm.className = 'react-btn';
+      rm.textContent = '🗑';
+      rm.setAttribute('aria-label', 'Remove the wall song');
+      rm.setAttribute('data-tip', 'Takes the song off your wall — visitors hear nothing until you upload another');
+      rm.addEventListener('click', async () => {
+        try {
+          await window.api('/api/profile/audio', { method: 'POST', body: { remove: true } });
+          audioSlot(zone, null, onChange);
+          if (onChange) onChange(null);
+          sfx('remove');
+          toast('Song removed');
+        } catch (err) { toast(err.message); }
+      });
+      zone.appendChild(rm);
+    }
+    if (had) { const f = zone.querySelector('input[type="file"]'); if (f) { try { f.focus(); } catch {} } }
+  }
+  async function uploadSong(input, zone, onChange) {
+    const f = input.files && input.files[0];
+    input.value = '';
+    if (!f) return;
+    const mime = songMime(f);
+    if (!mime) { sfx('error'); toast('Use an MP3, WAV, or WAVE file'); return; }
+    if (f.size > SONG_CAP) { sfx('error'); toast('Too big — keep the song under 16MB'); return; }
+    toast('Uploading…');
+    try {
+      const r = await fetch('/api/upload', { method: 'POST', credentials: 'same-origin',
+        headers: { 'Content-Type': mime, 'X-Filename': encodeURIComponent(f.name || (mime === 'audio/wav' ? 'song.wav' : 'song.mp3')) }, body: f });
+      const u = await r.json();
+      if (!r.ok || !u.url) throw new Error(u.error || 'upload failed');
+      const j = await window.api('/api/profile/audio', { method: 'POST', body: { audio: u.url } });
+      audioSlot(zone, j.url, onChange);
+      if (onChange) onChange(j.url);
+      sfx('success');
+      toast('Your wall has a song 🎵');
+    } catch (err) { toast('⚠️ ' + (err.message || 'upload failed')); }
+  }
+
   /* ---------- the whole editor, for the pop-up on your own wall ----------
-     ctx = { user: { username, avatar, bio, twitter, instagram }, theme: { accent, wall_bg, avatar_img, header_img, bg_img },
+     ctx = { user: { username, avatar, bio, twitter, instagram }, theme: { accent, wall_bg, avatar_img, header_img, bg_img, wall_audio },
              focus: 'avatar' | 'header' | null, onTheme(patch), onUser(patch) } — the two callbacks paint the wall behind the
      pop-up as each change is saved, so what you change is what you see. */
   function editor(container, ctx) {
@@ -309,7 +380,7 @@
     const state = { accent: t.accent || '', bg: t.wall_bg || '', avatar: u.avatar || '🚀' };
     container.innerHTML =
       '<div class="ws">' +
-        '<p class="ws-lead">Everything on your wall, in one place. Each change saves as you make it — your bio and links when you leave the box — and your wall shows it at once.</p>' +
+        '<p class="ws-lead">Everything on your wall, in one place. Each change saves as you make it — your bio and links when you leave the box — and your wall shows it at once. A song plays for anyone who opens your wall.</p>' +
         '<section class="ws-sec" id="ws-sec-avatar" aria-labelledby="ws-h-avatar" tabindex="-1">' +
           '<h3 class="ws-h" id="ws-h-avatar">🖼️ Profile picture</h3>' +
           '<p class="f-label">Photo or video <span>(replaces your emoji on your wall)</span></p>' +
@@ -334,6 +405,11 @@
           '<p class="f-label">Behind your whole wall <span>(a dark veil keeps your text readable over it)</span></p>' +
           '<div class="img-slot" id="ws-slot-background"></div>' +
         '</section>' +
+        '<section class="ws-sec" id="ws-sec-song" aria-labelledby="ws-h-song" tabindex="-1">' +
+          '<h3 class="ws-h" id="ws-h-song">🎵 Wall song</h3>' +
+          '<p class="f-label">MP3, WAV, or WAVE <span>(plays when anyone opens your wall — they can pause it)</span></p>' +
+          '<div class="img-slot song-slot" id="ws-slot-song"></div>' +
+        '</section>' +
         '<section class="ws-sec" id="ws-sec-about" aria-labelledby="ws-h-about" tabindex="-1">' +
           '<h3 class="ws-h" id="ws-h-about">✍️ Bio and links</h3>' +
           '<label class="f-label" for="ws-bio">Bio</label>' +
@@ -353,6 +429,7 @@
     imageSlot($('ws-slot-avatar'), 'avatar', t.avatar_img || null, onImg);
     imageSlot($('ws-slot-header'), 'header', t.header_img || null, onImg);
     imageSlot($('ws-slot-background'), 'background', t.bg_img || null, onImg);
+    audioSlot($('ws-slot-song'), t.wall_audio || null, (url) => onTheme({ wall_audio: url }));
     const pickEmoji = async (a) => {
       const was = state.avatar; state.avatar = a;
       try { await window.api('/api/profile', { method: 'POST', body: { avatar: a } }); if (ctx.onUser) ctx.onUser({ avatar: a }); toast('Avatar set to ' + a); sfx('select'); }
@@ -412,5 +489,5 @@
   }
 
   window.WallStyle = { AVATARS, ACCENTS, BGS, normHex, myColors, keepColor, readableAccent, readableBg, roveRadios,
-    picker, drawPickers, wallPickers, imageSlot, upload, emojiPicker, swatches, editor };
+    picker, drawPickers, wallPickers, imageSlot, upload, audioSlot, uploadSong, emojiPicker, swatches, editor };
 })();
