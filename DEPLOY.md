@@ -443,33 +443,47 @@ deep-links straight to a scan of that token — the New Pairs page uses this for
 never written to a log line, and is never sent anywhere but Telegram. If it leaks, run `/revoke` in
 @BotFather immediately.
 
-## Publishing main through the tunnel
+## SendRH.com follows GitHub
 
-The tunnel dials *out*. GitHub cannot open a connection to the box, and restarting `cloudflared` would only
-drop the hostname for a moment — it would not change the app. So the checkout on that box pulls `main` itself.
+SendRH.com is always what `main` of github.com/JustSendIt/JustSendIt holds, once it passes. The same Mac
+that publishes sendy.gg publishes this site. Cloudflare can't build or host it: it is one Node process
+with the SQLite database and the uploads, so Cloudflare only carries visitors to this Mac through the
+tunnel. The link to GitHub lives on this Mac instead, the same way sendy.gg's does.
 
-Once, on the machine that runs the tunnel, after this commit is on `main`:
+- `com.sendrh.deploy` (LaunchAgent, template `ops/com.sendrh.deploy.plist`) runs `ops/auto-deploy.sh`
+  every 2 minutes, as GitHub's `main` last fetched has it.
+- A pass with nothing new takes a second and logs nothing. When `main` moved past what is live, it
+  checks the new commit out in its own build worktree (`~/sendrh-build`, `npm ci` when the lockfile
+  changed), runs `npm test`, and runs `ops/update-live.sh <commit>`. The live checkout
+  (`~/Desktop/JustSendIt`) moves to that commit. `data/`, `.env` and uploads stay. `com.sendrh.site`
+  restarts; the app drains on SIGTERM and checkpoints SQLite. `cloudflared` is left running.
+- Spaced out on the same terms as sendy.gg (owner, 2026-11-03: "space out the deploy to manage the load
+  of the machine memory. No rush"): a pass starts at least 30 minutes after the last deploy
+  (`DEPLOY_MIN_GAP`), only while the 5-minute load average is under 36 (`HEAVY_MAX_LOAD`), and not while
+  sendy.gg's own deploy holds `~/.config/sendy-heavy`. Otherwise the next tick tries again; the log says
+  once why it waits.
+- A commit that fails any step never goes live and isn't tried again; the next push is. Only a
+  fast-forward of what is live deploys by itself; a rewritten `main` waits for `ops/update-live.sh <commit>`
+  by hand. If `https://sendrh.com/healthz` does not answer after the restart, the previous commit is put
+  back and started again.
+- The log is `~/Library/Logs/sendrh-deploy/deploy.log`, with each attempt's full output beside it
+  (`<commit>.log`); the state is in `~/.config/sendrh-deploy`.
 
-```bash
-cd /opt/justsendit
-git fetch origin main
-git checkout main
-git merge --ff-only origin/main
-sudo bash scripts/install-live-updater.sh
+```sh
+ops/auto-deploy.sh --status              # live, GitHub, held or failed, the last lines of the log
+ops/auto-deploy.sh --hold "why"          # pushes still land on GitHub; nothing goes live
+ops/auto-deploy.sh --release             # the next pass deploys GitHub's main
+cd ~/Desktop/JustSendIt && git fetch origin main
+mkdir -p ~/Library/Logs/sendrh-site ~/Library/Logs/sendrh-deploy
+cp ~/Desktop/JustSendIt/ops/com.sendrh.site.plist ~/Library/LaunchAgents/
+cp ~/Desktop/JustSendIt/ops/com.sendrh.deploy.plist ~/Library/LaunchAgents/
+# Stop whatever already listens on 8642 first, so this agent is the one process the tunnel reaches.
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sendrh.site.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sendrh.deploy.plist
 ```
 
-That enables `justsendit-update.timer` and restarts the app onto the checkout you just pulled, so this code is what the tunnel is serving. A manual pull does not restart by itself. Every minute the timer fetches `origin/main`. When the commit is ahead of
-the checkout **and** the CI job named `check` has passed, `scripts/update-live.sh` fast-forwards, runs
-`npm ci --omit=dev` only if the lockfile changed, and `systemctl restart justsendit`. The app drains on
-SIGTERM and checkpoints SQLite, same as a manual restart. `cloudflared` is left running.
-
-It will not deploy a commit whose CI failed or has not finished, a history that is not a fast-forward, or a
-checkout with local edits. `data/`, `.env` and uploads are untracked and are not touched. If the new process
-does not answer `/healthz`, the script returns to the previous commit and restarts that. A force-push of
-`main` is refused; publish that by hand if you ever mean it.
-
-The repo is public, so the fetch needs no key. Set `JUSTSENDIT_GITHUB_TOKEN` only if GitHub's anonymous
-check-runs limit becomes the reason a finished build sits unpublished. Logs: `journalctl -u justsendit-update -f`.
+The tunnel's ingress stays `service: http://127.0.0.1:8642`. Whoever can push to `main` decides what
+SendRH.com runs.
 
 ## Operate
 
@@ -477,9 +491,9 @@ check-runs limit becomes the reason a finished build sits unpublished. Logs: `jo
 - **Logs:** `journalctl -u justsendit -f` (VPS) or the platform's log view. Whenever the process looks like
   production (`NODE_ENV=production`, an `https` `BASE_URL`, or `COOKIE_SECURE`/`TRUST_PROXY` set) the boot prints
   `⚠️` warnings if `BASE_URL`/`COOKIE_SECURE`/`TRUST_PROXY` look misconfigured — including a forgotten `BASE_URL`.
-- **Restart:** `sudo systemctl restart justsendit`. The app catches SIGTERM, finishes in-flight
+- **Restart:** `sudo systemctl restart justsendit` on a VPS, or `launchctl kickstart -k gui/$(id -u)/com.sendrh.site` on the Mac. The app catches SIGTERM, finishes in-flight
   requests, checkpoints the WAL, and exits cleanly — no corruption, no WAL bloat. A push to `main` does this
-  on its own once the timer above is installed.
+  on its own once `com.sendrh.deploy` is installed.
 - **Backups (built in):** `data/app.db` is your entire user base. The server itself writes one consistent snapshot
   per UTC day to `data/backups/app-YYYY-MM-DD.db` (SQLite's online backup API via `node:sqlite` — safe while
   running, never blocks requests; one a day, the last 3 kept inside the data directory, 7 when `BACKUP_DIR` points outside it; set `BACKUP_DIR` to move them). **Copy that directory

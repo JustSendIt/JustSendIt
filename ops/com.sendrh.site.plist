@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  The SendRH.com process. cloudflared on this Mac proxies the tunnel to 127.0.0.1:8642;
+  this agent is what listens there. .env and data/ stay in the checkout and are not in this file.
+
+  A TEMPLATE: install it with
+    mkdir -p ~/Library/Logs/sendrh-site
+    cp ~/Desktop/JustSendIt/ops/com.sendrh.site.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sendrh.site.plist
+
+  It starts at login and again whenever the server stops for any reason other than
+  `launchctl bootout gui/$(id -u)/com.sendrh.site`. ops/update-live.sh restarts it
+  with `launchctl kickstart -k`. A stop gives the server 20 seconds to checkpoint SQLite.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sendrh.site</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/addison/.nvm/versions/node/v24.21.0/bin/node</string>
+    <string>--disable-warning=ExperimentalWarning</string>
+    <string>server.js</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/addison/Desktop/JustSendIt</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/addison/.nvm/versions/node/v24.21.0/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>15</integer>
+  <key>ExitTimeOut</key>
+  <integer>20</integer>
+  <key>ProcessType</key>
+  <string>Standard</string>
+
+  <key>StandardOutPath</key>
+  <string>/Users/addison/Library/Logs/sendrh-site/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/addison/Library/Logs/sendrh-site/launchd.log</string>
+</dict>
+</plist>
