@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  SendRH.com follows GitHub: every 2 minutes ops/auto-deploy.sh looks at main
+  (github.com/JustSendIt/JustSendIt) and, when it has moved past what is live, runs npm test and
+  puts it live through ops/update-live.sh. The tunnel is not restarted. DEPLOY.md, "SendRH.com follows GitHub".
+
+  A TEMPLATE: install it with
+    cp ~/Desktop/JustSendIt/ops/com.sendrh.deploy.plist ~/Library/LaunchAgents/
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sendrh.deploy.plist
+
+  It listens on nothing. Stop it with `launchctl bootout gui/$(id -u)/com.sendrh.deploy`,
+  or pause deploys with `ops/auto-deploy.sh --hold "why"`.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.sendrh.deploy</string>
+
+  <!-- Each pass runs the deployer as GitHub's main last fetched has it (copied out first: a checkout during the
+       pass never changes the script bash is reading), so the deploy steps follow GitHub too. -->
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-c</string>
+    <string>mkdir -p "$HOME/.config/sendrh-deploy" &amp;&amp; git -C "$HOME/Desktop/JustSendIt" show origin/main:ops/auto-deploy.sh &gt; "$HOME/.config/sendrh-deploy/pass.sh" &amp;&amp; exec /bin/bash "$HOME/.config/sendrh-deploy/pass.sh"</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/addison</string>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/Users/addison/.nvm/versions/node/v24.21.0/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+
+  <key>StartInterval</key>
+  <integer>120</integer>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>LowPriorityIO</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/addison/Library/Logs/sendrh-deploy/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/addison/Library/Logs/sendrh-deploy/launchd.log</string>
+</dict>
+</plist>
