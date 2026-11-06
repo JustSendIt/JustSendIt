@@ -5,12 +5,12 @@
   (github.com/JustSendIt/JustSendIt) and, when it has moved past what is live, runs npm test and
   puts it live through ops/update-live.sh. The tunnel is not restarted. DEPLOY.md, "SendRH.com follows GitHub".
 
-  A TEMPLATE: install it with
-    cp ~/Desktop/JustSendIt/ops/com.sendrh.deploy.plist ~/Library/LaunchAgents/
-    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sendrh.deploy.plist
+  A TEMPLATE. The live checkout does not contain this file until a deploy has checked main out.
+  Install from the fetch (DEPLOY.md, "SendRH.com follows GitHub"):
+    git show origin/main:ops/install-mac.sh | bash
 
   It listens on nothing. Stop it with `launchctl bootout gui/$(id -u)/com.sendrh.deploy`,
-  or pause deploys with `ops/auto-deploy.sh --hold "why"`.
+  or pause deploys with ops/auto-deploy.sh hold.
 -->
 <plist version="1.0">
 <dict>

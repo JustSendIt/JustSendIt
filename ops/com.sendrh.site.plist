@@ -4,10 +4,9 @@
   The SendRH.com process. cloudflared on this Mac proxies the tunnel to 127.0.0.1:8642;
   this agent is what listens there. .env and data/ stay in the checkout and are not in this file.
 
-  A TEMPLATE: install it with
-    mkdir -p ~/Library/Logs/sendrh-site
-    cp ~/Desktop/JustSendIt/ops/com.sendrh.site.plist ~/Library/LaunchAgents/
-    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.sendrh.site.plist
+  A TEMPLATE. The live checkout does not contain this file until a deploy has checked main out.
+  Install from the fetch (DEPLOY.md, "SendRH.com follows GitHub"):
+    git show origin/main:ops/install-mac.sh | bash
 
   It starts at login and again whenever the server stops for any reason other than
   `launchctl bootout gui/$(id -u)/com.sendrh.site`. ops/update-live.sh restarts it
