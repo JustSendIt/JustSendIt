@@ -493,7 +493,9 @@ function findChrome() {
 }
 // what a reader can see: the page never wider than the screen, nothing in the page's column outside it, no text under the floor
 // how far the bubble map (above the two columns) moves everything under it: offsets measured before it was added are kept by adding it
-const MAPSHIFT = '(() => { const m = document.getElementById("mkt-map"); return m ? m.getBoundingClientRect().height + parseFloat(getComputedStyle(m).marginBottom) : 0; })()';
+/* what sits above the lists and moves them down: the bubble map, and since 2026-11-17 the movers banner (with its source line) and the
+   market-at-a-glance tiles — each one's height and its margins */
+const MAPSHIFT = '(() => { let n = 0; for (const id of ["mkt-map", "mkt-movers", "mkt-movers-src", "mkt-glance"]) { const m = document.getElementById(id); if (m && m.getClientRects().length) { const cs = getComputedStyle(m); n += m.getBoundingClientRect().height + parseFloat(cs.marginBottom) + (id === "mkt-map" ? 0 : parseFloat(cs.marginTop)); } } return n; })()';
 const LAYOUT = `(() => {
   const wrap = document.querySelector('.mkt-wrap'), wr = wrap.getBoundingClientRect();
   const probe = document.createElement('span'); probe.style.fontSize = 'var(--text-floor)'; document.body.appendChild(probe);
@@ -1163,12 +1165,12 @@ async function browserWalk() {
       await go('/market', 1280); const m0 = FAKE.log.length;
       await ev('document.getElementById("mkt-tab-rwa").click(), true'); await rwaReady();
       const t0 = { asked: rwaAsks(m0), url: await ev('location.search'), sel: await ev('[...document.querySelectorAll("#mkt-side [role=tab]")].map((t) => t.dataset.tab + ":" + t.getAttribute("aria-selected") + ":" + t.tabIndex).join()'),
-        ctl: await ev('["chains","tokens","rwa"].map((k) => k + ":" + document.getElementById("mkt-ctl-" + k).hidden).join()'), lab: await ev('document.getElementById("mkt-panel").getAttribute("aria-labelledby") + "|" + document.getElementById("mkt-list").getAttribute("aria-labelledby")'),
+        ctl: await ev('["chains","tokens","rwa","watch","calls"].map((k) => k + ":" + document.getElementById("mkt-ctl-" + k).hidden).join()'), lab: await ev('document.getElementById("mkt-panel").getAttribute("aria-labelledby") + "|" + document.getElementById("mkt-list").getAttribute("aria-labelledby")'),
         cap: await textOf('#mkt-cap'), foot: await textOf('#mkt-foot'), lede: await ev('(() => { const p = document.querySelector("#mkt-ctl-rwa .mkt-rwa-lede"); return p && p.getClientRects().length ? p.textContent : ""; })()'), rows: await rwaRows(), pressed: await rwaPressed(),
         issuers: await ev('[...document.querySelectorAll("#mkt-ri-c [data-rissuer]")].map((b) => b.dataset.rissuer + ":" + b.textContent.replace(/^✓\\u00a0/, "") + ":" + ((b.dataset.tip || "").length >= 20)).join("|")'), more: await textOf('#mkt-more') };
       const r0 = t0.rows[0] || {}, tsla = t0.rows.find((x) => x.t === TSLA) || {};
       check('the RWAs tab asks exactly /api/market/rwa (Top RWAs by value on chain), puts tab=rwa in the address, selects its tab (the others out of the Tab order) and shows only its controls, the panel and the list labelled by it, the not-affiliated line above the controls',
-        t0.asked.join() === '/api/market/rwa' && t0.url === '?chain=robinhood&tab=rwa' && t0.sel === 'chains:false:-1,tokens:false:-1,rwa:true:0' && t0.ctl === 'chains:true,tokens:true,rwa:false' && t0.lab === 'mkt-tab-rwa|mkt-tab-rwa'
+        t0.asked.join() === '/api/market/rwa' && t0.url === '?chain=robinhood&tab=rwa' && t0.sel === 'chains:false:-1,tokens:false:-1,rwa:true:0,watch:false:-1,calls:false:-1' && t0.ctl === 'chains:true,tokens:true,rwa:false,watch:true,calls:true' && t0.lab === 'mkt-tab-rwa|mkt-tab-rwa'
         && /Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc\. Not advice, never a tip to buy\./.test(t0.lede) && t0.pressed === 'view=assets sort=value dir=desc kind=all issuer=all', JSON.stringify(Object.assign({}, t0, { rows: t0.rows.length, cap: '', foot: '' })));
       /* the caption is one line of what is shown and how it is ranked, then what is counted and any read that did not work (review, 2026-10-28:
          the first RWA row sat 2,385 px down the side column); what the ranking figure means and what is kept apart are in the foot */
@@ -1401,7 +1403,7 @@ async function browserWalk() {
       check('review two: market.js never calls the reference "the share" — the premium chip says "vs its reference", and the price check says the reference is one token\'s price, the share\'s × the token\'s multiplier', !/vs the share|underlying’s own price/.test(read('market.js')) && /% vs its reference/.test(read('market.js')) && /the share’s price × the token’s multiplier/.test(read('market.js')));
     });
 
-    await step('the three tabs by keyboard', async () => {
+    await step('the five tabs by keyboard', async () => {
       await go('/market', 1280); await listReady();
       await ev('document.getElementById("mkt-tab-chains").focus(), true');
       const right = () => key('ArrowRight', 'ArrowRight', 39);
@@ -1409,12 +1411,17 @@ async function browserWalk() {
       const t = { f: await ev('document.activeElement.id'), url: await ev('location.search') };
       await right(); await rwaReady();
       const a = { f: await ev('document.activeElement.id'), url: await ev('location.search'), sel: await ev('document.getElementById("mkt-tab-rwa").getAttribute("aria-selected")') };
-      await right(); await listReady(); await sleep(100);
+      await right(); await sleep(300);
       const b = { f: await ev('document.activeElement.id'), url: await ev('location.search') };
-      await key('End', 'End', 35); await rwaReady();
+      await key('End', 'End', 35); await sleep(300);
       const c = { f: await ev('document.activeElement.id'), url: await ev('location.search') };
-      check('the tablist\'s arrows, Home and End move over all three tabs and select each (wrapping); going to the RWAs tab puts it in the address and leaving it takes it out',
-        t.f === 'mkt-tab-tokens' && t.url === '' && a.f === 'mkt-tab-rwa' && a.sel === 'true' && a.url === '?chain=robinhood&tab=rwa' && b.f === 'mkt-tab-chains' && b.url === '?chain=robinhood' && c.f === 'mkt-tab-rwa' && c.url === '?chain=robinhood&tab=rwa', JSON.stringify({ t, a, b, c }));
+      await right(); await listReady(); await sleep(100);
+      const d = { f: await ev('document.activeElement.id'), url: await ev('location.search') };
+      await key('End', 'End', 35); await sleep(200); await key('Home', 'Home', 36); await listReady();
+      const h = { f: await ev('document.activeElement.id'), url: await ev('location.search') };
+      check('the tablist\'s arrows, Home and End move over all five tabs and select each (wrapping); going to the RWAs, Watchlist or Calls tab puts it in the address and leaving it takes it out',
+        t.f === 'mkt-tab-tokens' && t.url === '' && a.f === 'mkt-tab-rwa' && a.sel === 'true' && a.url === '?chain=robinhood&tab=rwa' && b.f === 'mkt-tab-watch' && b.url === '?chain=robinhood&tab=watch'
+        && c.f === 'mkt-tab-calls' && c.url === '?chain=robinhood&tab=calls' && d.f === 'mkt-tab-chains' && d.url === '?chain=robinhood' && h.f === 'mkt-tab-chains' && h.url === '?chain=robinhood', JSON.stringify({ t, a, b, c, d, h }));
     });
 
     // last, so the steps before it see the page history they had before it (run earlier in the walk, its extra page loads moved where
@@ -1792,12 +1799,12 @@ async function runSuite() {
     check('the scripts the Scanner\'s dashboard needs, as watchlist.html loads them: chart.js, newpairs.js, tokenmodal.js, swapkit.js after wallet.js; market.js before block0.js; block0.js then bundlers.js; sendy.js then onboard.js',
       order(H, 'src="app.js"></script>\n<script src="sfx.js"', 'src="tips.js"', 'src="wallet.js"', 'src="watch.js"', 'src="chart.js"', 'src="newpairs.js"', 'src="tokenmodal.js"', 'src="swapkit.js"', 'src="market.js"', 'src="block0.js"></script>\n<script src="bundlers.js"', 'src="sendy.js"></script>\n<script src="onboard.js"')
       && !/<script(?![^>]*\bsrc=)(?![^>]*application\/ld\+json)[^>]*>/.test(H));
-    check('  ...the layout\'s parts: the search form, the side column\'s three tabs (a tablist driving one panel: Top chains, Top tokens, RWAs) and the main view',
+    check('  ...the layout\'s parts: the search form, the side column\'s five tabs (a tablist driving one panel: Top chains, Top tokens, RWAs, Watchlist, Calls) and the main view',
       /<form class="mkt-search" id="mkt-search" role="search"/.test(H) && /id="mkt-tab-chains" type="button" role="tab" aria-selected="true" aria-controls="mkt-panel"/.test(H) && /id="mkt-tab-tokens" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel"/.test(H)
-      && /<button class="sc-tab" id="mkt-tab-rwa" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="rwa" data-tip="[^"]{30,}">🏛️ RWAs<\/button>\s*<\/div>/.test(H) && (H.match(/role="tab"/g) || []).length === 3
+      && /<button class="sc-tab" id="mkt-tab-rwa" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="rwa" data-tip="[^"]{30,}">🏛️ RWAs<\/button>\s*<button class="sc-tab" id="mkt-tab-watch" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="watch" data-tip="[^"]{30,}">⭐ Watchlist<\/button>\s*<button class="sc-tab" id="mkt-tab-calls" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="calls" data-tip="[^"]{30,}">📣 Calls<\/button>\s*<\/div>/.test(H) && (H.match(/role="tab"/g) || []).length === 5
       && /id="mkt-panel" role="tabpanel" aria-labelledby="mkt-tab-chains"/.test(H) && /<ol class="mkt-list" id="mkt-list"/.test(H) && /<section class="mkt-view" id="mkt-view" tabindex="-1"/.test(H));
     const chainsCtl = H.slice(H.indexOf('id="mkt-ctl-chains"'), H.indexOf('id="mkt-ctl-tokens"')), tokensCtl = H.slice(H.indexOf('id="mkt-ctl-tokens"'), H.indexOf('id="mkt-ctl-rwa"'));
-    const rwaCtl = H.slice(H.indexOf('id="mkt-ctl-rwa"'), H.indexOf('id="mkt-cap"'));
+    const rwaCtl = H.slice(H.indexOf('id="mkt-ctl-rwa"'), H.indexOf('id="mkt-ctl-watch"'));
     check('  ...the chains rank by TVL, volume, liquidity, market cap or fees, highest or lowest first, over 24h / 7d / 30d or two days of the reader\'s own',
       ['tvl', 'volume', 'liquidity', 'mcap', 'fees'].every((s) => chainsCtl.includes('data-sort="' + s + '"')) && ['desc', 'asc'].every((d) => chainsCtl.includes('data-dir="' + d + '"'))
       && ['24h', '7d', '30d', 'custom'].every((w) => chainsCtl.includes('data-win="' + w + '"')) && /<input type="date" id="mkt-cc-from"/.test(chainsCtl) && /<input type="date" id="mkt-cc-to"/.test(chainsCtl));
@@ -1821,8 +1828,9 @@ async function runSuite() {
     const asks = [...code.matchAll(/getJSON\(\s*([^)]+?)\)/g)].map((m) => m[1].trim());
     check('market.js is one IIFE in strict mode, wired with addEventListener only (no on… properties, no inline handlers)',
       /^\(function \(\) \{\n  'use strict';/m.test(code) && /\}\)\(\);\s*$/.test(JS) && !/\.on[a-z]+\s*=(?!=)/.test(code) && !/\son[a-z]+="/.test(code) && (code.match(/addEventListener\(/g) || []).length >= 15);
-    check('  ...it reads only this site\'s own /api/market/* routes: one fetch, behind getJSON, and every caller names a /api/market/ path (the CSP\'s connect-src stays as it is)',
-      fetches.length === 1 && fetches[0] === 'url' && asks.length >= 8 && asks.every((a) => a === 'url' || /^'\/api\/market\/|^(chainsURL|tokensURL|chainViewURL|tokenViewURL|rwaURL)\(|^v\.token \? tokenViewURL/.test(a))
+    // 2026-11-17: and two of the member's own reads and one of the site's (the Watchlist and Calls tabs): the watchlist, their calls' tokens, the most-called tokens
+    check('  ...it reads only this site\'s own routes: one fetch, behind getJSON, and every caller names a /api/market/ path, the member\'s watchlist or their calls, or the most-called tokens (the CSP\'s connect-src stays as it is)',
+      fetches.length === 1 && fetches[0] === 'url' && asks.length >= 8 && asks.every((a) => a === 'url' || /^'\/api\/market\/|^'\/api\/watchlist'$|^'\/api\/calls\/mine\/ids'$|^'\/api\/calls\/top-tokens\?window=(' \+ w|24h')|^(chainsURL|tokensURL|chainViewURL|tokenViewURL|rwaURL)\(|^v\.token \? tokenViewURL/.test(a))
       && /return '\/api\/market\/rwa' \+ \(q \? '\?' \+ q : ''\);/.test(code) && /getJSON\(rwaURL\(\)\)/.test(code) && /getJSON\('\/api\/market\/rwa\/token\?address=' \+ encodeURIComponent\(addr\)\)/.test(code)
       && /return '\/api\/market\/chains' \+/.test(code) && /return '\/api\/market\/tokens\?' \+/.test(code) && /return '\/api\/market\/chain\?' \+/.test(code) && /return '\/api\/market\/token\?' \+/.test(code)
       && !/https?:\/\/(?!www\.growthepie\.com|l2beat\.com\/scaling|www\.w3\.org\/2000\/svg|www\.coingecko\.com\/en\/coins\/' \+ encodeURIComponent\(cgId\))/.test(code.replace(/'https:\/\/'/g, '')) && !/\/api\/scan\?/.test(code), asks.join(' | '));
@@ -1833,7 +1841,8 @@ async function runSuite() {
     check('Top tokens\' chain filter (owner, 2026-10-27: "Make the chain picker filter be a drop down picker with the names of each chain and their logo"): first in the tab\'s controls, a labelled group holding a real button with aria-expanded and aria-controls — a disclosure, as the bell\'s list is: no aria-haspopup, no role="menu" — and the list it opens (role="list"), hidden until it is opened; the row of logo buttons is gone',
       /<div class="mkt-group" role="group" aria-labelledby="mkt-tf-l">\s*<p class="mkt-group-l" id="mkt-tf-l">Chain<\/p>\s*<div class="mkt-cpick" id="mkt-tchains">\s*<button class="np-chip mkt-cpick-b" id="mkt-tchain-b" type="button" aria-expanded="false" aria-controls="mkt-tchain-p" data-tip="[^"]{30,}">/.test(tokensCtl0)
       && /<ul class="mkt-cpick-p" id="mkt-tchain-p" role="list" aria-labelledby="mkt-tf-l" hidden><\/ul>\s*<\/div>\s*<\/div>/.test(tokensCtl0) && tokensCtl0.indexOf('id="mkt-tchains"') < tokensCtl0.indexOf('data-sort=')
-      && !/aria-haspopup|role="menu"|menuitem/.test(H + code) && !/mkt-cfs|mkt-cf\b/.test(H + code + CSS) && !/id="mkt-tok-on"/.test(H) && !/mkt-tok-on/.test(code));
+      // the picker is a disclosure (no haspopup, no menu); since 2026-11-17 the Watchlist and Calls rows open the token popup, a dialog, and say so
+      && !/aria-haspopup|role="menu"|menuitem/.test(H) && !/role="menu"|menuitem/.test(code) && (code.match(/aria-haspopup/g) || []).length === 1 && /data-tm-' \+ kind \+ '="' \+ i \+ '" aria-haspopup="dialog"/.test(code) && !/mkt-cfs|mkt-cf\b/.test(H + code + CSS) && !/id="mkt-tok-on"/.test(H) && !/mkt-tok-on/.test(code));
     check('  ...market.js draws "All chains" then a real button per chain the server reads, each in a list item, with aria-pressed, a tick, the chain\'s mark (its logo with alt="" over its initials; a drawn mark for every chain) and its full name in words, and a description; the button shows the chosen chain\'s mark and name, "Chain: " said before it, and a drawn caret — no ▾ typed anywhere',
       /filterBox\.innerHTML = \['all'\]\.concat\(READS\)\.map\(filterHTML\)\.join\(''\);/.test(code) && /'<li><button class="npm-item mkt-copt" type="button" data-tchain="' \+ esc\(k\) \+ '" aria-pressed="false" data-tip="' \+/.test(code)
       && /'<span class="mkt-tick" aria-hidden="true">✓<\/span>' \+ markHTML\(k, nm\) \+ '<span class="mkt-copt-n">' \+ esc\(nm\) \+ '<\/span><\/button><\/li>'/.test(code)
@@ -1846,13 +1855,15 @@ async function runSuite() {
       && /if \(\(e\.key === 'Escape' \|\| e\.key === 'Esc'\) && filterBox && !filterBox\.hidden\) \{ e\.preventDefault\(\); closePick\(true\); \}/.test(code)
       && /closePick\(true, e\.detail > 0\);\s*if \(t === S\.tokens\.tchain\) return;/.test(code) && /if \(!\['ArrowDown', 'ArrowUp', 'Home', 'End'\]\.includes\(e\.key\)\) return;/.test(code) && !/'Tab'/.test(code));
     check('  ...no two-tab assumption is left: the tabs are every tab the tablist holds, each tab\'s controls are shown by its own key, the list is read and painted by an explicit branch per tab (none falls into Top tokens\'), and "All tokens, sorted your way" names Top tokens by its id',
-      /const tabs = \[\.\.\.document\.querySelectorAll\('#mkt-side \[role="tab"\]'\)\];/.test(code) && /const ctl = \{ chains: \$\('mkt-ctl-chains'\), tokens: \$\('mkt-ctl-tokens'\), rwa: \$\('mkt-ctl-rwa'\) \};/.test(code)
-      && /for \(const k of Object\.keys\(ctl\)\) if \(ctl\[k\]\) ctl\[k\]\.hidden = tab !== k;/.test(code) && /\} else if \(kind === 'tokens'\) \{/.test(code) && /\} else if \(kind === 'rwa'\) \{/.test(code) && !/tabs\[1\]/.test(code)
-      && /if \(S\.tab === 'chains'\) paintChains\(\); else if \(S\.tab === 'tokens'\) paintTokens\(\); else if \(S\.tab === 'rwa'\) paintRwa\(\);/.test(code) && /\$\('mkt-tab-tokens'\)\.focus\(\)/.test(code));
-    check('  ...the RWA tab is in the address bar: tab=rwa, with rview, rsort, rdir, rkind and rissuer only when they are not the defaults; going to it or leaving it, and every choice on it, is pushed; Back and Forward restore it (an address without tab=rwa leaves the tab) and a link opens it; the first view\'s two reads are unchanged',
-      /S\.urlTab = q\.get\('tab'\) === 'rwa' \? 'rwa' : null;/.test(code) && /if \(S\.tab === 'rwa'\) \{\s*p\.set\('tab', 'rwa'\);/.test(code) && /\[\['view', 'rview'\], \['sort', 'rsort'\], \['dir', 'rdir'\], \['kind', 'rkind'\], \['issuer', 'rissuer'\]\]\) if \(S\.rwa\[k\] !== RWA_DEF\[k\]\) p\.set\(n, S\.rwa\[k\]\);/.test(code)
-      && /if \(was === 'rwa' \|\| tab === 'rwa'\) writeURL\(true\);/.test(code) && /r\[pickd\[0\]\] = pickd\[1\]; S\.shown = pageSize\(\);\s*writeURL\(true\); syncControls\(\); loadList\(\);/.test(code)
-      && /if \(S\.urlTab === 'rwa'\) \{ if \(S\.tab !== 'rwa'\) setTab\('rwa', false\);/.test(code) && /if \(S\.tab === 'rwa'\) \{ setTab\(S\.view\.token \|\| S\.tokens\.tchain \? 'tokens' : 'chains', false\); return; \}/.test(code) && /if \(S\.urlTab === 'rwa'\) setTab\('rwa', false\);\s*else if \(S\.view\.token \|\| S\.tokens\.tchain\) \{/.test(code));
+      /const tabs = \[\.\.\.document\.querySelectorAll\('#mkt-side \[role="tab"\]'\)\];/.test(code) && /const ctl = \{ chains: \$\('mkt-ctl-chains'\), tokens: \$\('mkt-ctl-tokens'\), rwa: \$\('mkt-ctl-rwa'\), watch: \$\('mkt-ctl-watch'\), calls: \$\('mkt-ctl-calls'\) \};/.test(code)
+      && /for \(const k of Object\.keys\(ctl\)\) if \(ctl\[k\]\) ctl\[k\]\.hidden = tab !== k;/.test(code) && /\} else if \(kind === 'tokens'\) \{/.test(code) && /\} else if \(kind === 'rwa'\) \{/.test(code) && /\} else if \(kind === 'watch'\) \{/.test(code) && /\} else if \(kind === 'calls'\) \{/.test(code) && !/tabs\[1\]/.test(code)
+      && /if \(S\.tab === 'chains'\) paintChains\(\); else if \(S\.tab === 'tokens'\) paintTokens\(\); else if \(S\.tab === 'rwa'\) paintRwa\(\); else if \(S\.tab === 'watch'\) paintWatch\(\); else if \(S\.tab === 'calls'\) paintCalls\(\);/.test(code) && /\$\('mkt-tab-tokens'\)\.focus\(\)/.test(code));
+    check('  ...the RWA, Watchlist and Calls tabs are in the address bar: tab=rwa|watch|calls, with rview, rsort, rdir, rkind and rissuer (the RWAs) and cwin (the Calls) only when they are not the defaults; going to one or leaving it, and every choice on it, is pushed; Back and Forward restore it (an address without tab= leaves the tab) and a link opens it; the first view\'s two reads are unchanged',
+      /const URL_TABS = \['rwa', 'watch', 'calls'\];/.test(code) && /S\.urlTab = URL_TABS\.includes\(q\.get\('tab'\)\) \? q\.get\('tab'\) : null;/.test(code) && /S\.calls\.win = S\.urlTab === 'calls' && CALL_WINS\.includes\(q\.get\('cwin'\)\) \? q\.get\('cwin'\) : '24h';/.test(code)
+      && /if \(URL_TABS\.includes\(S\.tab\)\) p\.set\('tab', S\.tab\);/.test(code) && /if \(S\.tab === 'rwa'\) for \(const \[k, n\] of \[\['view', 'rview'\], \['sort', 'rsort'\], \['dir', 'rdir'\], \['kind', 'rkind'\], \['issuer', 'rissuer'\]\]\) if \(S\.rwa\[k\] !== RWA_DEF\[k\]\) p\.set\(n, S\.rwa\[k\]\);/.test(code)
+      && /if \(S\.tab === 'calls' && S\.calls\.win !== '24h'\) p\.set\('cwin', S\.calls\.win\);/.test(code)
+      && /if \(URL_TABS\.includes\(was\) \|\| URL_TABS\.includes\(tab\)\) writeURL\(true\);/.test(code) && /r\[pickd\[0\]\] = pickd\[1\]; S\.shown = pageSize\(\);\s*writeURL\(true\); syncControls\(\); loadList\(\);/.test(code)
+      && /if \(S\.urlTab\) \{ if \(S\.tab !== S\.urlTab\) setTab\(S\.urlTab, false\);/.test(code) && /if \(URL_TABS\.includes\(S\.tab\)\) \{ setTab\(S\.view\.token \|\| S\.tokens\.tchain \? 'tokens' : 'chains', false\); return; \}/.test(code) && /if \(S\.urlTab\) setTab\(S\.urlTab, false\);\s*else if \(S\.view\.token \|\| S\.tokens\.tchain\) \{/.test(code));
     check('  ...an RWA\'s facts on its token view: when the token answer\'s rwa key is set, a host right after the stats (#mkt-tstats) read from /api/market/rwa/token, in the order a holder needs them — 1 is this the real one, 2 what you hold, 3 the price check, 4 corporate actions, 5 size, 6 the powers its issuer keeps, 7 the tokens paired with it, then the not-affiliated and not-advice foot — each a section card with its own heading id; holders link to the Scanner\'s explorer (NPCard.CHAIN_META), never one typed here',
       /const rwa = chain === 'robinhood' && d\.rwa && typeof d\.rwa === 'object' \? d\.rwa : null;/.test(code) && /'<div class="mkt-tstats" id="mkt-tstats">' \+ stats \+ '<\/div>' \+\s*\(rwa \? rwaHostHTML\(d\.address \|\| S\.view\.token, rwa\) : ''\) \+\s*windowsHTML\(d\)/.test(code)
       && /const rwaCardHTML = \(j\) => rwaLeadHTML\(j\) \+ rwaRealHTML\(j\) \+ rwaHoldHTML\(j\) \+ rwaPriceHTML\(j\) \+ rwaActionsHTML\(j\) \+ rwaSizeHTML\(j\) \+ rwaControlsHTML\(j\) \+ rwaConnHTML\(j\) \+ rwaCardFootHTML\(j\);/.test(code)

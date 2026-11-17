@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Market Data — Just Send It</title>
-<meta name="description" content="Market data for every chain, Robinhood Chain first: TVL, DEX volume, fees, stablecoins and the most-traded tokens, each with its source. Entertainment only.">
+<meta name="description" content="Market data for every chain, Robinhood Chain first: the biggest movers, TVL, DEX volume, fees and top tokens, each with its source. Entertainment only.">
 <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1">
 <meta name="theme-color" content="#c6f000">
 <link rel="canonical" href="https://sendrh.com/market">
@@ -26,7 +26,7 @@
 <meta name="twitter:description" content="Robinhood Chain first, then every chain: TVL, DEX volume, fees, stablecoins and top tokens, each figure with its source and read time. Entertainment only.">
 <meta name="twitter:image" content="https://sendrh.com/assets/logo-og.png">
 <meta name="twitter:image:alt" content="$Send — Just Send It logo">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://sendrh.com/market#webpage","url":"https://sendrh.com/market","name":"Market Data — Just Send It","description":"Market data for every chain, Robinhood Chain first: TVL, DEX volume, fees, stablecoins and the most-traded tokens, each with its source. Entertainment only.","inLanguage":"en","isPartOf":{"@type":"WebSite","@id":"https://sendrh.com/#website","name":"Just Send It","url":"https://sendrh.com/"},"breadcrumb":{"@id":"https://sendrh.com/market#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://sendrh.com/market#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://sendrh.com/"},{"@type":"ListItem","position":2,"name":"Market Data","item":"https://sendrh.com/market"}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebPage","@id":"https://sendrh.com/market#webpage","url":"https://sendrh.com/market","name":"Market Data — Just Send It","description":"Market data for every chain, Robinhood Chain first: the biggest movers, TVL, DEX volume, fees and top tokens, each with its source. Entertainment only.","inLanguage":"en","isPartOf":{"@type":"WebSite","@id":"https://sendrh.com/#website","name":"Just Send It","url":"https://sendrh.com/"},"breadcrumb":{"@id":"https://sendrh.com/market#breadcrumb"}},{"@type":"BreadcrumbList","@id":"https://sendrh.com/market#breadcrumb","itemListElement":[{"@type":"ListItem","position":1,"name":"Home","item":"https://sendrh.com/"},{"@type":"ListItem","position":2,"name":"Market Data","item":"https://sendrh.com/market"}]}]}</script>
 <link rel="icon" href="assets/logo-128.png">
 <link rel="apple-touch-icon" sizes="180x180" href="assets/logo-180.png">
 <link rel="stylesheet" href="fonts/fonts.css">
@@ -73,8 +73,28 @@
   <p class="np-hero-warn">⚠️ Figures can be late, wrong or missing — a missing one is shown as missing, never as zero. Not advice, never a tip to buy. <b>Do your own research.</b></p>
 </header>
 
+<!-- the biggest 24 h moves among the 100 largest coins (owner, 2026-11-17: "a moving banner showing the token the price and percentage
+     move, ranked by the 24hr percentage move … linked to all the on-chain data"): market.js draws it from /api/market/movers, read even
+     while the bubble map is folded away; a mover opens its on-chain data, as a bubble does. It moves only where motion is wanted: it stops
+     for a pointer or the keyboard on it, under ⏸ and under the reduced-motion setting (market.css), where it is a row that scrolls by hand -->
+<section class="mkt-movers" id="mkt-movers" aria-labelledby="mkt-movers-h">
+  <h2 class="mkt-movers-h" id="mkt-movers-h">📈 Top movers <span class="mkt-movers-sub">24 h · top 100</span></h2>
+  <div class="mkt-movers-win" id="mkt-movers-win"><p class="mkt-movers-wait">Reading the biggest moves…</p></div>
+</section>
+<p class="mkt-movers-src" id="mkt-movers-src"></p>
+
 <main id="main" tabindex="-1">
   <div class="mkt-wrap">
+
+    <!-- the market at a glance (owner, 2026-11-17: "integrate all the features on that page so it's a dashboard that people can easily
+         see everything and expand to more data and have tabs to other relevant data"): one tile per headline figure — the market's total,
+         its breadth, the biggest gainer and faller, the largest coin's dominance, Robinhood Chain, your watchlist and the most-called
+         token — each a way into the part of the page that has more. market.js fills them from the movers answer, the chains list and the
+         member's own lists; a figure not read yet says so -->
+    <section class="mkt-glance" id="mkt-glance" aria-labelledby="mkt-glance-h">
+      <h2 class="mkt-glance-h" id="mkt-glance-h">Market at a glance</h2>
+      <div class="mkt-glance-grid" id="mkt-glance-grid"></div>
+    </section>
 
     <!-- search: chains and tokens; a result opens in the main view -->
     <form class="mkt-search" id="mkt-search" role="search" action="/market" method="get" novalidate>
@@ -99,7 +119,7 @@
         <button class="btn btn-sm btn-ghost mkt-map-tog" id="mkt-map-tog" type="button" aria-expanded="true" aria-controls="mkt-map-body" data-tip="Folds the bubble map away so the chains and tokens come first; this browser remembers your choice">Hide the map</button>
       </div>
       <div class="mkt-map-body" id="mkt-map-body">
-        <p class="mkt-map-lede">The 100 largest coins on every chain, by market cap: one bubble each, bigger for a bigger market cap on a compressed scale but never smaller than its ticker needs — so below the three largest, a coin with a long ticker can be drawn bigger than larger coins, most of all on a phone — and coloured by its price move over the last 24 hours, brighter for a bigger move. Point at a bubble for its figures, press it for a card; the list under the map has every coin.</p>
+        <p class="mkt-map-lede">The 100 largest coins on every chain, by market cap: one bubble each, bigger for a bigger market cap on a compressed scale but never smaller than its ticker needs — so below the three largest, a coin with a long ticker can be drawn bigger than larger coins, most of all on a phone — and coloured by its price move over the last 24 hours, brighter for a bigger move. Point at a bubble for its figures; press it for its on-chain data — its token’s dashboard where it has a contract this site reads, else a card saying where it lives on-chain. The list under the map has every coin.</p>
         <div class="mkt-map-ctl">
           <div class="mkt-group" role="group" aria-labelledby="mkt-map-n-l">
             <p class="mkt-group-l" id="mkt-map-n-l">Coins</p>
@@ -131,11 +151,13 @@
 
     <div class="mkt-layout">
       <!-- the side column: the top lists (chains, tokens) and Robinhood Chain's real-world-asset tokens -->
-      <aside class="mkt-side" id="mkt-side" aria-label="Top chains, top tokens and RWAs">
+      <aside class="mkt-side" id="mkt-side" aria-label="Top chains, top tokens, RWAs, your watchlist and the most-called tokens">
         <div class="sc-tabs mkt-tabs" role="tablist" aria-label="Top lists">
           <button class="sc-tab is-on" id="mkt-tab-chains" type="button" role="tab" aria-selected="true" aria-controls="mkt-panel" data-tab="chains" data-tip="Lists the chains, ranked by the figure you pick">🔗 Top chains</button>
           <button class="sc-tab" id="mkt-tab-tokens" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="tokens" data-tip="Lists the most-traded tokens of every chain this site reads, or of the one chain you pick from its list">🪙 Top tokens</button>
           <button class="sc-tab" id="mkt-tab-rwa" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="rwa" data-tip="Lists the real-world-asset tokens on Robinhood Chain — tokenised shares, ETFs, bond and commodity funds — each counted only on evidence, with the tokens paired with them and the stablecoins apart">🏛️ RWAs</button>
+          <button class="sc-tab" id="mkt-tab-watch" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="watch" data-tip="Lists the tokens you saved to your watchlist with ☆, with their price and 24 h move — private to you">⭐ Watchlist</button>
+          <button class="sc-tab" id="mkt-tab-calls" type="button" role="tab" aria-selected="false" aria-controls="mkt-panel" tabindex="-1" data-tab="calls" data-tip="Lists the Robinhood Chain tokens members called most on this site, by how many members called each">📣 Calls</button>
         </div>
 
         <div class="mkt-panel" id="mkt-panel" role="tabpanel" aria-labelledby="mkt-tab-chains">
@@ -294,6 +316,23 @@
                 </div>
               </div>
             </details>
+          </div>
+
+          <!-- your watchlist: the member's saved tokens (GET /api/watchlist), each opening its on-chain dashboard in the site's popup -->
+          <div class="mkt-ctl" id="mkt-ctl-watch" hidden>
+            <p class="mkt-note">The Robinhood Chain tokens you saved with ☆ — here, in the Scanner or in any token’s popup — private to you. Press one for its on-chain dashboard.</p>
+          </div>
+
+          <!-- the most-called tokens on this site (GET /api/calls/top-tokens), by how many members called each — Robinhood Chain only -->
+          <div class="mkt-ctl" id="mkt-ctl-calls" hidden>
+            <p class="mkt-note">Send Calls are members’ public picks on Robinhood Chain tokens. Not advice, never a tip to buy.</p>
+            <div class="mkt-group" role="group" aria-labelledby="mkt-kw-l">
+              <p class="mkt-group-l" id="mkt-kw-l">Time frame</p>
+              <div class="mkt-chips">
+                <button class="np-chip" type="button" aria-pressed="true" data-cwin="24h" data-tip="Counts the calls made in the last 24 hours"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>24h</button>
+                <button class="np-chip" type="button" aria-pressed="false" data-cwin="7d" data-tip="Counts the calls made in the last 7 days"><span class="mkt-tick" aria-hidden="true">✓&nbsp;</span>7 days</button>
+              </div>
+            </div>
           </div>
 
           <p class="mkt-cap" id="mkt-cap" aria-live="polite"></p>

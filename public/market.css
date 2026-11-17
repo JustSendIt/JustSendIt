@@ -33,8 +33,9 @@
 
 /* ---------- the side column ---------- */
 .mkt-side { background: var(--ink-2); border: 1px solid var(--ink-4); border-radius: 18px; padding: 0.9rem; }
-.mkt-tabs.sc-tabs { width: 100%; margin: 0 0 0.9rem; box-sizing: border-box; }
-.mkt-tabs .sc-tab { flex: 1 1 0; min-width: 0; justify-content: center; white-space: normal; text-align: center; padding: 0.4rem 0.6rem; line-height: 1.2; }
+/* five tabs (the lists, the RWAs, your watchlist, the calls): they wrap into rows rather than squeeze a word past its tab */
+.mkt-tabs.sc-tabs { width: 100%; margin: 0 0 0.9rem; box-sizing: border-box; flex-wrap: wrap; border-radius: 16px; }
+.mkt-tabs .sc-tab { flex: 1 1 6.5rem; min-width: 0; justify-content: center; white-space: normal; text-align: center; padding: 0.4rem 0.6rem; line-height: 1.2; }
 .mkt-ctl[hidden] { display: none; }
 .mkt-group { margin: 0 0 0.75rem; }
 .mkt-group[hidden] { display: none; }
@@ -472,3 +473,79 @@ html.motion-off .mkt-caret { transition: none; }   /* the nav's ⏸ stops motion
   .mkt-layout { grid-template-columns: minmax(min(24rem, 40%), 28%) minmax(0, 1fr); gap: var(--rail-gap); }
   .mkt-groups { grid-template-columns: repeat(auto-fit, minmax(min(100%, 30rem), 1fr)); }
 }
+
+/* ════════ the dashboard layer (owner, 2026-11-17: the movers banner, the market at a glance, the Watchlist and Calls tabs, a coin's
+   on-chain data, the view's "Jump to") ════════ */
+
+/* ---------- the movers banner: a strip under the page's head, across the whole width ---------- */
+.mkt-movers { display: flex; align-items: stretch; margin: 0; padding: 0; border-block: 1px solid color-mix(in srgb, var(--green) 30%, transparent); background: var(--ink-1); position: relative; z-index: 4; }
+.mkt-movers-h {
+  flex: none; display: flex; flex-direction: column; justify-content: center; gap: 0.1rem; margin: 0; padding: 0.3rem 0.85rem;
+  font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; font-size: max(var(--text-floor), 0.8rem);
+  color: var(--green-bright); background: var(--ink-2); border-right: 1px solid color-mix(in srgb, var(--green) 30%, transparent); line-height: 1.15;
+}
+.mkt-movers-sub { color: var(--text-mute); font-size: max(var(--text-floor), 0.7rem); letter-spacing: 0.04em; }
+.mkt-movers-win { flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; align-items: center; }
+.mkt-movers-wait { margin: 0; padding: 0.6rem 0.9rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); }
+.mkt-movers-track { display: flex; width: max-content; animation: mkt-mv var(--mv-dur, 40s) linear infinite; }
+.mkt-movers-list { display: flex; gap: 0.45rem; margin: 0; padding: 0.3rem 0.225rem; list-style: none; }
+@keyframes mkt-mv { to { transform: translateX(-50%); } }
+/* a pointer on it or the keyboard in it stops it, so a mover can be read and pressed */
+.mkt-movers:hover .mkt-movers-track, .mkt-movers:focus-within .mkt-movers-track { animation-play-state: paused; }
+/* ⏸ and the reduced-motion setting: it does not move at all — the copy goes, and the row scrolls by hand */
+html.motion-off .mkt-movers-track { animation: none; }
+html.motion-off .mkt-movers-dup { display: none; }
+html.motion-off .mkt-movers-win { overflow-x: auto; overscroll-behavior-x: contain; }
+@media (prefers-reduced-motion: reduce) {
+  .mkt-movers-track { animation: none; }
+  .mkt-movers-dup { display: none; }
+  .mkt-movers-win { overflow-x: auto; overscroll-behavior-x: contain; }
+}
+.mkt-mover {
+  display: inline-flex; align-items: center; gap: 0.45rem; min-height: 44px; padding: 0.25rem 0.8rem; border-radius: 999px;
+  border: 1px solid var(--hair); background: var(--ink-2); color: var(--text); font-family: inherit; font-size: max(var(--text-floor), 0.9rem);
+  white-space: nowrap; cursor: pointer; line-height: 1.1;
+}
+.mkt-mover:hover { border-color: var(--g-hot); }
+.mkt-mover:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.mkt-mover .mkt-logo { width: 24px; height: 24px; border-radius: 50%; }
+.mkt-mover-s { font-weight: 800; }
+.mkt-mover-p { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.mkt-mover-c { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
+.mkt-mover.is-up .mkt-mover-c, .mkt-gl-c.is-up { color: var(--rh-green); }
+.mkt-mover.is-down .mkt-mover-c, .mkt-gl-c.is-down { color: var(--red); }
+.mkt-movers-src { max-width: var(--dash-max); margin: 0.35rem auto 0; padding: 0 1.25rem; color: var(--text-mute); font-size: max(var(--text-floor), 0.78rem); line-height: 1.4; }
+.mkt-movers-src:empty { display: none; }
+@media (max-width: 520px) { .mkt-movers-h { padding: 0.3rem 0.55rem; } }
+
+/* ---------- the market at a glance: one tile per headline figure, two across on a phone, four from 760px ---------- */
+.mkt-glance { margin: 0.6rem 0 1.3rem; padding: 0; }   /* a <section>: styles.css pads every one like a home-page band */
+.mkt-glance-h { margin: 0 0 0.55rem; font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; font-size: max(var(--text-floor), 0.82rem); color: var(--text-dim); }
+.mkt-glance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+@media (min-width: 760px) { .mkt-glance-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.mkt-gl {
+  display: flex; flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 0.2rem; min-width: 0; min-height: 44px;
+  padding: 0.7rem 0.8rem; border-radius: 14px; border: 1px solid var(--ink-4); background: var(--ink-2); color: var(--text);
+  font-family: inherit; text-align: left; cursor: pointer;
+}
+.mkt-gl:hover { border-color: var(--g-hot); }
+.mkt-gl:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
+.mkt-gl-k { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; font-size: max(var(--text-floor), 0.72rem); color: var(--text-mute); overflow-wrap: anywhere; }
+.mkt-gl-v { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; font-size: max(var(--text-floor), 1.2rem); line-height: 1.15; overflow-wrap: anywhere; }
+.mkt-gl-v small { font-size: max(var(--text-floor), 0.75rem); color: var(--text-dim); }
+.mkt-gl-s { font-size: max(var(--text-floor), 0.78rem); color: var(--text-dim); line-height: 1.35; overflow-wrap: anywhere; }
+.mkt-gl .mkt-na { font-size: max(var(--text-floor), 0.95rem); }
+
+/* ---------- the main view's "Jump to" ---------- */
+.mkt-jump { display: flex; flex-wrap: wrap; gap: 0.4rem; margin: 0.2rem 0 1rem; }
+.mkt-jump .np-chip { min-height: 44px; white-space: normal; text-align: center; line-height: 1.2; }
+.mkt-view [id$="-h"] { scroll-margin-top: calc(var(--nav-h, 60px) + 0.75rem); }
+
+/* ---------- a token the member watches, in any list ---------- */
+.mkt-star { color: var(--gold); font-weight: 800; }
+
+/* ---------- a coin's card: where it lives on-chain ---------- */
+.mkt-coin-oc { margin: 0.7rem 0; padding: 0.65rem 0.8rem; border: 1px solid color-mix(in srgb, var(--green) 30%, transparent); border-radius: 12px; background: var(--ink-1); }
+.mkt-coin-oc-h { margin: 0 0 0.3rem; font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; font-size: max(var(--text-floor), 0.75rem); color: var(--green-bright); }
+.mkt-coin-oc .mkt-note { margin: 0 0 0.4rem; }
+.mkt-coin-oc .mkt-acts { margin: 0; }

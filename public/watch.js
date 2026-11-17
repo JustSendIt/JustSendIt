@@ -5,6 +5,9 @@
   'use strict';
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const ids = new Set();
+  /* the TOKENS saved, beside the pools: a list keyed by token (the Market Data page's rows) marks a token the member watches
+     even when the pool they saved is not the one that list shows (/api/watchlist/ids sends both since 2026-11-17) */
+  const tokens = new Set();
   let loaded = false;
 
   async function load() {
@@ -12,18 +15,22 @@
       const r = await fetch('/api/watchlist/ids', { credentials: 'same-origin' });
       if (!r.ok) return;
       const j = await r.json();
-      ids.clear();
+      ids.clear(); tokens.clear();
       (j.ids || []).forEach(a => ids.add(String(a).toLowerCase()));
+      (j.tokens || []).forEach(a => tokens.add(String(a).toLowerCase()));
       loaded = true;
       document.dispatchEvent(new CustomEvent('watchlist:changed'));
     } catch {}
   }
   const has = (pair) => ids.has(String(pair || '').toLowerCase());
+  const hasToken = (token) => tokens.has(String(token || '').toLowerCase());
 
   async function add(p) {
     const pair = p && p.pair && p.pair.address; if (!pair) return false;
     if (!(window.AUTH && AUTH.user)) { if (window.AUTH) AUTH.open(); return false; } // signed-out → login (no optimistic flash)
     ids.add(pair.toLowerCase());                 // optimistic
+    const tok = p.token && p.token.address ? String(p.token.address).toLowerCase() : null, hadTok = tok ? tokens.has(tok) : true;
+    if (tok) tokens.add(tok);
     document.dispatchEvent(new CustomEvent('watchlist:changed'));
     try {
       const r = await fetch('/api/watchlist', {
@@ -34,13 +41,13 @@
           snapshot: p,
         }),
       });
-      if (!r.ok) { ids.delete(pair.toLowerCase()); document.dispatchEvent(new CustomEvent('watchlist:changed')); if (r.status === 401 && window.AUTH) AUTH.open(); else if (window.SFX) SFX.play('error'); return false; }   // refused: the star goes hollow again, with no toast to say so
+      if (!r.ok) { ids.delete(pair.toLowerCase()); if (!hadTok) tokens.delete(tok); document.dispatchEvent(new CustomEvent('watchlist:changed')); if (r.status === 401 && window.AUTH) AUTH.open(); else if (window.SFX) SFX.play('error'); return false; }   // refused: the star goes hollow again, with no toast to say so
       const j = await r.json().catch(() => ({}));
       if (window.SFX) SFX.play('success');   // the server kept it
       if (window.sendToast) sendToast('⭐ Saved to your watchlist');
       if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned);  // +N pop, nav badge, notif refresh
       return true;
-    } catch { ids.delete(pair.toLowerCase()); document.dispatchEvent(new CustomEvent('watchlist:changed')); if (window.SFX) SFX.play('error'); return false; }
+    } catch { ids.delete(pair.toLowerCase()); if (!hadTok) tokens.delete(tok); document.dispatchEvent(new CustomEvent('watchlist:changed')); if (window.SFX) SFX.play('error'); return false; }
   }
   async function remove(pair) {
     pair = String(pair || ''); if (!pair) return false;
@@ -54,6 +61,7 @@
       if (!r.ok) { revert(); if (r.status === 401 && window.AUTH) AUTH.open(); else if (window.sendToast) sendToast('Could not remove — try again'); return false; }
       if (window.SFX) SFX.play('remove');   // the server let it go
       if (window.sendToast) sendToast('Removed from watchlist');
+      load();   // which TOKENS are still saved is the server's to say (another pool of the same token may still be on the list)
       return true;
     } catch { revert(); if (window.sendToast) sendToast('Could not remove — try again'); return false; }
   }
@@ -85,9 +93,9 @@
   }
   document.addEventListener('watchlist:changed', () => syncButtons());
 
-  window.Watchlist = { load, has, add, remove, toggle, btnHTML, syncButtons, ids };
+  window.Watchlist = { load, has, hasToken, add, remove, toggle, btnHTML, syncButtons, ids, tokens, isLoaded: () => loaded };
 
   // load once we know who the user is
   if (window.AUTH && AUTH.ready) AUTH.ready.then(() => { if (AUTH.user) load(); });
-  document.addEventListener('auth:change', e => { if (e && e.detail) load(); else { ids.clear(); document.dispatchEvent(new CustomEvent('watchlist:changed')); } });
+  document.addEventListener('auth:change', e => { if (e && e.detail) load(); else { ids.clear(); tokens.clear(); loaded = false; document.dispatchEvent(new CustomEvent('watchlist:changed')); } });
 })();

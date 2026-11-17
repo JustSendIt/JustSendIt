@@ -150,6 +150,10 @@
   const RWA_VIEWS = ['assets', 'tokens', 'connected', 'stables'], RWA_SORTS = ['value', 'tvl', 'liquidity', 'mcap', 'volume', 'premium'];
   const RWA_KINDS = ['all', 'stock', 'etf', 'bond', 'commodity', 'credit'];
   const RWA_DEF = { view: 'assets', sort: 'value', dir: 'desc', kind: 'all', issuer: 'all' };
+  // the tabs the address names (tab=…): the RWAs, the member's watchlist and the calls (owner, 2026-11-17: "integrate it with the user's
+  // watchlist and call system across the platform"); Top chains and Top tokens are the page's own default lists and are not in it
+  const URL_TABS = ['rwa', 'watch', 'calls'];
+  const CALL_WINS = ['24h', '7d'];
   const ISSUER_KEY = /^[a-z0-9]{2,16}$/;   // the server names its issuers (rhj, ondo, …) and falls back to all for one it does not know
 
   /* ---------- state ---------- */
@@ -158,6 +162,8 @@
     chains: { sort: 'tvl', dir: 'desc', win: '24h', from: '', to: '' },
     tokens: { sort: 'volume', dir: 'desc', win: '24h', from: '', to: '', all: false, tchain: '' },   // tchain '' = every chain
     rwa: Object.assign({}, RWA_DEF),   // the RWA tab's choices; in the address (tab=rwa&rview=…) while that tab is open
+    calls: { win: '24h' },   // the Calls tab's time frame; in the address (tab=calls&cwin=7d) while that tab is open
+    watchAns: null, callsAns: null, callsFor: null, mine: null,
     view: { chain: DEFAULT_CHAIN, token: null },
     chainRows: null, chainAns: null, tokenAns: null, tokenFor: null, viewData: null, rwaAns: null, urlTab: null,
     shown: 0, range: 90,
@@ -185,8 +191,9 @@
       else k.win = w;
     }
     // the RWA tab, with its choices where they are not the defaults; anything else in them is the default (the server does the same)
-    S.urlTab = q.get('tab') === 'rwa' ? 'rwa' : null;
-    if (S.urlTab) {
+    S.urlTab = URL_TABS.includes(q.get('tab')) ? q.get('tab') : null;
+    S.calls.win = S.urlTab === 'calls' && CALL_WINS.includes(q.get('cwin')) ? q.get('cwin') : '24h';
+    if (S.urlTab === 'rwa') {
       const one = (v, list, d) => (list.includes(v) ? v : d), ri = q.get('rissuer') || '';
       S.rwa = { view: one(q.get('rview'), RWA_VIEWS, RWA_DEF.view), sort: one(q.get('rsort'), RWA_SORTS, RWA_DEF.sort), dir: q.get('rdir') === 'asc' ? 'asc' : 'desc',
         kind: one(q.get('rkind'), RWA_KINDS, RWA_DEF.kind), issuer: ISSUER_KEY.test(ri) ? ri : RWA_DEF.issuer };
@@ -199,10 +206,9 @@
     const k = v.token ? S.tokens : S.chains;
     if (k.win !== '24h') { p.set('window', k.win); if (k.win === 'custom') { p.set('from', k.from); p.set('to', k.to); } }
     if (S.tokens.tchain) p.set('tchain', S.tokens.tchain);
-    if (S.tab === 'rwa') {
-      p.set('tab', 'rwa');
-      for (const [k, n] of [['view', 'rview'], ['sort', 'rsort'], ['dir', 'rdir'], ['kind', 'rkind'], ['issuer', 'rissuer']]) if (S.rwa[k] !== RWA_DEF[k]) p.set(n, S.rwa[k]);
-    }
+    if (URL_TABS.includes(S.tab)) p.set('tab', S.tab);
+    if (S.tab === 'rwa') for (const [k, n] of [['view', 'rview'], ['sort', 'rsort'], ['dir', 'rdir'], ['kind', 'rkind'], ['issuer', 'rissuer']]) if (S.rwa[k] !== RWA_DEF[k]) p.set(n, S.rwa[k]);
+    if (S.tab === 'calls' && S.calls.win !== '24h') p.set('cwin', S.calls.win);
     return '/market?' + p.toString();
   }
   function writeURL(push) {
@@ -276,8 +282,8 @@
   /* ════════════════════════════ the side column ════════════════════════════ */
   const CH_SORT = { tvl: 'TVL', volume: 'volume', liquidity: 'DEX liquidity', mcap: 'market cap', fees: 'gas fees' };
   const TK_SORT = { volume: 'volume', liquidity: 'liquidity', mcap: 'market cap', fdv: 'FDV', change: 'price change' };
-  const tabs = [...document.querySelectorAll('#mkt-side [role="tab"]')];   // every tab the tablist holds: Top chains, Top tokens, RWAs
-  const ctl = { chains: $('mkt-ctl-chains'), tokens: $('mkt-ctl-tokens'), rwa: $('mkt-ctl-rwa') };   // each tab's controls, by its data-tab
+  const tabs = [...document.querySelectorAll('#mkt-side [role="tab"]')];   // every tab the tablist holds: Top chains, Top tokens, RWAs, Watchlist, Calls
+  const ctl = { chains: $('mkt-ctl-chains'), tokens: $('mkt-ctl-tokens'), rwa: $('mkt-ctl-rwa'), watch: $('mkt-ctl-watch'), calls: $('mkt-ctl-calls') };   // each tab's controls, by its data-tab
   const wide = () => window.innerWidth >= 1280;
   const pageSize = () => (wide() ? 25 : 10);
 
@@ -327,6 +333,7 @@
       }
     }
     const wash = $('mkt-wash'); if (wash) wash.setAttribute('aria-pressed', String(!!S.tokens.all));
+    if (ctl.calls) ctl.calls.querySelectorAll('[data-cwin]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.cwin === S.calls.win)));
     if (filterBox) filterBox.querySelectorAll('[data-tchain]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.tchain === (S.tokens.tchain || 'all'))));
     paintPicked();
     syncRwa();
@@ -576,12 +583,12 @@
     S.shown = pageSize();
     loadList();
   }
-  // a tab the reader picks: the RWA tab is in the address (tab=rwa), so going to it or leaving it is pushed — Back returns to the
-  // tab before; Top chains and Top tokens are not in it (a chain filter is), so moving between those two writes nothing
+  // a tab the reader picks: the RWA, Watchlist and Calls tabs are in the address (tab=…), so going to one or leaving it is pushed —
+  // Back returns to the tab before; Top chains and Top tokens are not in it (a chain filter is), so moving between those two writes nothing
   function pickTab(tab, focus) {
     const was = S.tab;
     setTab(tab, focus);
-    if (was === 'rwa' || tab === 'rwa') writeURL(true);
+    if (URL_TABS.includes(was) || URL_TABS.includes(tab)) writeURL(true);
   }
   tabs.forEach((t) => t.addEventListener('click', () => { if (S.tab !== t.dataset.tab) pickTab(t.dataset.tab, false); }));
   $('mkt-tab-chains').parentNode.addEventListener('keydown', (e) => {
@@ -658,6 +665,7 @@
         S.chainRows.forEach((r) => { if (r && r.key && r.name) names.set(r.key, r.name); });
         paintChains();
         syncControls();
+        paintGlance();
       } catch (e) {
         if (my !== seq.list) return;
         cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, 'the chains')) + '</span> ' + failActs(e, 'list', 'chains');
@@ -696,7 +704,102 @@
         if (my !== seq.list) return;
         cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, 'Robinhood Chain’s RWAs')) + '</span> ' + retryBtn('list');
       }
+    } else if (kind === 'watch') {
+      // the member's own watchlist (GET /api/watchlist: their saved Robinhood Chain pools, read live where the site can) — private to them
+      cap.innerHTML = loadingHTML('Reading your watchlist…'); list.innerHTML = ''; more.innerHTML = ''; foot.innerHTML = WATCH_FOOT;
+      if (window.AUTH && AUTH.ready && AUTH.ready.then) { try { await AUTH.ready; } catch {} }
+      if (my !== seq.list) return;
+      if (!(window.AUTH && AUTH.user)) {
+        cap.innerHTML = 'Your watchlist: the Robinhood Chain tokens you save with ☆, private to you.';
+        list.innerHTML = '<li class="mkt-empty">Sign in to keep a watchlist. ' + SIGNIN_BTN + '</li>';
+        return;
+      }
+      try {
+        const j = await getJSON('/api/watchlist');
+        if (my !== seq.list) return;
+        S.watchAns = j; paintWatch();
+      } catch (e) {
+        if (my !== seq.list) return;
+        if (e && e.status === 401) { cap.innerHTML = 'Your watchlist: the Robinhood Chain tokens you save with ☆, private to you.'; list.innerHTML = '<li class="mkt-empty">Sign in to keep a watchlist. ' + SIGNIN_BTN + '</li>'; return; }
+        cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, 'your watchlist')) + '</span> ' + retryBtn('list');
+      }
+    } else if (kind === 'calls') {
+      // the tokens most called on this site in the time frame, by distinct members (GET /api/calls/top-tokens) — Robinhood Chain only, as calls are
+      const w = S.calls.win;
+      cap.innerHTML = loadingHTML('Reading the most-called tokens…'); list.innerHTML = ''; more.innerHTML = ''; foot.innerHTML = CALLS_FOOT;
+      try {
+        const j = await getJSON('/api/calls/top-tokens?window=' + w);
+        if (my !== seq.list) return;
+        S.callsAns = j; S.callsFor = w;
+        await loadMine();
+        if (my !== seq.list) return;
+        paintCalls();
+      } catch (e) {
+        if (my !== seq.list) return;
+        cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, 'the most-called tokens')) + '</span> ' + retryBtn('list');
+      }
     }
+  }
+
+  /* ---------- the Watchlist and Calls tabs: Robinhood Chain tokens, each opening its on-chain dashboard in the site's popup ---------- */
+  const SIGNIN_BTN = '<button class="btn btn-sm btn-primary" type="button" data-mkt-signin="1" data-tip="Opens the sign-in panel: a watchlist and your calls are kept with your account">Sign in</button>';
+  const WATCH_FOOT = 'Save a token with ☆ on its on-chain dashboard — here, in the Scanner, or in any token’s popup. Your watchlist is private to you; the <a href="/watchlist">Watchlist page</a> has it in full.';
+  const CALLS_FOOT = 'A Send Call is a member’s public pick on a Robinhood Chain token, with its price at the time. Calls are members’ picks, never advice and never a tip to buy. Make one from a token’s on-chain dashboard.';
+  const STAR = ' <span class="mkt-star" title="In your watchlist">★<span class="sr-only"> in your watchlist</span></span>';
+  const watching = (addr) => !!(window.Watchlist && Watchlist.hasToken && Watchlist.hasToken(addr));
+  // a row that opens the site's token popup (not the main view): the token, and where in this tab's answer its row is
+  function tmRowHTML(i, kind, addr, nm, sym, sub, figHTML, tip) {
+    return '<li><button class="mkt-row" type="button" data-tm-token="' + esc(addr) + '" data-tm-' + kind + '="' + i + '" aria-haspopup="dialog" data-tip="' + esc(tip) + '">' +
+      '<span class="mkt-rank">' + (i + 1) + '</span>' + avaHTML(sym || nm, null) +
+      '<span class="mkt-nm"><b>' + esc(nm) + (sym ? ' <span class="mkt-sym">$' + esc(sym) + '</span>' : '') + (watching(addr) ? STAR : '') + '</b><small>' + sub + '</small></span>' +
+      '<span class="mkt-fig">' + figHTML + '</span></button></li>';
+  }
+  const moveHTML = (price, ch) => (price != null ? '<b>' + esc(usd(price)) + '</b>' : '<b class="mkt-na">Not available</b>') + '<small>' + (ch != null ? esc(pct(ch)) + ' in 24 h' : '24 h move not given') + '</small>';
+  function paintWatch() {
+    const items = (S.watchAns && Array.isArray(S.watchAns.items) ? S.watchAns.items : []).filter((p) => p && p.token && p.token.address && p.pair);
+    cap.innerHTML = 'Your watchlist · <b>' + items.length + ' token' + (items.length === 1 ? '' : 's') + '</b> on Robinhood Chain · private to you';
+    if (!items.length) { list.innerHTML = '<li class="mkt-empty">Nothing saved yet. Press ☆ on a token’s on-chain dashboard to keep it here.</li>'; more.innerHTML = ''; return; }
+    list.innerHTML = items.slice(0, S.shown).map((p, i) => {
+      const t = p.token, m = p.market || {}, saved = p._wl && p._wl.source === 'saved';
+      const price = m.priceUsd != null && isFinite(m.priceUsd) ? Number(m.priceUsd) : null, ch = p.priceChange && p.priceChange.h24 != null && isFinite(p.priceChange.h24) ? Number(p.priceChange.h24) : null;
+      const sub = '<code>' + esc(short(t.address)) + '</code>' + (m.liquidityUsd != null && isFinite(m.liquidityUsd) ? ' · Liq ' + esc(usd(Number(m.liquidityUsd))) : '') + (saved ? ' · your saved snapshot, not a live read' : '');
+      return tmRowHTML(i, 'w', t.address, t.name || t.symbol || short(t.address), t.symbol, sub, saved ? '<b class="mkt-na">Not live</b><small>saved snapshot</small>' : moveHTML(price, ch),
+        'Opens ' + (t.name || t.symbol || 'this token') + '’s on-chain dashboard: the Scanner’s read, its chart, Watch and Send Call');
+    }).join('');
+    more.innerHTML = moreHTML(items.length);
+  }
+  async function loadMine() {   // the tokens the member has called (theirs alone), to mark them in the Calls list
+    S.mine = null;
+    if (!(window.AUTH && AUTH.user)) return;
+    try { const j = await getJSON('/api/calls/mine/ids'); S.mine = new Set((Array.isArray(j) ? j : (j && j.calls) || []).map((c) => String(c && c.token || '').toLowerCase()).filter(Boolean)); } catch {}
+  }
+  function paintCalls() {
+    const j = S.callsAns || {}, rows = Array.isArray(j.rows) ? j.rows : Array.isArray(j.tokens) ? j.tokens : [];
+    cap.innerHTML = 'Most called on Send · <b>' + (S.callsFor === '7d' ? 'last 7 days' : 'last 24 hours') + '</b> · ranked by how many members called each token · Robinhood Chain' + (j.at ? ' · read ' + agoEl(j.at) : '');
+    if (!rows.length) { list.innerHTML = '<li class="mkt-empty">' + esc(j.why ? cap1(j.why) : 'No token was called in this time frame yet') + '.</li>'; more.innerHTML = ''; return; }
+    list.innerHTML = rows.slice(0, S.shown).map((r, i) => {
+      const m = r.market || null, price = m ? val(m.price) : null, ch = m ? val(m.change24h) : null, mine = S.mine && S.mine.has(String(r.token).toLowerCase());
+      const n = Number(r.callers) || 0, sub = '📣 ' + n + ' member' + (n === 1 ? '' : 's') + ' called it' + (mine ? ' · <b>you called it</b>' : '') + (r.lastAt ? ' · last ' + agoEl(r.lastAt) : '');
+      return tmRowHTML(i, 'c', r.token, r.name || r.symbol || short(r.token), r.symbol, sub, m ? moveHTML(price, ch) : '<b class="mkt-na">Not available</b><small>' + esc((r.marketWhy || (m === null && r.why)) || 'price not read just now') + '</small>',
+        'Opens ' + (r.name || r.symbol || 'this token') + '’s on-chain dashboard: the calls on its chart, the Scanner’s read and a Send Call of your own');
+    }).join('');
+    more.innerHTML = moreHTML(rows.length);
+  }
+  // a saved watchlist row read live; its snapshot is shown, marked as one, only when the live read has nothing (watchlist.js does the same)
+  function openWatchDash(p) {
+    if (!(p._wl && p._wl.source === 'saved')) { TokenModal.open(p.token.address, { chain: 'robinhood', symbol: p.token.symbol, name: p.token.name, pair: p }); return; }
+    const scored = !!(p.risk && p.risk.dataKnown);
+    TokenModal.open(p.token.address, { chain: 'robinhood', symbol: p.token.symbol, name: p.token.name, fallback: scored ? async (ans) => ({ pair: p, note: ans && ans.notFound
+      ? '<p class="tm-msg tm-note">🤷 The chain reports no trading pool for this token now. Below is your saved snapshot of it, not a live read.</p>'
+      : '<p class="tm-msg tm-note">⏳ We couldn’t read it live just now — below is your saved snapshot of it, not a live read. Nothing here is a judgement about the token.</p>' }) : null });
+  }
+  function openRowPopup(b) {
+    if (!(window.TokenModal && TokenModal.open)) return false;
+    const addr = b.dataset.tmToken;
+    if (b.dataset.tmW != null) { const p = ((S.watchAns && S.watchAns.items) || [])[Number(b.dataset.tmW)]; if (p && p.token && sameToken(p.token.address, addr)) { openWatchDash(p); return true; } }
+    const r = b.dataset.tmC != null ? ((S.callsAns && (S.callsAns.rows || S.callsAns.tokens)) || [])[Number(b.dataset.tmC)] : null;
+    TokenModal.open(addr, { chain: 'robinhood', symbol: r && r.symbol, name: r && r.name });
+    return true;
   }
 
   function moreHTML(total) {
@@ -767,7 +870,7 @@
       const cur = S.view.token && S.view.chain === on && sameToken(S.view.token, r.address);
       return '<li><button class="mkt-row" type="button" data-chain="' + esc(on) + '" data-token="' + esc(r.address) + '"' + (cur ? ' aria-current="true"' : '') + ' data-tip="Opens ' + esc(nm) + (all ? ' on ' + esc(r.chainName || chainName(on)) : '') + ' in the main view: price, pools, a chart and the Scanner’s read">' +
         '<span class="mkt-rank">' + (i + 1) + '</span>' + avaHTML(r.symbol || r.name, logoFor(r, on)) +
-        '<span class="mkt-nm"><b>' + esc(nm) + (r.symbol ? ' <span class="mkt-sym">$' + esc(r.symbol) + '</span>' : '') + '</b><small>' + (all ? chainBadge(r) : '') + '<code>' + esc(short(r.address)) + '</code>' +
+        '<span class="mkt-nm"><b>' + esc(nm) + (r.symbol ? ' <span class="mkt-sym">$' + esc(r.symbol) + '</span>' : '') + (on === 'robinhood' && watching(r.address) ? STAR : '') + '</b><small>' + (all ? chainBadge(r) : '') + '<code>' + esc(short(r.address)) + '</code>' +
           (s2.v != null ? ' · ' + (sec === 'liquidity' ? 'Liq ' : 'Vol ') + esc(usd(s2.v)) + (sec === 'liquidity' && r.liquidity && r.liquidity.pools ? ' in ' + r.liquidity.pools + ' pool' + (r.liquidity.pools === 1 ? '' : 's') : '') : '') + '</small>' + (flags ? '<span class="mkt-flags">' + flags + '</span>' : '') + '</span>' +
         '<span class="mkt-fig">' + (main != null ? '<b>' + esc(main) + '</b>' + (sortF === 'mcap' && (r.flags || []).includes('global-mcap') ? '<small>global, all chains</small>' : '') : '<b class="mkt-na">Not available</b><small>' + whyOf(f) + '</small>') + '</span>' +
       '</button></li>';
@@ -984,12 +1087,30 @@
     const b = e.target.closest('button'); if (!b) return;
     if (b.dataset.limit) { S.chainsLimit = Number(b.dataset.limit); loadList(); return; }
     const first = S.shown; S.shown += pageSize();
-    if (S.tab === 'chains') paintChains(); else if (S.tab === 'tokens') paintTokens(); else if (S.tab === 'rwa') paintRwa();
+    if (S.tab === 'chains') paintChains(); else if (S.tab === 'tokens') paintTokens(); else if (S.tab === 'rwa') paintRwa(); else if (S.tab === 'watch') paintWatch(); else if (S.tab === 'calls') paintCalls();
     const next = list.querySelectorAll('.mkt-row')[first]; if (next) next.focus();
   });
   list.addEventListener('click', (e) => {
+    const tm = e.target.closest('[data-tm-token]'); if (tm) { openRowPopup(tm); return; }
+    const si = e.target.closest('[data-mkt-signin]'); if (si) { if (window.AUTH && AUTH.open) AUTH.open(); return; }
     const b = e.target.closest('.mkt-row'); if (!b) return;
     open({ chain: b.dataset.chain, token: b.dataset.token || null }, true);
+  });
+  // the Calls tab's time frame: in the address (Back walks it), the list read again
+  if (ctl.calls) ctl.calls.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-cwin]'); if (!b || !CALL_WINS.includes(b.dataset.cwin) || b.dataset.cwin === S.calls.win) return;
+    S.calls.win = b.dataset.cwin; S.shown = pageSize(); syncControls(); writeURL(true); loadList();
+  });
+  // the member's lists move with them: a star pressed anywhere on the page, a sign-in or a sign-out
+  document.addEventListener('watchlist:changed', () => {
+    memo.delete('/api/watchlist');
+    if (S.tab === 'watch' && window.AUTH && AUTH.user) loadList(); else if (S.tab === 'tokens' && S.tokenAns) paintTokens();
+    if (typeof paintGlance === 'function') paintGlance();
+  });
+  document.addEventListener('auth:change', () => {
+    memo.delete('/api/watchlist'); memo.delete('/api/calls/mine/ids');
+    if (S.tab === 'watch' || S.tab === 'calls') loadList();
+    if (typeof paintGlance === 'function') paintGlance();
   });
   document.addEventListener('click', (e) => {
     const w = e.target.closest('[data-reset-win]');
@@ -1094,6 +1215,15 @@
     } finally { if (my === seq.view) view.removeAttribute('aria-busy'); }
   }
   view.addEventListener('click', (e) => {
+    // the ☆ on the Scanner's dashboard in this view: saves the pair it shows to the member's watchlist (a home-chain token only — the
+    // dashboard draws no ☆ for another chain's)
+    const w = e.target.closest('.np-watch[data-wpair]'), sh = $('mkt-scan-host');
+    if (w && sh && sh.contains(w)) {
+      if (sh._pair && sh._pair.pair && window.Watchlist && sameToken(w.dataset.wpair, sh._pair.pair.address)) { e.preventDefault(); Watchlist.toggle(sh._pair); }
+      return;
+    }
+    const jb = e.target.closest('[data-jump-to]');
+    if (jb) { jumpTo(jb.dataset.jumpTo); return; }
     const t = e.target.closest('[data-open-token]');
     if (t) { open({ chain: t.dataset.chain || S.view.chain, token: t.dataset.openToken }, true); return; }
     const c = e.target.closest('[data-open-chain]');
@@ -1107,7 +1237,7 @@
       const moved = k !== S.tokens.tchain, was = S.tab;
       if (moved) { S.tokens.tchain = k; S.shown = pageSize(); }
       if (S.tab !== 'tokens') setTab('tokens', true); else { if (moved) loadList(); $('mkt-tab-tokens').focus(); }
-      if (moved || was === 'rwa') writeURL(true);   // after the tab moved: the address names the chain filter, and no longer the RWA tab
+      if (moved || URL_TABS.includes(was)) writeURL(true);   // after the tab moved: the address names the chain filter, and no longer the tab before
     }
   });
 
@@ -1653,8 +1783,27 @@
   }
 
   /* ---------- mounting a view: charts, logos, the Scanner's dashboard ---------- */
+  /* "Jump to": the parts of the view this answer drew, in their order — a long view (a chain's charts, its pulse, its tokens and
+     pools; a token's windows, chart, pools, RWA facts and the Scanner's read) is one press from any of them (owner, 2026-11-17: "a
+     dashboard that people can easily see everything and expand to more data") */
+  const JUMPS = [['mkt-mc-h', 'Market cap'], ['mkt-ch-h', 'Charts'], ['mkt-pl-h', 'Live pulse'], ['mkt-l2-h', 'L2BEAT'], ['mkt-tt-h', 'Top tokens'], ['mkt-np-h', 'New pools'],
+    ['mkt-rwa-host', 'RWA facts'], ['mkt-tw-h', 'Time frames'], ['mkt-pc-h', 'Price chart'], ['mkt-po-h', 'Pools'], ['mkt-lk-h', 'Links'], ['mkt-sc-h', 'On-chain scan'], ['mkt-sr-h', 'Sources']];
+  function addJump() {
+    const head = view.querySelector('header.mkt-vhead'); if (!head) return;
+    const have = JUMPS.filter(([id]) => $(id) && view.contains($(id)));
+    if (have.length < 2) return;
+    head.insertAdjacentHTML('afterend', '<nav class="mkt-jump" aria-label="Jump to a part of this view">' +
+      have.map(([id, label]) => '<button class="np-chip mkt-jump-b" type="button" data-jump-to="' + id + '" data-tip="Scrolls down to ' + esc(label.toLowerCase()) + ' in this view">' + esc(label) + '</button>').join('') + '</nav>');
+  }
+  function jumpTo(id) {
+    const t = $(id); if (!t) return;
+    try { t.scrollIntoView({ block: 'start', behavior: reduced() ? 'auto' : 'smooth' }); } catch { t.scrollIntoView(); }
+    if (!t.hasAttribute('tabindex')) t.setAttribute('tabindex', '-1');
+    try { t.focus({ preventScroll: true }); } catch {}
+  }
   function mountView(d) {
     wireLogos(view);
+    addJump();
     if (S.view.token) {
       const box = view.querySelector('[data-candles] .mkt-plot');
       const c = d && d.candles;
@@ -1846,6 +1995,7 @@
         return;
       }
       if (!p.chain) p.chain = j.chain || chain;
+      host._pair = p;   // its ☆ saves this pair (the view's click handler below)
       const sc = j.scan || {};
       const meta = '<p class="sc-hit-s">' + (sc.readAt ? (sc.stale ? 'Last read ' : 'Read ') + agoEl(sc.readAt) : 'Read just now') + ' · this read is not added to the Scanner’s public “recently scanned” list.' +
         (sc.stale ? ' <span class="sc-stale">⏳ This is the last snapshot — the chain could not be reached just now. Nothing on it is live.</span>' : '') + '</p>';
@@ -2463,8 +2613,8 @@
   }
   /* ---------- a coin's card, under the map ---------- */
   function openMapCard(id, focus) {
-    const r = MAP.ans && MAP.ans.rows.find((x) => x.id === id); if (!r || !mapEl.card) return;
-    MAP.pick = id;
+    const r = id && typeof id === 'object' ? id : MAP.ans && MAP.ans.rows.find((x) => x.id === id); if (!r || !mapEl.card) return;
+    id = r.id; MAP.pick = id;
     mapEl.fig.querySelectorAll('.mkt-bub').forEach((g) => g.classList.toggle('is-on', g.dataset.coin === id));
     if (mapEl.table) mapEl.table.querySelectorAll('tr[data-coin]').forEach((tr) => tr.classList.toggle('is-on', tr.dataset.coin === id));
     const chk = r.check || {}, notes = Array.isArray(chk.notes) ? chk.notes : [], cgId = /^[a-z0-9-]{1,80}$/.test(String(r.id || '')) ? r.id : null;
@@ -2474,11 +2624,49 @@
       stat('Rank', rankF, (x) => '#' + x) + '</dl>' +
       (r.stable === true ? '<p class="mkt-note">CoinGecko files this coin as a stablecoin.</p>' : '') +
       (notes.length ? '<ul class="mkt-chknotes">' + notes.map((n) => '<li>' + esc(n) + '</li>').join('') + '</ul>' : '') +
+      coinOnchainHTML(r) +
       '<p class="mkt-acts">' + (cgId ? '<a class="mkt-src-l mkt-map-ext" href="https://www.coingecko.com/en/coins/' + encodeURIComponent(cgId) + '" target="_blank" rel="noopener">View on CoinGecko ↗</a> ' : '') +
       '<button class="btn btn-sm btn-ghost mkt-mini" type="button" data-map-close="1" data-tip="Closes this coin’s card">✕ Close</button></p>' +
       '<p class="mkt-note">Not advice, never a tip to buy.</p></section>';
     mapEl.card.hidden = false;
     if (focus) { const h = $('mkt-mapc-h'); if (h) { h.focus({ preventScroll: true }); mapCardInView(); } }
+  }
+  /* ---------- a coin, pressed anywhere (a bubble, the list, the movers banner, a tile): its on-chain data ----------
+     Owner, 2026-11-17: "when you click one of the token bubbles it shows the user all the on-chain data like it does everywhere else on
+     the site whenever you click a token". The server says where each of CoinGecko's coins lives on-chain (lib/marketmap.js 'onchain',
+     from CoinGecko's own list of contracts, read once a day): a token contract on a chain the Scanner reads opens the site's token popup —
+     the Scanner's read of that contract, its holders, liquidity and chart; any other coin opens its card, which says where it lives: a
+     chain's own coin (its chain's data in the main view), a base trading asset (its market data there), or a chain this site does not read */
+  const coinRow = (id) => (MAP.ans && MAP.ans.rows.find((x) => x.id === id)) || (MV.ans && [].concat(MV.ans.rows || [], MV.ans.gainers || [], MV.ans.losers || []).find((x) => x && x.id === id)) || null;
+  const scannable = (oc) => !!oc && oc.kind === 'contract' && oc.scannable !== false && SCANS.includes(oc.chain) && (oc.chain === 'solana' ? B58_ADDR.test(String(oc.address || '')) : EVM_ADDR.test(String(oc.address || '')));
+  function coinNote(r, oc) {
+    const p = mapPrice(val(r.price)), c = val(r.change24h);
+    return 'CoinGecko' + (Number.isInteger(r.rank) ? ' #' + r.rank : '') + (p ? ' · ' + p : '') + (c != null ? ' · ' + pct(c) + ' in 24 h' : '') +
+      ' (its market across every chain). Below: its token contract on ' + chainName(oc.chain) + ', read from the chain — the price there is its deepest pool’s.';
+  }
+  function openCoinScan(r) {
+    const oc = r.onchain;
+    if (!scannable(oc) || !(window.TokenModal && TokenModal.open)) return false;
+    TokenModal.open(oc.address, { chain: oc.chain, symbol: r.symbol, name: coinName(r), note: coinNote(r, oc) });
+    return true;
+  }
+  function openCoin(r) {
+    if (!r) return;
+    if (scannable(r.onchain) && openCoinScan(r)) return;
+    if (!MAP.shown) setMapOpen(true, false);   // its card is under the map: opened for it (not remembered — the reader did not unfold it)
+    openMapCard(r, true);
+  }
+  function coinOnchainHTML(r) {
+    const oc = r.onchain, nm = coinName(r);
+    const box = (inner) => '<div class="mkt-coin-oc"><p class="mkt-coin-oc-h">⛓️ On-chain</p>' + inner + '</div>';
+    if (!oc || typeof oc !== 'object') return box('<p class="mkt-note">' + esc(cap1(r.onchainWhy || 'where this coin lives on-chain has not been read yet — the site reads CoinGecko’s list of contracts once a day')).replace(/\.?$/, '.') + '</p>');
+    const cn = chainName(oc.chain);
+    const tokenBtn = readable(oc.chain, oc.address) ? '<button class="btn btn-sm btn-ghost" type="button" data-coin-token="' + esc(r.id) + '" data-tip="Opens its market data on ' + esc(cn) + ' in the main view: its pools, a price chart and time frames">📊 Market data on ' + esc(cn) + ' ↓</button>' : '';
+    if (oc.kind === 'contract') return box('<p class="mkt-note">' + esc(nm) + ' has a token contract on ' + esc(cn) + ': <code>' + esc(short(oc.address)) + '</code>.</p><p class="mkt-acts">' +
+      (scannable(oc) ? '<button class="btn btn-sm btn-primary" type="button" data-coin-scan="' + esc(r.id) + '" data-tip="Opens its on-chain dashboard: the Scanner’s read of the contract, its holders, liquidity and chart">🛡️ On-chain dashboard</button> ' : '') + tokenBtn + '</p>');
+    if (oc.kind === 'native') return box('<p class="mkt-note">' + esc(oc.why || nm + ' is ' + cn + '’s own coin, so it has no token contract to read.') + '</p><p class="mkt-acts"><button class="btn btn-sm btn-primary" type="button" data-coin-chain="' + esc(oc.chain) + '" data-tip="Opens ' + esc(cn) + ' in the main view: its TVL, volume, fees, activity and top tokens">⛓️ ' + esc(cn) + '’s on-chain data ↓</button></p>');
+    if (oc.kind === 'quote') return box('<p class="mkt-note">' + esc(oc.why || 'On ' + cn + ' it is a base trading asset (a stablecoin or a wrapped coin): the Scanner profiles tokens, not these.') + '</p>' + (tokenBtn ? '<p class="mkt-acts">' + tokenBtn + '</p>' : ''));
+    return box('<p class="mkt-note">' + esc(oc.why || 'No token contract on Robinhood Chain, Ethereum or Solana — the chains this site reads — and not the coin of a chain it reads.') + '</p>');
   }
   /* the card comes into view whole — between the sticky nav and the buttons pinned to the screen's foot (its scroll margins,
      market.css) — when it fits there, else its top just under the nav: under a phone's tall column it can be far below the
@@ -2501,7 +2689,7 @@
     const cell = (label, f, fmt) => { const x = val(f); return '<td data-l="' + label + '">' + (x != null ? esc(fmt(x)) : NA) + '</td>'; };
     mapEl.table.innerHTML = '<table class="mkt-table mkt-map-t"><caption class="sr-only">The coins on the map, largest first</caption><thead><tr><th scope="col">Rank</th><th scope="col">Coin</th><th scope="col">Price</th><th scope="col">Market cap</th><th scope="col">Dominance</th><th scope="col">24 h change</th><th scope="col">Check</th></tr></thead><tbody>' +
       rows.map((r) => '<tr data-coin="' + esc(r.id) + '"' + (r.id === MAP.pick ? ' class="is-on"' : '') + '><td data-l="Rank">' + (Number.isInteger(r.rank) ? '#' + r.rank : NA) + '</td>' +
-        '<th scope="row"><button class="mkt-map-pick" type="button" data-map-coin="' + esc(r.id) + '" data-tip="Opens ' + esc(coinName(r)) + '’s figures in a card under the map">' + esc(r.symbol || '') + ' <small>' + esc(coinName(r)) + (r.stable === true ? ' · stablecoin' : '') + '</small></button></th>' +
+        '<th scope="row"><button class="mkt-map-pick" type="button" data-map-coin="' + esc(r.id) + '" data-tip="Opens ' + esc(coinName(r)) + '’s on-chain data: its token’s dashboard, or its card saying where it lives on-chain">' + esc(r.symbol || '') + ' <small>' + esc(coinName(r)) + (r.stable === true ? ' · stablecoin' : '') + '</small></button></th>' +
         cell('Price', r.price, mapPrice) + cell('Market cap', r.mcap, usd) + cell('Dominance', r.dominance, domText) + cell('24 h change', r.change24h, (x) => pct(x)) + '<td data-l="Check">' + (mapChk(r) || NA) + '</td></tr>').join('') + '</tbody></table>';
   }
   /* ---------- its controls ---------- */
@@ -2511,9 +2699,12 @@
       const t = e.target.closest('[data-map-top]');
       if (t) { const n = Number(t.dataset.mapTop) === 50 ? 50 : 100; if (n !== MAP.top) { MAP.top = n; paintMap(); say('The map shows the ' + n + ' largest coins' + (MAP.stables ? '' : ', stablecoins left out') + '.'); } return; }
       if (e.target.closest('#mkt-map-stables')) { MAP.stables = !MAP.stables; paintMap(); say(MAP.stables ? 'Stablecoins are on the map again.' : 'Stablecoins are left out of the map.'); return; }
-      const p = e.target.closest('[data-map-coin]'); if (p) { openMapCard(p.dataset.mapCoin, true); return; }
+      const p = e.target.closest('[data-map-coin]'); if (p) { openCoin(coinRow(p.dataset.mapCoin)); return; }
       if (e.target.closest('[data-map-close]')) { mapBack(closeMapCard()); return; }
-      const g = e.target.closest('.mkt-bub'); if (g) { mapTip(null); openMapCard(g.dataset.coin, true); }
+      const cs = e.target.closest('[data-coin-scan]'); if (cs) { openCoinScan(coinRow(cs.dataset.coinScan) || {}); return; }
+      const ct = e.target.closest('[data-coin-token]'); if (ct) { const r = coinRow(ct.dataset.coinToken), oc = r && r.onchain; if (oc && readable(oc.chain, oc.address)) open({ chain: oc.chain, token: oc.address }, true); return; }
+      const cc = e.target.closest('[data-coin-chain]'); if (cc) { open({ chain: cc.dataset.coinChain, token: null }, true); return; }
+      const g = e.target.closest('.mkt-bub'); if (g) { mapTip(null); openCoin(coinRow(g.dataset.coin)); }
     });
     mapEl.fig.addEventListener('pointermove', (e) => { if (e.pointerType === 'touch') return; mapTip(e.target.closest('.mkt-bub'), e); });
     mapEl.fig.addEventListener('pointerleave', () => mapTip(null));
@@ -2527,14 +2718,126 @@
     if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => { if (MAP.shown && MAP.ans) drawMap(false); }).catch(() => {});
   }
 
+  /* ════════════════════════════ the movers banner and the market at a glance ════════════════════════════
+     Owner, 2026-11-17: "Have the top 10 market movers within the top 100 top tokens in the bubble maps be a moving banner showing the
+     token the price and percentage move, ranked by the 24hr percentage move. Have it linked to all the on-chain data shown on the market
+     page." /api/market/movers is worked out by the server from the SAME reading as the bubble map (CoinGecko's 100 largest, every 10
+     minutes — no read of its own from any vendor): the ten with the biggest 24 h move either way, ranked by the size of the move, with
+     the market's total, its breadth, its biggest gainers and fallers and the three largest coins' dominance. It is read even while the
+     map is folded away (the map itself is not), and again every five minutes while the page is in view. Each mover opens its on-chain
+     data, as a bubble does. The banner moves only where motion is wanted (market.css): it stops for a pointer or the keyboard, under ⏸
+     and under the reduced-motion setting, where it is a row that scrolls by hand. */
+  const mvEl = { sec: $('mkt-movers'), win: $('mkt-movers-win'), src: $('mkt-movers-src'), grid: $('mkt-glance-grid') };
+  const MV = { ans: null, at: 0, seq: 0, timer: 0, fail: null, calls: null };
+  const MV_EVERY = 5 * 60e3;
+  async function loadMovers() {
+    if (!mvEl.sec) return;
+    const my = ++MV.seq;
+    try {
+      const j = await getJSON('/api/market/movers');
+      if (my !== MV.seq) return;
+      MV.ans = j; MV.at = Date.now(); MV.fail = null;
+    } catch (e) {
+      if (my !== MV.seq) return;
+      MV.fail = { at: Date.now(), text: errText(e, 'the biggest moves') };   // a banner it had stays, saying how old it is
+    }
+    paintMovers(); paintGlance(); planMovers();
+  }
+  function planMovers() {
+    clearTimeout(MV.timer);
+    MV.timer = setTimeout(() => { if (document.visibilityState === 'visible') { memo.delete('/api/market/movers'); loadMovers(); } else planMovers(); }, MV_EVERY);
+  }
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && mvEl.sec && MV.at && Date.now() - MV.at >= MV_EVERY) { memo.delete('/api/market/movers'); loadMovers(); }
+  });
+  const moveCls = (c) => (c == null ? '' : c > 0 ? ' is-up' : c < 0 ? ' is-down' : '');
+  function moverTip(r) {
+    const oc = r.onchain;
+    return scannable(oc) ? 'Opens ' + coinName(r) + '’s on-chain dashboard: the Scanner’s read of its token on ' + chainName(oc.chain)
+      : oc && oc.kind === 'native' ? 'Opens ' + coinName(r) + '’s card: it is ' + chainName(oc.chain) + '’s own coin, with its chain’s on-chain data a press away'
+        : 'Opens ' + coinName(r) + '’s card under the bubble map, with its figures and where it lives on-chain';
+  }
+  function moverHTML(r) {
+    const c = val(r.change24h), p = mapPrice(val(r.price));
+    return '<li><button class="mkt-mover' + moveCls(c) + '" type="button" data-mover="' + esc(r.id) + '" data-tip="' + esc(moverTip(r)) + '">' +
+      (ownLogo(r.logo) ? '<img class="mkt-logo" src="' + esc(r.logo) + '" alt="" loading="lazy" decoding="async" width="24" height="24">' : '') +
+      '<b class="mkt-mover-s">' + esc(r.symbol || coinName(r)) + '</b><span class="mkt-mover-p">' + esc(p || 'price not given') + '</span><span class="mkt-mover-c">' + esc(c == null ? 'no change given' : pct(c)) + '</span></button></li>';
+  }
+  function paintMovers() {
+    if (!mvEl.win) return;
+    const j = MV.ans, rows = j && Array.isArray(j.rows) ? j.rows.filter((r) => r && val(r.change24h) != null) : [];
+    if (!rows.length) {
+      mvEl.win.innerHTML = '<p class="mkt-movers-wait">' + esc(MV.fail ? MV.fail.text : j && j.why ? cap1(j.why).replace(/\.?$/, '.') : 'The biggest moves have not been read yet.') + '</p>';
+      if (mvEl.src) mvEl.src.innerHTML = MV.fail ? retryBtn('movers') : '';
+      return;
+    }
+    const items = rows.map(moverHTML).join('');
+    // the list twice, end to end, so the loop has no gap; the copy is for the eye only (aria-hidden and inert: a reader and the
+    // keyboard meet each mover once). Its speed is set by its length: about 45 px a second, whatever the screen
+    mvEl.win.innerHTML = '<div class="mkt-movers-track"><ol class="mkt-movers-list">' + items + '</ol><ol class="mkt-movers-list mkt-movers-dup" aria-hidden="true" inert>' + items + '</ol></div>';
+    const tr = mvEl.win.querySelector('.mkt-movers-track'), first = tr && tr.firstElementChild;
+    if (tr && first) tr.style.setProperty('--mv-dur', Math.max(20, Math.round(first.scrollWidth / 45)) + 's');
+    wireLogos(mvEl.win);
+    const at = val(j.reads && j.reads.coins && j.reads.coins.at) || j.at;
+    if (mvEl.src) mvEl.src.innerHTML = 'Ranked by the size of the 24 h move, either way, among CoinGecko’s 100 largest coins' + (at ? ' · read ' + agoEl(at) : '') +
+      (MV.fail ? ' · <span class="mkt-err-t">the newest read failed (' + esc(MV.fail.text) + '), so these are from ' + agoEl(MV.at) + '</span>' : '') + ' · not advice, never a tip to buy';
+  }
+  if (mvEl.sec) mvEl.sec.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mover]'); if (b) { openCoin(coinRow(b.dataset.mover)); return; }
+    if (e.target.closest('[data-retry="movers"]')) { memo.delete('/api/market/movers'); loadMovers(); }
+  });
+
+  /* ---------- the market at a glance: one tile per headline figure, each a way into the part of the page with more ---------- */
+  function glTile(kind, arg, k, v, sub, tip, cls) {
+    return '<button class="mkt-gl' + (cls || '') + '" type="button" data-glance="' + kind + '"' + (arg ? ' data-arg="' + esc(arg) + '"' : '') + ' data-tip="' + esc(tip) + '">' +
+      '<span class="mkt-gl-k">' + esc(k) + '</span><span class="mkt-gl-v">' + v + '</span><span class="mkt-gl-s">' + sub + '</span></button>';
+  }
+  function paintGlance() {
+    const g = mvEl.grid; if (!g) return;
+    const j = MV.ans || {}, nr = '<span class="mkt-na">Not read yet</span>';
+    const total = fig(j.total), counts = j.counts || null, up = (j.gainers || [])[0], dn = (j.losers || [])[0], dom = (j.dominance || [])[0];
+    const rh = chainRow('robinhood'), mine = window.AUTH && AUTH.user, wl = window.Watchlist && Watchlist.isLoaded && Watchlist.isLoaded() ? Watchlist.ids.size : null;
+    const ct = MV.calls && Array.isArray(MV.calls.rows) ? MV.calls.rows[0] : null;
+    const coinTile = (r, k, tip) => (r && val(r.change24h) != null
+      ? glTile('coin', r.id, k, esc(r.symbol || coinName(r)) + ' <span class="mkt-gl-c' + moveCls(val(r.change24h)) + '">' + esc(pct(val(r.change24h))) + '</span>', esc(mapPrice(val(r.price)) || 'price not given') + ' · ' + esc(coinName(r)), tip.replace('{n}', coinName(r)))
+      : glTile('map', '', k, nr, 'from the bubble map’s reading', 'Opens the bubble map of the 100 largest coins'));
+    g.innerHTML = [
+      glTile('map', '', '🌐 Crypto market cap', total.v != null ? esc(usd(total.v)) : nr, total.v != null ? srcLine(total) : esc(j.why || 'CoinGecko’s total, read every 30 minutes'), 'Opens the bubble map of the 100 largest coins, sized by market cap'),
+      glTile('map', '', '📊 Top 100, last 24 h', counts ? '<span class="mkt-gl-c is-down">▼ ' + (counts.down | 0) + '</span> <span class="mkt-gl-c is-up">▲ ' + (counts.up | 0) + '</span>' : nr,
+        counts ? 'down · up' + (counts.flat ? ' · ' + counts.flat + ' unchanged' : '') + (counts.none ? ' · ' + counts.none + ' with no change given' : '') : 'how many of the 100 largest moved each way', 'Opens the bubble map, coloured by each coin’s 24 h move'),
+      coinTile(up, '🚀 Biggest gainer, 24 h', 'Opens {n}’s on-chain data'),
+      coinTile(dn, '🩸 Biggest faller, 24 h', 'Opens {n}’s on-chain data'),
+      dom && val(dom.v != null ? dom.v : dom.dominance) != null
+        ? glTile('coin', dom.id, '👑 ' + (dom.symbol || 'Largest coin') + ' dominance', esc(domText(val(dom.v != null ? dom.v : dom.dominance))), 'its share of the whole market (CoinGecko)', 'Opens ' + (dom.name || dom.symbol || 'the largest coin') + '’s card and its on-chain data')
+        : glTile('map', '', '👑 Dominance', nr, 'the largest coin’s share of the market', 'Opens the bubble map, where the three largest show their dominance'),
+      glTile('chain', 'robinhood', '⛓️ Robinhood Chain', rh && val(rh.tvl) != null ? esc(usd(val(rh.tvl))) + ' <small>TVL</small>' : nr,
+        rh ? (val(rh.volume) != null ? 'DEX volume ' + esc(usd(val(rh.volume))) + ' · ' : '') + srcLine(fig(rh.tvl)) : 'its TVL and DEX volume (DefiLlama)', 'Opens Robinhood Chain in the main view: its TVL, volume, fees, activity, top tokens and new pools'),
+      glTile('tab', 'watch', '⭐ Your watchlist', mine ? (wl != null ? wl + ' token' + (wl === 1 ? '' : 's') : '<span class="mkt-na">Reading…</span>') : 'Sign in', mine ? 'saved with ☆ on Robinhood Chain · private to you' : 'to keep the tokens you save', 'Opens the Watchlist tab: the tokens you saved, with their price and 24 h move'),
+      glTile('tab', 'calls', '📣 Most called today', ct ? esc(ct.symbol ? '$' + ct.symbol : ct.name || short(ct.token)) : MV.calls ? '<span class="mkt-na">None yet</span>' : nr,
+        ct ? (Number(ct.callers) || 0) + ' member' + ((Number(ct.callers) || 0) === 1 ? '' : 's') + ' called it · calls are picks, not advice' : 'Send Calls on Robinhood Chain tokens, last 24 h', 'Opens the Calls tab: the tokens members called most, by how many called each'),
+    ].join('');
+    wireLogos(g);
+  }
+  // the most-called token for its tile (the Calls tab reads the same answer, kept a minute)
+  async function loadCallsTop() { try { MV.calls = await getJSON('/api/calls/top-tokens?window=24h'); } catch { MV.calls = null; } paintGlance(); }
+  if (mvEl.grid) mvEl.grid.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-glance]'); if (!b) return;
+    const k = b.dataset.glance, arg = b.dataset.arg || '';
+    if (k === 'coin') { openCoin(coinRow(arg)); return; }
+    if (k === 'chain') { open({ chain: arg, token: null }, true); return; }
+    if (k === 'tab') { if (S.tab !== arg) pickTab(arg, true); else { const t = $('mkt-tab-' + arg); if (t) t.focus(); } const side = $('mkt-side'); if (side) { try { side.scrollIntoView({ block: 'start', behavior: reduced() ? 'auto' : 'smooth' }); } catch { side.scrollIntoView(); } } return; }
+    // the map: opened if it was folded (not remembered), and brought into view
+    if (mapEl.sec) { if (!MAP.shown) setMapOpen(true, false); try { mapEl.sec.scrollIntoView({ block: 'start', behavior: reduced() ? 'auto' : 'smooth' }); } catch { mapEl.sec.scrollIntoView(); } if (mapEl.tog) mapEl.tog.focus({ preventScroll: true }); }
+  });
+
   /* ════════════════════════════ start ════════════════════════════ */
   // Back / Forward to another chain filter shows Top tokens, where that filter is (Top chains and Top tokens are not in the address);
   // the RWA tab is (tab=rwa): an address with it shows that tab with its choices, and leaving it goes where the address points — Top
   // tokens for a token or a chain filter, else Top chains. An open chain list closes first — left open, its tick and the focus would
   // be on a chain that is no longer the one chosen
   window.addEventListener('popstate', () => { closePick(true); readURL(); syncControls(); loadView(false);
-    if (S.urlTab === 'rwa') { if (S.tab !== 'rwa') setTab('rwa', false); else { S.shown = pageSize(); loadList(); } return; }
-    if (S.tab === 'rwa') { setTab(S.view.token || S.tokens.tchain ? 'tokens' : 'chains', false); return; }
+    if (S.urlTab) { if (S.tab !== S.urlTab) setTab(S.urlTab, false); else { S.shown = pageSize(); loadList(); } return; }
+    if (URL_TABS.includes(S.tab)) { setTab(S.view.token || S.tokens.tchain ? 'tokens' : 'chains', false); return; }
     if (S.tchainMoved && S.tab !== 'tokens') setTab('tokens', false); else loadList(); });
   readURL();
   S.shown = pageSize();
@@ -2542,7 +2845,7 @@
   // a link that opened the page on the RWA tab opens it, with its choices; one on a token, or on a chain filter, opens Top tokens —
   // the logos come with the chains list, which that tab does not read, so it is asked for them quietly (the same read the first
   // view makes, kept a minute)
-  if (S.urlTab === 'rwa') setTab('rwa', false);
+  if (S.urlTab) setTab(S.urlTab, false);
   else if (S.view.token || S.tokens.tchain) {
     setTab('tokens', false);
     getJSON('/api/market/chains').then((j) => { if (learnChains(j && j.rows, (r) => r.key)) paintFilter(); }).catch(() => {});
@@ -2550,4 +2853,7 @@
   loadView(false);
   // the bubble map: open unless this browser folded it away (then it is read only when it is opened)
   if (mapEl.sec) setMapOpen(mapPref.get() !== 'hidden', false);
+  // the movers banner and the tiles: always (the movers answer is small and is the server's own work, no vendor asked for it)
+  paintGlance(); loadMovers(); loadCallsTop();
+  if (S.tab !== 'chains') getJSON('/api/market/chains').then((j) => { if (!S.chainRows && j && Array.isArray(j.rows)) { S.chainRows = j.rows; j.rows.forEach((r) => { if (r && r.key && r.name) names.set(r.key, r.name); }); } paintGlance(); }).catch(() => {});
 })();
