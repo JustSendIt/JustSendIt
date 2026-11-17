@@ -6,9 +6,13 @@
  * because a memo served as application/octet-stream is silent forever behind nosniff, and nothing in
  * the source would tell you that.
  */
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
+import { spawn } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
+import net from 'node:net';
+import os from 'node:os';
 import path from 'node:path';
 import { ROOT, DB_PATH } from './_paths.mjs';
 
@@ -52,6 +56,48 @@ const webmAudio = () => {
   return Buffer.concat([head, Buffer.alloc(2048 - head.length)]);
 };
 const mp4Audio = () => { const b = Buffer.alloc(2048); b.write('ftyp', 4, 'latin1'); return b; };
+
+/* A server of this suite's own, for a setting the shared one cannot have (section 5): a port the OS hands out (never the live
+   8642), a fresh data directory with its own key, every outside address dead, and a guard that refuses any fetch that would
+   leave this machine. One member with a session is made in its database. */
+let own = null, ownDir = null, ownLog = '';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+async function bootOwn(extraEnv) {
+  const port = await (async () => { for (;;) { const p = await new Promise((ok) => { const s = net.createServer(); s.listen(0, '127.0.0.1', () => { const q = s.address().port; s.close(() => ok(q)); }); }); if (p !== 8642) return p; } })();
+  const base = 'http://localhost:' + port;
+  ownDir = mkdtempSync(path.join(os.tmpdir(), 'jsi-vmoff-'));
+  mkdirSync(path.join(ownDir, 'uploads'), { recursive: true });
+  writeFileSync(path.join(ownDir, '.data_key'), randomBytes(32).toString('hex') + '\n', { mode: 0o600 });
+  const guard = path.join(ownDir, 'guard.mjs');
+  writeFileSync(guard, `const real = globalThis.fetch;
+globalThis.fetch = async function (input, init) {
+  let u = null; try { u = new URL(typeof input === 'string' ? input : (input && input.url) || String(input)); } catch {}
+  if (u && (u.hostname === '127.0.0.1' || u.hostname === 'localhost' || u.hostname === '[::1]')) return real.call(this, input, init);
+  throw new TypeError('fetch failed');
+};
+`);
+  const DEAD = 'http://127.0.0.1:9/';
+  const env = { ...process.env, PORT: String(port), JSI_DATA_DIR: ownDir, DATA_DIR: ownDir, BASE_URL: base, NODE_ENV: 'test', SEED_INVITE_CODE: '12345', TOS_GATE: '0',
+    TRUST_PROXY: '1', TRUST_PROXY_FROM: 'loopback', SEED_CODES_OPEN: '1', DATA_KEY: '', DATA_KEY_FILE: '', BACKUP_DIR: path.join(ownDir, 'backups'), KEY_ROTATE_EXTRA_DBS: '',
+    RPC_URL: DEAD, CHART_SRC_DS_URL: DEAD, CHART_SRC_GT_URL: DEAD, TOKSEARCH_GT_URL: DEAD, TOKSEARCH_DS_URL: DEAD, MC_DEXSCREENER_URL: DEAD, MC_GECKO_URL: DEAD, MC_GOPLUS_URL: DEAD,
+    ETH_RPC_URL: DEAD, SOL_RPC_URL: DEAD, JUPITER_URL: DEAD, MARKET_COLLECT: '0', BLOCKSCOUT_URL: '', OUTBOUND_MAX_WAIT_MS: '2000', ANTHROPIC_API_KEY: '', ...extraEnv };
+  own = spawn(process.execPath, ['--disable-warning=ExperimentalWarning', '--import', pathToFileURL(guard).href, 'server.js'], { cwd: ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] });
+  own.stdout.on('data', (d) => { ownLog += d; }); own.stderr.on('data', (d) => { ownLog += d; });
+  let up = false;
+  for (let i = 0; i < 200 && !up; i++) { if (own.exitCode != null) return null; try { up = (await fetch(base + '/healthz')).ok; } catch {} if (!up) await sleep(150); }
+  if (!up) return null;
+  const odb = new DatabaseSync(path.join(ownDir, 'app.db')); odb.exec('PRAGMA busy_timeout = 5000');
+  odb.prepare('INSERT INTO users (username, created_at, avatar, holder_verified_at, holder_state) VALUES (?,?,?,?,?)').run('__vm_off__', Date.now(), '🎵', Date.now(), 'ok');
+  const id = odb.prepare('SELECT id FROM users WHERE username = ?').get('__vm_off__').id;
+  const sid = 'tok_vmoff_' + randomBytes(8).toString('hex');
+  odb.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed) VALUES (?,?,?,?,1)').run(createHash('sha256').update(sid).digest('hex'), id, Date.now(), Date.now() + 864e5);
+  odb.close();
+  return { base, sid };
+}
+async function haltOwn() {
+  if (own) { const s = own; own = null; const done = new Promise((r) => s.once('exit', r)); try { s.kill('SIGTERM'); } catch {} await Promise.race([done, sleep(4000)]); }
+  if (ownDir) { try { rmSync(ownDir, { recursive: true, force: true }); } catch {} ownDir = null; }
+}
 
 try {
   /* ═══════════ 1. the recorder ═══════════ */
@@ -146,10 +192,38 @@ try {
     check('bytes that are not the container they claim are refused', lying.status !== 200, lying.status);
 
     /* The unsupported-type message no longer advertises voice memos: the feature ships hidden (VOICE_MEMOS),
-       and the route refuses audio with its own sentence rather than listing something it will not accept. */
-    check('an unsupported type is named without advertising a hidden feature', /MP4 or WebM'/.test(SRC) && !/MP4, WebM or a voice memo/.test(SRC));
+       and the route refuses audio with its own sentence rather than listing something it will not accept. It does name the
+       wall song (MP3 or WAV), which is taken whatever VOICE_MEMOS says. */
+    const UNSUPPORTED = 'unsupported media type — use JPG, PNG, WebP, GIF, MP4 or WebM (a wall song: MP3 or WAV)';
+    check('an unsupported type is named without advertising a hidden feature: it lists what is taken, a wall song (MP3 or WAV) included',
+      SRC.includes("if (!spec) return bad(res, '" + UNSUPPORTED + "', 415);") && !/MP4, WebM or a voice memo/.test(SRC) && !/unsupported media type[^'\n]*voice memo/.test(SRC));
+    const pdf = await post('application/pdf', Buffer.from('%PDF-1.4\n' + 'x'.repeat(200)));
+    check('  ...and that is what the route answers, over HTTP, with a 415', pdf.status === 415 && pdf.j.error === UNSUPPORTED, pdf.status + ' ' + pdf.j.error);
     check('and audio is refused by name when the feature is off', /voice memos are switched off/.test(SRC) && /spec\.kind === 'audio' && !VOICE_MEMOS/.test(SRC));
     check('the cap is a backstop, not the thing that governs length', /'audio\/webm': \{ ext: 'weba', kind: 'audio', cap: 8 \* 1024 \* 1024/.test(SRC));
+  }
+
+  /* ═══════════ 5. VOICE_MEMOS unset, as on the live site: a memo is refused, a wall song is not ═══════════
+     run.mjs turns voice memos on for the shared server (the round trip above needs them), so this boots a throwaway server
+     of its own with the switch unset — its own port and data directory, nothing off this machine — and asks it over HTTP. */
+  {
+    const off = await bootOwn({ VOICE_MEMOS: '' });
+    if (!off) check('a server of its own (VOICE_MEMOS unset) comes up', false, ownLog.slice(-400));
+    else {
+      const cfg = await fetch(off.base + '/api/config').then((r) => r.json()).catch(() => ({}));
+      check('a server with VOICE_MEMOS unset says voice memos are off', cfg.features && cfg.features.voiceMemos === false, JSON.stringify(cfg.features));
+      const up = async (mime, body) => {
+        const r = await fetch(off.base + '/api/upload', { method: 'POST', headers: { 'Content-Type': mime, Origin: off.base, Cookie: 'sid=' + off.sid }, body });
+        let j = {}; try { j = await r.json(); } catch {}
+        return { status: r.status, j };
+      };
+      const memo = await up('audio/webm', webmAudio()), memo4 = await up('audio/mp4', mp4Audio());
+      check('  ...a WebM voice memo is refused with a 415, by name', memo.status === 415 && /voice memos are switched off/.test(memo.j.error || ''), memo.status + ' ' + memo.j.error);
+      check('  ...and so is an MP4 one (what iOS records)', memo4.status === 415 && /voice memos are switched off/.test(memo4.j.error || ''), memo4.status + ' ' + memo4.j.error);
+      const f = Buffer.alloc(417, 0); f[0] = 0xff; f[1] = 0xfb; f[2] = 0x90;   // one MPEG-1 Layer III frame (128 kbps, 44.1 kHz)
+      const song = await up('audio/mpeg', Buffer.concat([f, f, f]));
+      check('  ...while an MP3 wall song is taken: a wall song is not a voice memo', song.status === 200 && song.j.kind === 'song' && /\.mp3$/.test(song.j.url || ''), song.status + ' ' + (song.j.error || song.j.url));
+    }
   }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join('\n'));
@@ -157,6 +231,7 @@ try {
   // throwaway rows never outlive the run
   for (const id of made) { try { db.prepare('DELETE FROM sessions WHERE user_id=?').run(id); db.prepare('DELETE FROM users WHERE id=?').run(id); } catch {} }
   try { db.close(); } catch {}
+  await haltOwn();   // the server of its own (by its own process), and its whole data directory
 }
 
 let pass = 0;

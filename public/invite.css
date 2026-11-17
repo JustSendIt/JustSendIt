@@ -130,8 +130,13 @@
 #inv-join-panel { width: min(100%, 28rem); text-align: left; }
 #inv-join-panel .addr-input { text-align: left; }
 #inv-join-extra { margin-top: 0.35rem; }
-#inv-join-extra summary { cursor: pointer; color: var(--g-text, #f2f6ec); font-weight: 700; }
+/* a control, so a finger-sized one (it was 24px tall on a phone): padding and a floor rather than display:flex, which
+   would take away the disclosure triangle */
+#inv-join-extra summary { cursor: pointer; color: var(--g-text, #f2f6ec); font-weight: 700; min-height: 44px; box-sizing: border-box; padding-block: 0.55rem; }
 #inv-join-extra summary:focus-visible { outline: 2px solid var(--g-green, var(--green)); outline-offset: 2px; }
+/* the two-factor box (the label is the target) is 44px tall as well; the terms line under it is the sign-in panel's own */
+#inv-join-panel .w-opt { min-height: 44px; margin: 0.35rem 0 0; color: var(--g-text, #f2f6ec); }
+#inv-join-panel .w-opt input:focus-visible { outline: 2px solid var(--g-green, var(--green)); outline-offset: 2px; }
 
 /* ═══ the same codes, on the dashboard ═══════════════════════════════════════════════════════
    Uses the site's own surface tokens rather than the gate palette: this one lives on a page the

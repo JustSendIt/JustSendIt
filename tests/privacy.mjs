@@ -74,6 +74,12 @@ try {
     db.prepare(`UPDATE users SET twofa_method='totp', twofa_secret=?, twofa_enabled_at=?, twitter_handle='leaver_x', ig_handle='leaver_ig',
       avatar_img=?, header_img=?, bg_img=?, signup_ip=?, last_ip=?, age_at=?, accent='#123456', wall_bg='x' WHERE id=?`)
       .run(secret, Date.now(), files[0], files[1], files[2], hex(32), hex(32), Date.now(), u.id);
+    /* their wall song: a file on disk named only in users.wall_audio (no uploads row, so it is the column the deletion has to
+       read for it — the uploads-row path is the 'upload' file above), three MPEG-1 Layer III frames */
+    const frame = Buffer.alloc(417, 0); frame[0] = 0xff; frame[1] = 0xfb; frame[2] = 0x90;
+    const song = hex(12) + '.mp3';
+    writeFileSync(path.join(UPLOADS, song), Buffer.concat([frame, frame, frame])); made.files.push(song);
+    db.prepare('UPDATE users SET wall_audio = ? WHERE id = ?').run(song, u.id);
     db.prepare("INSERT INTO identities (user_id, type, identifier, identifier_enc, linked_at) VALUES (?,?,?,?,?)").run(u.id, 'wallet', hex(32), wallet, Date.now());
     db.prepare('INSERT INTO uploads (name, user_id, bytes, kind, created_at, claimed) VALUES (?,?,?,?,?,1)').run(files[3], u.id, 100, 'image', Date.now());
     db.prepare('INSERT INTO notifications (user_id, kind, icon, text, created_at) VALUES (?,?,?,?,?)').run(u.id, 'alert', '🔗', 'hello', Date.now());
@@ -93,6 +99,8 @@ try {
     insCode.run(cRedeemed, u.id, Date.now(), Date.now(), null, createHash('sha256').update(passTok).digest('hex'), Date.now());
     insCode.run(cUsed, u.id, Date.now(), Date.now(), joiner.id, null, Date.now());
     insCode.run(cOthers, other.id, Date.now(), null, null, null, null);
+    // a report they filed about someone else's wall: it goes with them (reports are keyed by reporter_id, not user_id)
+    db.prepare('INSERT INTO reports (reporter_id, kind, target_id, reason, created_at) VALUES (?,?,?,?,?)').run(u.id, 'user', other.id, 'pv report ' + hex(3), Date.now());
 
     const del = await api('/api/account/delete', { method: 'POST', sid: u.sid, body: { confirm: 'DELETE', current: { code: totp(secret) } } });
     check('an account with an authenticator can delete itself (the factor arrives nested, as the page sends it)', del.status === 200 && del.j && del.j.ok, del.status + ' ' + (del.j && del.j.error));
@@ -102,10 +110,12 @@ try {
       row && row.twitter_handle == null && row.ig_handle == null && row.avatar_img == null && row.header_img == null && row.bg_img == null &&
       row.signup_ip == null && row.last_ip == null && row.age_at == null && row.twofa_secret == null && row.accent === '' && row.wall_bg === '',
       JSON.stringify(row && { t: row.twitter_handle, s: row.signup_ip, a: row.age_at }));
+    check('  ...the reports they filed are gone', db.prepare('SELECT COUNT(*) n FROM reports WHERE reporter_id=?').get(u.id).n === 0);
     for (const t of ['identities', 'sessions', 'notifications', 'uploads']) {
       check('  ...' + t + ' are gone', db.prepare(`SELECT COUNT(*) n FROM ${t} WHERE user_id=?`).get(u.id).n === 0);
     }
     check('  ...the files behind the profile pictures are removed from disk', files.every((f) => !existsSync(path.join(UPLOADS, f))), files.filter((f) => existsSync(path.join(UPLOADS, f))).join(','));
+    check('  ...and the wall song: its file is gone from disk and the row no longer names it', !existsSync(path.join(UPLOADS, song)) && row && row.wall_audio == null, JSON.stringify({ onDisk: existsSync(path.join(UPLOADS, song)), wall_audio: row && row.wall_audio }));
     check('  ...a draft proposal is gone, an opened one keeps its tally but not its words or network',
       db.prepare("SELECT COUNT(*) n FROM proposals WHERE author_id=? AND status='draft'").get(u.id).n === 0 &&
       db.prepare("SELECT COUNT(*) n FROM proposals WHERE author_id=? AND status='open' AND title='[deleted]' AND body='' AND author_ip IS NULL").get(u.id).n === 1);
@@ -122,7 +132,7 @@ try {
     check('  ...accounts deleted before this rule get the same at boot', /DELETE FROM invite_codes WHERE user_id IS NULL AND (?:admin = 0 AND )?owner_id IN \(SELECT id FROM users WHERE deleted_at IS NOT NULL\)/.test(SRC)
       && /DELETE FROM invite_codes WHERE owner_id = \? AND user_id IS NULL/.test(SRC));
     const pub = await api('/api/users/deleted-' + u.id);
-    check('  ...and the public profile carries nothing that identifies them', pub.status !== 200 || (!/leaver_x|leaver_ig/.test(pub.text) && !files.some((f) => pub.text.includes(f))), pub.status);
+    check('  ...and the public profile carries nothing that identifies them (no picture, no song)', pub.status !== 200 || (!/leaver_x|leaver_ig/.test(pub.text) && ![...files, song].some((f) => pub.text.includes(f))), pub.status);
   }
 
   /* ═══ 2. no endpoint hands one person's private data to anybody else ═══ */
@@ -175,7 +185,7 @@ try {
     // the one script from another company is Cloudflare's Web Analytics beacon (the two hosts Cloudflare's own CSP guidance names), and the privacy page says so
     check('  ...the only script host beside this site is Cloudflare\'s analytics beacon, its report endpoint the only other connect host, and no inline script', /script-src 'self' https:\/\/static\.cloudflareinsights\.com(;|$)/.test(csp) && /connect-src 'self' https:\/\/rpc\.mainnet\.chain\.robinhood\.com https:\/\/cloudflareinsights\.com(;|$)/.test(csp) && !/unsafe-inline'[^;]*;?[^;]*script|script-src[^;]*(nonce|unsafe-inline)/.test(csp), csp);
     const privHtml = readFileSync(path.join(PUB, 'privacy.html'), 'utf8');
-    check('  ...and the privacy page tells visitors about the beacon in Cloudflare\'s own words, and no longer claims there are no analytics scripts', /Cloudflare Web Analytics/.test(privHtml) && /does not use any client-side state, such as cookies or localStorage/.test(privHtml) && /Version 2026-11-03/.test(privHtml) && !/no analytics scripts/.test(privHtml));
+    check('  ...and the privacy page tells visitors about the beacon in Cloudflare\'s own words, and no longer claims there are no analytics scripts', /Cloudflare Web Analytics/.test(privHtml) && /does not use any client-side state, such as cookies or localStorage/.test(privHtml) && /Version 2026-11-17/.test(privHtml) && !/no analytics scripts/.test(privHtml));
     const pages = readdirSync(PUB).filter((f) => f.endsWith('.html'));
     const google = pages.filter((f) => /fonts\.(googleapis|gstatic)\.com/.test(readFileSync(path.join(PUB, f), 'utf8').replace(/<p>[\s\S]*?<\/p>/g, '')));
     check('no page loads Google Fonts', google.length === 0, google.join(','));
