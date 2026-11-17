@@ -1,112 +1,9 @@
-/* ===== Homepage: market cap, swap, MoonPay, celebrations ===== */
+/* ===== Homepage: the $SEND market cap, the swap, MoonPay, celebrations ===== */
 initTokenCards();
-
-/* ---------- OG banner: live countdown to the tier windows ----------
-   The deadlines come from /api/og/campaign, not from this file and not from the HTML. They used to be
-   hardcoded epochs in index.html sitting beside the same constants on the server; with three windows
-   per coin that is six numbers to hand-maintain, and a countdown that is confidently wrong is worse
-   than no countdown. Each element names the window it wants (data-og-window) and the server answers
-   with the binding date — the EARLIER of the two coins', since a tier requires holding both. */
-(function ogBannerTimers() {
-  const els = document.querySelectorAll('[data-og-deadline]');
-  if (!els.length) return;
-  const banner = document.querySelector('.og-banner');
-  const labels = document.querySelectorAll('.og-tier-label');   // the strip shows the countdown closed and open: two labels, one window
-  let loaded = false;   // three states, not two: open, closed, and "we don't know yet"
-  fetch('/api/og/campaign', { credentials: 'same-origin' })
-    .then(r => (r.ok ? r.json() : null))
-    .then(c => {
-      if (!c || !c.closes) return;                   // leave the em-dash rather than invent a date
-      // "current" resolves to whichever window is actually open. Hardcoding it to gold while the
-      // LABEL followed c.tierNow meant that from day 31 the banner read "silver closes in closed" —
-      // the label and the number describing two different windows for 330 of the campaign's 360 days.
-      const openKey = (c.name && c.name[c.tierNow] || '').toLowerCase();
-      els.forEach(el => {
-        const w = el.dataset.ogWindow === 'current' ? openKey : el.dataset.ogWindow;
-        if (w && c.closes[w]) el.dataset.ogDeadline = String(c.closes[w]);
-      });
-      if (openKey) labels.forEach((l) => { l.textContent = openKey; });
-      loaded = true;
-      tick();
-    })
-    .catch(() => {});
-  function fmt(ms) {
-    if (ms <= 0) return 'closed';
-    const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
-    if (d > 0) return d + 'd ' + h + 'h ' + m + 'm';
-    if (h > 0) return h + 'h ' + m + 'm ' + sec + 's';
-    return m + 'm ' + sec + 's';
-  }
-  function tick() {
-    const now = Date.now();
-    let allClosed = true;
-    els.forEach(el => {
-      const at = Number(el.dataset.ogDeadline);
-      if (!at) { el.textContent = '—'; return; }     // not filled in yet (or the request failed)
-      const left = at - now;
-      el.textContent = fmt(left);
-      el.classList.toggle('og-timer-closed', left <= 0);
-      // The urgency pulse marks the last three days of the window that is OPEN NOW — the deadline for the
-      // tier being earned today, which is a fact the reader needs — and never the "everything closes" timer,
-      // so at most one element pulses, and only three times across the whole year, each at a real cut-off.
-      if (el.parentElement) el.parentElement.classList.toggle('og-timer-soon', el.dataset.ogWindow === 'current' && left > 0 && left < 3 * 86400 * 1000);
-      if (left > 0) allClosed = false;
-    });
-    // Only claim the campaign is over once we actually know. Before the fetch resolves (and forever
-    // if it fails) every deadline is empty, which made allClosed true and greyed the banner out —
-    // presenting a live campaign as expired on every page load and on every flaky connection.
-    if (banner && loaded) banner.classList.toggle('og-banner-closed', allClosed);
-    // the dashboard's OG tile follows the strip: once every window has closed its chip says so and its label stops counting
-    const tile = document.getElementById('dash-og');
-    if (tile && loaded) {
-      tile.classList.toggle('is-over', allClosed);
-      const chip = tile.querySelector('.dash-live > span'); if (chip) chip.textContent = allClosed ? 'closed' : 'live';
-      const k = tile.querySelector('.dash-k'); if (k && allClosed) k.textContent = 'every window has closed';
-    }
-  }
-  tick();
-  setInterval(() => { if (!document.hidden) tick(); }, 1000); // a countdown nobody can see doesn't need repainting
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) tick(); });
-
-  /* ---------- the CTA: the one action the site can honestly offer, by who is looking ----------
-     Signed out → read the rules. Signed in → get your linked wallet checked (the badge is earned by holding,
-     and checking is the only step this site performs). Already OG → your badge. Never "buy": the banner says
-     itself that it is not a reason to buy, and a CTA must not contradict the sentence beside it. */
-  const cta = document.getElementById('og-banner-cta');
-  const TIER = { 4: ['Diamond', 20], 3: ['Gold', 10], 2: ['Silver', 5], 1: ['Bronze', 3] };
-  function paintCta() {
-    if (!banner || !cta) return;
-    const u = (window.AUTH && AUTH.user) ? AUTH.user : null;
-    const base = banner.dataset.ariaBase || '';
-    let text, href, tail;
-    const tier = u ? (Number(u.og) || 0) : 0;   // /api/me reports `og` as the tier (4 diamond · 3 gold · 2 silver · 1 bronze · 0 none)
-    if (u && TIER[tier]) { text = 'You are OG ' + TIER[tier][0] + ' · ' + TIER[tier][1] + '×'; href = '/profile'; tail = 'You hold OG ' + TIER[tier][0] + '. Tap to open your profile.'; }
-    else if (u) { text = 'Check my wallet for OG'; href = '/profile#connected-wallet'; tail = 'Tap to link a wallet and have it checked on-chain. Not a recommendation to buy.'; }
-    else { text = 'How OG works'; href = '/about#og-rules'; tail = 'Tap to read how it works. Not a recommendation to buy.'; }
-    cta.innerHTML = text + ' <span class="og-cta-arrow">→</span>';
-    cta.setAttribute('href', href);
-    cta.setAttribute('aria-label', text + '. ' + tail);
-    if (base) banner.setAttribute('aria-label', base);
-    // the dashboard's OG tile offers the same one action as the strip, so a signed-in reader never sees two different calls
-    const tgo = document.querySelector('#dash-og .dash-go');
-    if (tgo) { tgo.textContent = text + '\u00a0→'; tgo.setAttribute('href', href); tgo.setAttribute('data-tip', tail); }   // the arrow never orphans onto a line of its own
-  }
-  /* the strip: tap the head to pop the rest down; remembered for the visit so a return to the page finds it as left */
-  const head = document.getElementById('og-banner-head'), more = document.getElementById('og-banner-more');
-  if (head && more && banner) {
-    const setOpen = (on) => { more.hidden = !on; head.setAttribute('aria-expanded', String(on)); banner.classList.toggle('og-open', on); try { sessionStorage.setItem('og-open', on ? '1' : ''); } catch {} };
-    let was = false; try { was = sessionStorage.getItem('og-open') === '1'; } catch {}
-    if (was) setOpen(true);
-    head.addEventListener('click', () => setOpen(more.hidden));
-  }
-  paintCta();
-  if (window.AUTH && AUTH.ready && AUTH.ready.then) AUTH.ready.then(paintCta, paintCta);
-  document.addEventListener('auth:change', paintCta);
-})();
 
 const _reduced = () => (window.prefersReduced ? window.prefersReduced() : false);
 
-/* ---------- live market cap with count-up (per token: $SEND + $GWC) ---------- */
+/* ---------- live market cap with count-up ($SEND) ---------- */
 const mcapState = {}; // key -> last animated value
 function setMcap(key, target, opts = {}) {
   const el = document.getElementById('mcap-value-' + key);
@@ -134,7 +31,7 @@ async function refreshMcap(opts) {
     const pairs = await fetchPairs();
     let a11yText = '';
     let ethFresh = false;   // whether THIS pass read an ETH price — the swap tile says "right now" only then
-    for (const key of ['SEND', 'GWC']) {
+    for (const key of ['SEND']) {
       const p = pairs[key];
       // Dexscreener: marketCap = circulating market cap, fdv = fully-diluted. Show the real market cap; only
       // fall back to FDV when it's missing — and relabel the panel so we never call FDV a "market cap".
@@ -178,7 +75,7 @@ async function refreshMcap(opts) {
     }
   } catch {
     // nothing could be read at all: say so on both panels rather than "loading" for the whole outage
-    for (const key of ['SEND', 'GWC']) { const sub = document.getElementById('mcap-sub-' + key); if (sub && /^loading/.test(sub.textContent)) sub.textContent = 'not read yet — trying again every 30 seconds'; }
+    for (const key of ['SEND']) { const sub = document.getElementById('mcap-sub-' + key); if (sub && /^loading/.test(sub.textContent)) sub.textContent = 'not read yet — trying again every 30 seconds'; }
     // …and an ETH price shown earlier stops claiming to be current (the next good read says "right now" again)
     const ethEl = document.getElementById('dash-eth'); if (ethEl && !ethEl.hidden) ethEl.textContent = ethEl.textContent.replace(' right now', ' · last reading');
   }
@@ -272,13 +169,14 @@ async function watchSwapTx(hash) {
 }
 
 /* ---------- swap panel ---------- */
-let swapPick = 'SEND';
-const SLIPPAGE = 10; // % — generous guard for thin pools + GWC's transfer tax
+/* One pair since 2026-11-17 (the owner: the landing page is about $SEND): ETH → $SEND. */
+const swapPick = 'SEND';
+const SLIPPAGE = 10; // % — a generous guard for a thin pool and the token's transfer tax
 /* Transfer taxes the router's quote knows nothing about: getAmountsOut prices the pool leg only, then the
    token contract takes its cut on the transfer to the buyer (which is why the swap uses the fee-on-transfer
-   router path). Without this the headline was ~5% high for $GWC and ~1% high for $SEND. The figures are
-   the ones this page already states in the guide's warn-box ($Send 1% per transfer, $GWC 5% each way). */
-const TAX_BPS = { SEND: 100, GWC: 500 };
+   router path). Without this the headline was ~1% high for $SEND. The figure is the one this page states on
+   the $SEND card and in the guide's warn-box (1% on every buy, sell and transfer). */
+const TAX_BPS = { SEND: 100 };
 /* Price impact is what a constant-product pool charges for SIZE, and the slippage guard never covered it —
    the guard trims an already-crushed quote by 10%, so "10% guard" read as a loss cap while a large order
    could fill far under the going rate. The going rate comes from the pool itself: a second quote for a
@@ -286,17 +184,6 @@ const TAX_BPS = { SEND: 100, GWC: 500 };
 const REF_WEI = 10n ** 14n;
 const IMPACT_WARN = 5;   // % — from here the swap button asks before opening the wallet
 let lastImpact = null;   // impact of the amount currently quoted; null while a quote is pending or unavailable
-function pickSwap(key) {
-  swapPick = key;
-  for (const k of ['SEND', 'GWC']) {
-    const el = document.getElementById('choice-' + k);
-    el.classList.toggle('selected', key === k);
-    el.setAttribute('aria-pressed', String(key === k)); // reflect selection to assistive tech, not just visually
-  }
-  if (window.SFX) SFX.play('select');   // one of the two coins picked (by tap or by key) — one sound, not a switch's and the toast's
-  sendToast(key === 'SEND' ? '$SEND selected 🚀' : '$GWC selected 💰');
-  refreshQuote();
-}
 var lastEthUsd = null, lastTokUsd = {}; // filled by refreshMcap (var: assigned asynchronously, read by refreshQuote)
 /* inline swap status line (mirrors the toasts so errors don't vanish in 2.6s — audit #43) */
 window.swapStatus = function (msg, kind) {
@@ -343,11 +230,6 @@ function refreshQuote() {
   }, 350);
 }
 
-for (const key of ['SEND', 'GWC']) {
-  const el = document.getElementById('choice-' + key);
-  el.addEventListener('click', () => pickSwap(key));
-  el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickSwap(key); } });
-}
 document.getElementById('swap-amt').addEventListener('input', refreshQuote);
 document.querySelectorAll('[data-amt]').forEach(b => b.addEventListener('click', () => {
   document.getElementById('swap-amt').value = b.dataset.amt;
@@ -486,7 +368,7 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
     count.textContent = text;
     if (dashCount) dashCount.textContent = text;
     // the tile's label stops saying "resets in" once the moment has passed
-    const k = document.querySelector('#dash-beta .dash-k'); if (k) k.textContent = left <= 0 ? 'Beta ended · Send Power' : 'Beta ends · Send Power resets in';
+    const k = document.querySelector('#dash-beta .dash-k'); if (k) k.textContent = left <= 0 ? 'Beta ended · final board' : 'Send Power resets in';
   }
 
   async function load() {
@@ -573,7 +455,7 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
     shownPath = location.pathname;
     go(m[1], true, true);
   });
-  // the dashboard's jump buttons: a section with no address of its own (the video, the $GWC and OG-site cards) — the same
+  // the dashboard's jump buttons: a section with no address of its own (the video) — the same
   // scroll and focus as a section link, the address left alone
   document.addEventListener('click', (e) => {
     const b = e.target.closest && e.target.closest('button[data-jump]'); if (!b) return;

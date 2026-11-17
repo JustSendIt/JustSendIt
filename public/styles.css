@@ -562,8 +562,9 @@ a { color: var(--gold); }
 
 /* ===== Mission Control: the hero dashboard =====
    One tile per thing on the page (index.html says which, and why). A tile is a column: the head (an icon disc, the name,
-   a LIVE pill where the reading is live), the glance (one line, or a live reading), the More drop-down with the long
-   read folded away, and the foot with the one way in. Twelve tiles in two columns at every width from 560px — six full
+   a LIVE pill where the reading is live), the glance (one line, or a live reading), and the foot with the one way in.
+   landing.css (body.lp) lays the grid out since 2026-11-17 — the $SEND reading across the top, nine tiles under it — and
+   gives it the instrument look; what follows is the base the tiles keep. Twelve tiles in two columns at every width from 560px — six full
    rows, the two coins first — and one column under that: a pair on a phone broke the names mid-word (a 145px tile holds
    77px of name beside its icon) and stood every tile 500px tall.
    Two columns, not three, on a desktop too: the text floor is 19pt from 1280px up, and a third of the 1040px column
@@ -579,9 +580,6 @@ a { color: var(--gold); }
 .dash-title-ico { font-size: max(var(--text-floor), 1.2em); text-shadow: none; }
 .dash-title-sub { font-family: 'Rubik', sans-serif; font-weight: 700; letter-spacing: 0; font-size: max(var(--text-floor), 0.95rem); color: var(--text-dim); text-shadow: none; }
 .dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.85rem; }
-/* while a long read is open, every tile keeps its own height: with the row stretched, the neighbour's button sank to the
-   foot of a tile that was mostly air. Closed, the rows stay even (an engine without :has() keeps them even throughout). */
-.dash-grid:has(.dash-more[open]) { align-items: start; }
 @media (max-width: 559px) { .dash-grid { grid-template-columns: minmax(0, 1fr); } }
 @media (min-width: 1000px) { .dash-grid { gap: 1rem; } }
 /* the New-here read, folded like the tiles' and across the grid's width (the base .reassure is a 620px centred box) */
@@ -602,7 +600,7 @@ a { color: var(--gold); }
 @media (min-width: 560px) and (max-width: 639px) { .dash-tile { padding: 0.8rem 0.75rem 0.75rem; gap: 0.5rem; } }
 .dash-tile:hover { transform: translateY(-3px); border-color: color-mix(in srgb, var(--tile) 70%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--tile) 22%, transparent), 0 16px 40px rgba(0,0,0,0.45); }
 /* the accent each tile wears on its border, its icon disc and its big reading — the site's own few, no new colours */
-.dash-tile.is-gwc, .dash-tile.is-og, .dash-tile.is-communities, .dash-tile.is-origin { --tile: var(--gold); }
+.dash-tile.is-communities { --tile: var(--gold); }
 .dash-tile.is-guide { --tile: var(--rh-green); }
 .dash-tile.is-beta, .dash-tile.is-tracker { --tile: var(--diamond); }
 .dash-tile.is-rocketize, .dash-tile.is-watch { --tile: var(--gold-deep); }
@@ -626,10 +624,6 @@ a { color: var(--gold); }
 /* a tile whose reading is over (the beta settled, every OG window closed): home.js marks it, the chip goes quiet and says so */
 .dash-tile.is-over .dash-live { border-color: var(--text-mute); background: transparent; color: var(--text-dim); }
 .dash-tile.is-over .dash-live i { animation: none; background: var(--text-mute); }
-/* the OG tile's clock takes the strip's two states (home.js sets them on the same elements as the strip's timer):
-   red through the last three days of the open window, dim once it has closed */
-.dash-glance.og-timer-soon .dash-big { color: var(--red); text-shadow: 0 0 22px color-mix(in srgb, var(--red) 45%, transparent); }
-.dash-big.og-timer-closed { color: var(--text-dim); text-shadow: none; }
 .dash-glance { display: flex; flex-direction: column; gap: 0.15rem; min-width: 0; }
 .dash-line { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.92rem); line-height: 1.45; text-wrap: pretty; overflow-wrap: anywhere; }
 .dash-line b { color: var(--text); }
@@ -639,28 +633,9 @@ a { color: var(--gold); }
 .dash-sub a { color: var(--gold); }
 /* the readings keep the names the market-cap panels had (home.js writes to those ids); sized by the tile, not the viewport */
 .dash-tile .mcap-value { font-size: max(var(--text-floor), 2rem); font-size: max(var(--text-floor), clamp(1.1rem, 12cqi, 2.6rem)); line-height: 1.1; }   /* the first is the floor for an engine without cqi */
-/* the drop-down: the long read, folded. The summary is a pill on the site's control ladder (light fill, black type);
-   the chevron is drawn here so the summary's own word stays its label. */
-/* the foot floats at the left of the action block, the summary takes the rest of its line, and the opened read clears both:
-   button and pill on one row, the long read across the tile's full width under them — no script, no second column */
+/* the way in: one button at the foot of the tile */
 .dash-act { display: flow-root; margin-top: auto; }
 .dash-foot { float: left; margin: 0 0.45rem 0.4rem 0; }
-.dash-more { display: block; margin: 0; }
-.dash-more > summary {
-  display: inline-flex; align-items: center; gap: 0.35rem; min-height: 44px; padding: 0.3rem 0.85rem; border-radius: 999px; vertical-align: top;
-  background: var(--ctl-fill-lo); border: 1.5px solid var(--ctl-fill-lo); color: var(--ctl-ink);
-  font-weight: 800; font-size: max(var(--text-floor), 0.85rem); cursor: pointer; list-style: none;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-.dash-more > summary::-webkit-details-marker { display: none; }
-.dash-more > summary::after { content: '▾'; }
-.dash-more[open] > summary::after { content: '▴'; }
-.dash-more > summary:hover { background: var(--ctl-fill-hi); border-color: var(--green); }
-.dash-more > summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-.dash-more-body { clear: both; padding: 0.7rem 0.1rem 0.2rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); line-height: 1.55; overflow-wrap: anywhere; }
-.dash-more-body p { margin: 0 0 0.6rem; }
-.dash-more-body p:last-child { margin-bottom: 0; }
-.dash-more-body b { color: var(--text); }
 /* a narrow tile (the narrowest pairs): a smaller icon disc, and the way-in button across the full width — the foot stops
    floating there, since a floated box shrinks to fit and a 100% width inside it is no width at all. The LIVE pill keeps
    its word: a green ring alone would be a colour-only signal. (A tile cannot query itself, so the padding is a media
@@ -671,7 +646,7 @@ a { color: var(--gold); }
   .dash-go { width: 100%; padding-inline: 0.6rem; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .dash-tile, .dash-ico, .dash-more > summary { transition: none; }
+  .dash-tile, .dash-ico { transition: none; }
   .dash-tile:hover, .dash-tile:hover .dash-ico { transform: none; }
   .dash-live i { animation: none; }
 }
@@ -830,18 +805,6 @@ section { padding: 3.6rem 1.25rem; position: relative; }
   border: 2px solid rgba(0,200,5,0.4); border-radius: 24px; padding: 2rem;
   box-shadow: 0 0 50px rgba(0,200,5,0.12), 0 24px 50px rgba(0,0,0,0.5);
 }
-.swap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin: 1.2rem 0; }
-.swap-choice {
-  border: 2px solid var(--ink-4); border-radius: 16px; padding: 1.1rem; text-align: center;
-  cursor: pointer; transition: all 0.15s ease; background: var(--ctl-fill-lo); color: var(--ctl-ink);
-}
-.swap-choice:hover { transform: translateY(-3px); }
-.swap-choice.selected.send { border-color: var(--green); background: var(--green); color: var(--on-green); box-shadow: 0 0 24px color-mix(in srgb, var(--green) 30%, transparent); }
-.swap-choice.selected.gwc { border-color: var(--gold); background: var(--gold); color: var(--on-gold); box-shadow: 0 0 24px rgba(255,179,64,0.3); }
-.swap-choice .big { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.4rem); }
-.swap-choice.send .big { color: inherit; }
-.swap-choice.gwc .big { color: inherit; }
-.swap-choice .sub { color: inherit; font-size: max(var(--text-floor), 0.82rem); font-weight: 600; margin-top: 0.2rem; }
 .swap-note { color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); line-height: 1.55; margin-top: 1rem; }
 .swap-note a { color: var(--rh-green); }
 
@@ -863,31 +826,6 @@ section { padding: 3.6rem 1.25rem; position: relative; }
 .clip-card:hover { transform: rotate(0deg) scale(1.035); }
 .clip-card video { display: block; width: 100%; height: auto; }
 .clip-ctl { text-align: center; margin-top: 0.9rem; }
-
-/* ===== GWC card ===== */
-.gwc-hero {
-  max-width: 620px; margin: 0 auto; text-align: center; padding: 2.6rem 2rem;
-  border-radius: 26px; background: linear-gradient(180deg, var(--ink-3), var(--ink-2));
-  border: 2px solid rgba(255,179,64,0.4);
-  box-shadow: 0 0 50px rgba(255,179,64,0.12), 0 24px 50px rgba(0,0,0,0.5);
-}
-.gwc-hero .coins { font-size: max(var(--text-floor), 2.4rem); letter-spacing: 0.3rem; }
-.gwc-hero h3 { font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), clamp(1.5rem, 4vw, 2.1rem)); color: var(--gold); margin: 0.7rem 0 0.4rem; text-shadow: 0 2px 0 var(--gold-deep); }
-.gwc-hero p { color: var(--text-dim); margin-bottom: 1.6rem; }
-.gwc-hero p strong { color: var(--green-bright); }
-.community-links { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; margin-top: 0.4rem; }
-/* The $GWC card and the OG $SEND site's card side by side where two fit, stacked on a phone and a tablet. Each card is a
-   column, so the two button rows sit on the same line whatever the copy's length. */
-.origin-pair { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(22rem, 100%), 1fr)); gap: 1.4rem; max-width: 1240px; margin: 0 auto; }
-.origin-pair > .gwc-hero { max-width: none; margin: 0; display: flex; flex-direction: column; align-items: center; min-width: 0; }
-.origin-pair > .gwc-hero > p:not(.og-site-tag) { flex: 1 0 auto; max-width: 34em; }
-.origin-pair > .gwc-hero > .community-links { margin-top: 0; }
-@media (max-width: 1099px) { .origin-pair { max-width: 620px; } }
-/* the OG site in the site's own green: $SEND's colour, where the $GWC card is gold */
-.gwc-hero.og-site { border-color: color-mix(in srgb, var(--green-bright) 45%, transparent); box-shadow: 0 0 50px color-mix(in srgb, var(--green) 14%, transparent), 0 24px 50px rgba(0,0,0,0.5); }
-.gwc-hero.og-site h3 { color: var(--green-bright); text-shadow: 0 2px 0 var(--green-dark); margin-top: 0.5rem; overflow-wrap: anywhere; }
-.gwc-hero.og-site em { color: var(--text); font-style: normal; font-weight: 700; }
-.gwc-hero .og-site-tag { display: inline-block; margin: 0.7rem 0 0; padding: 0.15em 0.8em; border-radius: 999px; font-size: max(var(--text-floor), 0.8rem); font-weight: 800; letter-spacing: 0.06em; text-transform: uppercase; color: var(--on-gold); background: linear-gradient(180deg, var(--gold) 0%, var(--gold-deep) 100%); }
 
 /* ===== Profile ===== */
 .profile-hero { text-align: center; padding: 3rem 1.25rem 1.5rem; }
@@ -1033,8 +971,7 @@ video.media-preview-el { width: auto; }
 @keyframes toast-out { to { opacity: 0; transform: translateY(-10px) scale(0.92); } }
 #fx-canvas { position: fixed; inset: 0; pointer-events: none; z-index: 300; }
 
-/* one wrapper so the whole field is a single aria-hidden and a span added later cannot forget it;
-   .og-confetti below is the same shape for the same reason */
+/* one wrapper so the whole field is a single aria-hidden and a span added later cannot forget it */
 .hero-floats { position: absolute; inset: 0; pointer-events: none; }
 /* the duration belongs in the shorthand. Without it the shorthand resets animation-duration to 0s, so a span
    written without an inline value rendered upright and perfectly still — indistinguishable from a deliberate
@@ -1042,7 +979,7 @@ video.media-preview-el { width: auto; }
 .float-emoji { position: absolute; font-size: max(var(--text-floor), 1.9rem); opacity: 0.5; animation: floaty 6s ease-in-out infinite; pointer-events: none; z-index: 1; }
 /* two planes: the inward rail sits back, so a dozen glyphs read as depth rather than wallpaper. New for this
    class — the original four were all one weight — and opacity rather than size, because opacity is what this
-   repo already varies for depth (.og-confetti span) and it stays on the compositor. */
+   repo already varies for depth and it stays on the compositor. */
 .float-emoji.faint { opacity: 0.3; }
 @keyframes floaty {
   0%, 100% { transform: translateY(0) rotate(-8deg); }
@@ -2010,7 +1947,6 @@ button.nav-live { font-family: inherit; line-height: 1.5; cursor: pointer; }   /
   .nav-live { display: none; }                                 /* "N Sending it" pill can't fit beside bell + account + ≡ at phone widths */
   .nav-xp { white-space: nowrap; }
   .profile-link { padding: 0 0.7rem; }
-  .swap-row { grid-template-columns: 1fr; }
   }
 
 /* ===== Universal wallet connect picker ===== */
@@ -2175,104 +2111,6 @@ a.og-badge:focus-visible { outline: 3px solid var(--green-bright); outline-offse
 .og-block-lost { background: rgba(255,93,93,0.08); border-color: rgba(255,93,93,0.4); }
 .og-block-lost .og-block-badge { background: none; box-shadow: none; font-size: max(var(--text-floor), 1.4rem); padding: 0; }
 .og-block-lost .og-block-body b { color: var(--red); }
-
-/* ===== OG claim banner (top of the landing page) — high-energy, make people WANT it ===== */
-.og-banner {
-  position: relative; overflow: hidden;
-  display: block;   /* a strip: the head is always shown, the rest pops down on a tap (see .og-banner-head / .og-banner-more) */
-  text-decoration: none; color: var(--text);
-  background: linear-gradient(100deg, #17120a 0%, #3a2a08 22%, #6b4c08 50%, #3a2a08 78%, #17120a 100%);
-  background-size: 250% 100%; animation: ogGradient 9s linear infinite;
-  border-top: 1px solid rgba(255,179,64,0.35); border-bottom: 2px solid rgba(255,179,64,0.6);
-  box-shadow: inset 0 0 45px rgba(255,179,64,0.12), 0 3px 22px rgba(255,179,64,0.15);
-  padding: 0; font-size: max(var(--text-floor), 0.9rem); line-height: 1.4;
-  transition: box-shadow 0.2s ease;
-}
-@keyframes ogGradient { 0% { background-position: 0% 50%; } 100% { background-position: 250% 50%; } }
-.og-banner:hover { box-shadow: inset 0 0 55px rgba(255,179,64,0.22), 0 6px 32px rgba(255,179,64,0.4); }
-/* the head: one row — medal, title, one line, the live countdown, a chevron — a button that pops the rest down */
-.og-banner-head { position: relative; z-index: 1; display: flex; align-items: center; flex-wrap: wrap; gap: 0.35rem 0.9rem; width: 100%; min-height: 56px; padding: 0.45rem 1rem; background: none; border: 0; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
-.og-banner-head:focus-visible { outline: 3px solid #ffd27a; outline-offset: -3px; }
-.og-banner-brief { flex: 1 1 320px; min-width: 0; font-size: max(var(--text-floor), 0.82rem); color: var(--text); }
-.og-banner-brief b { color: var(--gold); }
-/* scoped under .og-banner: the base .og-timer rule (a column) comes later in this file and would win at equal weight */
-.og-banner .og-timer-head { flex-direction: row; align-items: baseline; gap: 0.45rem; padding: 0.2rem 0.7rem; margin-left: auto; }
-.og-banner .og-timer-head i, .og-banner .og-timer-head b { white-space: nowrap; }
-.og-chev { flex: 0 0 auto; font-size: max(var(--text-floor), 1rem); color: var(--gold); transition: transform 0.2s ease; }
-.og-banner.og-open .og-chev { transform: rotate(180deg); }
-/* the rest: the full copy, both timers, the one honest action */
-.og-banner-more { position: relative; z-index: 1; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.6rem 1.2rem; padding: 0.1rem 1rem 0.9rem; }
-.og-banner-more[hidden] { display: none; }
-/* one row at every width: the one-line summary only where it fits on one line; on a tablet the clock without its
-   label; on a phone the title and the chevron (the clock is the first thing the pop-down shows) */
-@media (max-width: 1699px) { .og-banner-brief { display: none; } }
-@media (max-width: 899px) { .og-banner .og-timer-head i { display: none; } .og-banner .og-timer-head b[data-og-deadline]::before { content: '⏳ '; } }
-@media (max-width: 560px) { .og-banner .og-timer-head { display: none; } .og-banner .og-banner-head { flex-wrap: nowrap; } .og-banner .og-chev { margin-left: auto; } }
-@media (prefers-reduced-motion: reduce) { .og-chev { transition: none; } }
-
-/* diagonal shine sweep */
-.og-shine { position: absolute; top: 0; left: -60%; width: 42%; height: 100%; transform: skewX(-20deg); background: linear-gradient(90deg, transparent, var(--g-veil), transparent); animation: ogShine 5.5s ease-in-out infinite; pointer-events: none; }
-@keyframes ogShine { 0% { left: -60%; } 55%, 100% { left: 135%; } }
-/* floating emoji accents */
-.og-confetti { position: absolute; inset: 0; pointer-events: none; }
-.og-confetti span { position: absolute; font-size: max(var(--text-floor), 0.85rem); opacity: 0.4; animation: ogFloat 6s ease-in-out infinite; }
-.og-confetti span:nth-child(1) { left: 5%; top: 22%; animation-delay: 0s; }
-.og-confetti span:nth-child(2) { left: 19%; top: 62%; animation-delay: 1.2s; }
-.og-confetti span:nth-child(3) { right: 27%; top: 16%; animation-delay: 0.6s; }
-.og-confetti span:nth-child(4) { right: 7%; top: 60%; animation-delay: 2s; }
-.og-confetti span:nth-child(5) { left: 45%; top: 10%; animation-delay: 1.6s; }
-.og-confetti span:nth-child(6) { right: 41%; bottom: 12%; animation-delay: 2.6s; }
-@keyframes ogFloat { 0%,100% { transform: translateY(0) rotate(0); opacity: 0.3; } 50% { transform: translateY(-8px) rotate(12deg); opacity: 0.65; } }
-/* bobbing medallion */
-.og-banner-badge { position: relative; z-index: 1; flex: 0 0 auto; }
-.og-medal { display: inline-block; font-size: max(var(--text-floor), 1.5rem); filter: drop-shadow(0 0 10px rgba(255,179,64,0.85)); animation: ogBob 3s ease-in-out infinite; }
-@keyframes ogBob { 0%,100% { transform: translateY(0) rotate(-6deg); } 50% { transform: translateY(-4px) rotate(6deg); } }
-/* copy */
-.og-banner-copy { position: relative; z-index: 1; flex: 1 1 520px; max-width: 62ch; }
-.og-banner-title { display: block; font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.2rem); letter-spacing: 0.5px; color: var(--gold); text-shadow: 0 0 12px rgba(255,179,64,0.5); }
-.og-word { background: linear-gradient(180deg, #fff, var(--gold)); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: var(--gold); }
-.og-tag { display: inline-block; font-family: 'Rubik', sans-serif; font-size: max(var(--text-floor), 0.58rem); font-weight: 900; text-transform: uppercase; letter-spacing: 0.1em; text-indent: 0.1em; color: var(--on-gold); background: var(--gold); border-radius: 999px; padding: 0.14rem 0.5rem; vertical-align: middle; transform: rotate(-3deg); }
-.og-banner-sub { display: block; font-size: max(var(--text-floor), 0.82rem); color: var(--text); margin-top: 0.15rem; }
-.og-banner-sub b { color: var(--gold); }
-/* timers */
-/* The row may shrink and wrap: the banner is overflow:hidden, so a row that refuses to (flex 0 0 auto) is
-   simply cut off at 320–375px — and the two things it cuts are the deadlines. */
-.og-banner-timers { position: relative; z-index: 1; flex: 0 1 auto; min-width: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: 0.6rem; }
-.og-timer { display: flex; flex-direction: column; align-items: center; line-height: 1.15; background: rgba(0,0,0,0.35); border: 1px solid rgba(255,179,64,0.4); border-radius: 12px; padding: 0.32rem 0.6rem; }
-.og-timer i { font-style: normal; font-size: max(var(--text-floor), 0.57rem); text-transform: uppercase; letter-spacing: 0.03em; color: var(--gold); font-weight: 800; white-space: nowrap; }
-.og-timer b { font-size: max(var(--text-floor), 1.02rem); font-weight: 900; color: #fff; font-variant-numeric: tabular-nums; text-shadow: 0 0 8px rgba(255,179,64,0.5); }
-.og-timer b.og-timer-closed { color: var(--text-dim); text-shadow: none; }
-/* The red tint sits on a scrim DARKER than the ordinary timer's, not instead of it: a tint alone lightens the
-   banner's brightest gradient stop (#6b4c08) under red text to 2.3:1. Black 0.7 under a 0.12 tint measures
-   5.0:1 for #ff5d5d at that stop, the worst point of the sweep. */
-.og-timer.og-timer-soon { border-color: var(--red); background: linear-gradient(rgba(255,93,93,0.12), rgba(255,93,93,0.12)), rgba(0,0,0,0.7); animation: ogSoon 1s ease-in-out infinite; }
-.og-timer.og-timer-soon i { color: var(--red); }
-.og-timer.og-timer-soon b { color: var(--red); text-shadow: 0 0 8px rgba(255,93,93,0.6); }
-@keyframes ogSoon { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
-/* pulsing CTA pill */
-.og-banner-cta { position: relative; z-index: 1; flex: 0 0 auto; font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 0.95rem); letter-spacing: 0.3px; color: var(--on-gold); background: linear-gradient(180deg, #ffd884, var(--gold-deep)); border-radius: 999px; padding: 0.5rem 1.05rem; box-shadow: 0 0 18px rgba(255,179,64,0.5); white-space: nowrap; animation: ogPulse 1.8s ease-in-out infinite; }
-@keyframes ogPulse { 0%,100% { transform: scale(1); box-shadow: 0 0 14px rgba(255,179,64,0.4); } 50% { transform: scale(1.05); box-shadow: 0 0 26px rgba(255,179,64,0.75); } }
-.og-cta-arrow { display: inline-block; animation: ogArrow 1.2s ease-in-out infinite; }
-@keyframes ogArrow { 0%,100% { transform: translateX(0); } 50% { transform: translateX(4px); } }
-/* both windows past → calm it down */
-.og-banner-closed { filter: grayscale(0.6); opacity: 0.82; animation: none; background-position: 50% 50%; }
-.og-banner-closed .og-shine, .og-banner-closed .og-confetti { display: none; }
-.og-banner-closed .og-medal, .og-banner-closed .og-banner-cta, .og-banner-closed .og-cta-arrow { animation: none; }
-@media (max-width: 760px) {
-  .og-banner { font-size: max(var(--text-floor), 0.82rem); padding: 0.7rem 0.9rem; }
-  /* the CTA used to vanish below 760px — no button at all on a phone. It now takes its own full-width row. */
-  .og-banner-cta { flex: 1 0 100%; text-align: center; margin-top: 0.25rem; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; }
-  .og-medal { font-size: max(var(--text-floor), 1.7rem); }
-  .og-banner-title { font-size: max(var(--text-floor), 1.04rem); }
-  /* the timers take their own row like the CTA, and a caption may break rather than push past the edge */
-  .og-banner-timers { flex: 1 1 100%; }
-  .og-timer i { white-space: normal; }
-}
-@media (prefers-reduced-motion: reduce) {
-  .og-banner, .og-medal, .og-confetti span, .og-timer.og-timer-soon, .og-banner-cta, .og-cta-arrow { animation: none; }
-  .og-shine { display: none; }
-  .og-banner { background-position: 50% 50%; }
-}
 
 /* ===== Token-detail popup (TokenModal) ===== */
 .tm-modal { position: fixed; inset: 0; z-index: 200; display: flex; align-items: center; justify-content: center; padding: 1rem; }
@@ -5303,19 +5141,17 @@ code.bd-addr { color: var(--text); }
 .sec-jump { margin: -0.6rem 0 1.2rem; }
 
 /* ---------- motion pause (WCAG 2.2.2) ----------
-   Decorative motion that starts by itself and never stops — the ticker, the OG banner's sweeps, the hero
+   Decorative motion that starts by itself and never stops — the ticker, the landing scope's sweep, the hero
    field, the world grid, the breathing FAB — needs a control the reader can reach without an account.
    html.motion-off is set by the ⏸ button in the nav (app.js) and remembered per browser; it pauses every
    ambient animation while leaving state animations (toasts, fills, focus) alone. Hover or focus inside the
    ticker also pauses it, which is what makes the scrolling text readable at all. */
 .ticker:hover .ticker-track, .ticker:focus-within .ticker-track { animation-play-state: paused; }
 html.motion-off .ticker-track, html.motion-off .float-emoji, html.motion-off .hero-logo, html.motion-off .hero h1 .rocket,
-html.motion-off #compose-fab, html.motion-off .og-banner, html.motion-off .og-banner::before, html.motion-off .og-shine,
-html.motion-off .og-confetti span, html.motion-off .og-medal, html.motion-off .og-banner-cta, html.motion-off .og-cta-arrow,
-html.motion-off body::before, html.motion-off .rh-badge .dot, html.motion-off .dash-live i, html.motion-off .mcap-value.pumping, html.motion-off .np-verdict.np-t-perfect,
+html.motion-off #compose-fab, html.motion-off body::before, html.motion-off .rh-badge .dot, html.motion-off .dash-live i, html.motion-off .mcap-value.pumping, html.motion-off .np-verdict.np-t-perfect,
 html.motion-off #music-player .eq span, html.motion-off .relic-pip, html.motion-off .forge-flame, html.motion-off .gxp.near .gxp-fill,
 /* the same infinite pulses the prefers-reduced-motion rules stop — the switch is for readers without the OS setting */
-html.motion-off .nav-live-dot, html.motion-off .og-timer.og-timer-soon, html.motion-off .np-live-dot, html.motion-off .comm-pulse i, html.motion-off .np-feed-hint { animation-play-state: paused !important; }
+html.motion-off .nav-live-dot, html.motion-off .np-live-dot, html.motion-off .comm-pulse i, html.motion-off .np-feed-hint { animation-play-state: paused !important; }
 html.motion-off #matrix-rain { display: none; }
 .motion-btn { display: inline-flex; align-items: center; justify-content: center; min-width: var(--nav-ctl); min-height: var(--nav-ctl); border-radius: 999px; border: 1.5px solid var(--ctl-fill-lo); background: var(--ctl-fill-lo); color: var(--ctl-ink); font: inherit; font-size: var(--nav-fs); cursor: pointer; margin-right: 0; }
 .motion-btn:hover, .motion-btn:focus-visible { color: var(--ctl-ink); background: var(--ctl-fill-hi); border-color: var(--green); }
@@ -5866,8 +5702,6 @@ html.motion-off #age-gate, html.motion-off #age-gate.age-leaving, html.motion-of
 /* where a price came from, when it is not the index (chain.js) */
 .price-src { margin: 0.35rem 0 0; font-size: max(var(--text-floor), 0.78rem); color: var(--text-dim); }
 
-/* the Diamond line in the homepage OG banner wears the Diamond OG colour, not the gold of the rest */
-.og-banner .og-diamond-word { color: var(--og-diamond-mid); }
 
 /* Form controls do not inherit the page's size (the browser gives them 13.33px): floored like everything else.
    Element selectors, so any class rule for a control still wins. */

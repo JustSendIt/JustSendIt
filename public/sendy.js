@@ -65,7 +65,7 @@
     },
     'how to buy': {
       keywords: ['how to buy', 'how do i buy', 'where to buy', 'where can i buy', 'get send', 'get gwc', 'swap', 'bridge', 'robinhood wallet'],
-      answer: 'The How to Buy guide (/guide) walks through it in five steps: get a wallet and lock down its seed phrase, add Robinhood Chain to it, bridge some ETH over, swap it into $SEND or $GWC on the swap (/swap) — which fills in the real contract address — and then see your bags. It is a guide, not a tip: memecoins are maximum-risk entertainment, and nothing here tells anyone to buy.'
+      answer: 'The How to Buy guide (/guide) walks through it in five steps: get a wallet and lock down its seed phrase, add Robinhood Chain to it, bridge some ETH over, swap it into $SEND on the swap (/swap) — which fills in the real contract address — and then track your bags in the Wallet Tracker. For $GWC, use 🚀 Swap in my wallet on its Scanner detail (/newpairs?scan=0x61339f11384dde4b2dc3a33e75b4dc23cc620f22). It is a guide, not a tip: memecoins are maximum-risk entertainment, and nothing here tells anyone to buy.'
     },
     'market data': {
       keywords: ['market data', 'tvl', 'market cap', 'top tokens', 'top chains', 'chain stats', 'liquidity', 'volume', 'fees'],

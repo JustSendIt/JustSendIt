@@ -75,7 +75,7 @@ try {
   const APP = pub('app.js'), GAM = pub('gamify.js'), IDX = pub('index.html'), ABOUT = pub('about.html'), WP = pub('whitepaper.html'), README = readFileSync(path.join(ROOT, 'README.md'), 'utf8');
   check('the badge knows tier 4 (name, 20×, tooltip)', /4: \{ name: 'Diamond', mult: 20,/.test(APP));
   check('  ...and wears its own colour, not Gold’s or the Diamond Hands cyan', /\.og-badge--diamond \{/.test(pub('styles.css')) && /--og-diamond:/.test(pub('styles.css')));
-  check('the homepage OG banner names Diamond 20× and who it is for', /💎 Diamond 20×<\/b> for those who bought both in \$GWC’s first month and bought more of each than they sold that month/.test(IDX) && /Diamond, 20 times Send Power/.test(IDX));
+  check('the home page carries no OG banner since 2026-11-17 (it is about $SEND alone, and OG means holding both coins): the pages below explain Diamond', !/og-banner|Diamond 20×/.test(IDX));
   check('the dashboard block and its rules card explain it', /tier === 4 \? 'in the first month of \$GWC and bought more of each than you sold that month'/.test(GAM) && /💎 Diamond — 20×\.<\/b> Bought both in the first month of \$GWC/.test(GAM));
   check('the About page OG rules list it', /💎 Diamond — 20×\.<\/b> The first believers: bought both in the <b>first month of \$GWC<\/b>/.test(ABOUT));
   check('the whitepaper lists it', /Diamond &mdash; 20&times;\.<\/strong> You bought both in the <strong>first month of \$GWC<\/strong>/.test(WP));

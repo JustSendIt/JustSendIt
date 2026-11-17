@@ -1,0 +1,218 @@
+/* ═══ The landing page (index.html, body.lp): the mission-control layer ═══
+   Owner, 2026-11-17: the landing page redone "super high tech", short and quick to read, and about $SEND. Every rule here
+   is scoped to body.lp, which only index.html carries, so About and the White Paper keep the classes they share with it
+   (.hero, .ticker, .card, .step, .reassure, .section-title…) exactly as they are. Loaded after rocketize.css and before
+   responsive.css, whose Home section keeps the wide-screen geometry. Colours come from the tokens only: prefs.js re-tints
+   them for each reader. No new fonts: IBM Plex Mono (600) is the telemetry voice, Rubik the reading voice, and Luckiest
+   Guy stays on the wordmark alone. Decoration animates transform only, and stops under ⏸ (html.motion-off) and under
+   the OS reduced-motion setting. */
+
+/* ---------- the tape: a telemetry strip instead of a green banner ---------- */
+body.lp .ticker {
+  background: var(--ink-1); color: var(--green-bright);
+  border-block: 1px solid var(--g-edge);
+  font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.14em; font-size: max(var(--text-floor), 0.8rem);
+}
+body.lp .ticker-track span::before { content: '// '; color: var(--text-mute); }
+
+/* ---------- the hero: a blueprint grid under a soft top light ---------- */
+body.lp .hero.hero-dash {
+  background:
+    radial-gradient(ellipse 80% 55% at 50% 0%, color-mix(in srgb, var(--green) 13%, transparent), transparent 70%),
+    linear-gradient(180deg, color-mix(in srgb, var(--ink) 84%, transparent), var(--ink));
+}
+body.lp .hero.hero-dash::before {
+  content: ''; position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  background-image: linear-gradient(var(--grid-line-2) 1px, transparent 1px), linear-gradient(90deg, var(--grid-line-2) 1px, transparent 1px);
+  background-size: var(--grid-gap) var(--grid-gap); background-position: center top;
+  -webkit-mask-image: radial-gradient(ellipse 90% 75% at 50% 15%, #000 25%, transparent 80%);
+  mask-image: radial-gradient(ellipse 90% 75% at 50% 15%, #000 25%, transparent 80%);
+}
+/* the drift field reads as hologram glyphs, not stickers (it only shows in the wide gutters; eggs 16 and 17 live on it) */
+body.lp .hero-dash .float-emoji { filter: grayscale(1) brightness(1.3) drop-shadow(0 0 6px var(--green)); opacity: 0.26; }
+body.lp .hero-dash .float-emoji.faint { opacity: 0.14; }
+
+/* the mark in a scope: a fixed ring, a slow dashed orbit and a radar sweep behind the logo */
+body.lp .hero-logo-btn { position: relative; isolation: isolate; border-radius: 50%; }
+body.lp .hero-logo-btn::before, body.lp .hero-logo-btn::after {
+  content: ''; position: absolute; border-radius: 50%; pointer-events: none;
+}
+body.lp .hero-logo-btn::before {
+  inset: 2%; z-index: -1;
+  background: conic-gradient(from 0deg, transparent 0 290deg, color-mix(in srgb, var(--green-bright) 26%, transparent) 360deg);
+  border: 1px solid color-mix(in srgb, var(--green-bright) 40%, transparent);
+  animation: lp-turn 6s linear infinite;
+}
+body.lp .hero-logo-btn::after {
+  inset: -7%; z-index: -1;
+  border: 1px dashed color-mix(in srgb, var(--green-bright) 30%, transparent);
+  animation: lp-turn 40s linear infinite reverse;
+}
+@keyframes lp-turn { to { transform: rotate(360deg); } }
+body.lp .hero-logo { animation: none; filter: drop-shadow(0 0 28px var(--glow-g)) drop-shadow(0 12px 30px rgba(0,0,0,0.6)); }
+body.lp .hero-logo:hover { transform: scale(1.03); }
+
+/* the words: the wordmark keeps its face, set level; the rest is instrument lettering */
+body.lp .hero h1 { transform: none; text-shadow: 0 0 var(--glow-2) color-mix(in srgb, var(--green) 45%, transparent), 0 3px 0 var(--green-dark); }
+body.lp .hero .tag { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; font-size: max(var(--text-floor), 0.9rem); }
+body.lp .hero .tag strong { color: var(--green-bright); }
+body.lp .rh-badge, body.lp .risk-chip { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.04em; }
+body.lp .rh-badge .dot { border-radius: 2px; box-shadow: 0 0 var(--glow-1) var(--rh-green); }
+/* the four ways in are 44px targets at every width (the phone 2×2 measured 39px) */
+body.lp .hero-actions .cta-row .btn { min-height: 44px; }
+/* on a tablet the four wrapped three and one: a 2×2 like the phone's, centred under the words */
+@media (min-width: 560px) and (max-width: 999.98px) {
+  body.lp .hero-actions .cta-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.7rem; width: min(100%, 36rem); margin-inline: auto; }
+}
+
+/* ---------- Mission Control ---------- */
+body.lp .dash-title {
+  transform: none; font-family: var(--font-body); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em;
+  font-size: max(var(--text-floor), clamp(1.1rem, 2.2vw, 1.45rem)); color: var(--text); text-shadow: 0 0 var(--glow-2) color-mix(in srgb, var(--green) 30%, transparent);
+}
+body.lp .dash-title-sub { font-family: var(--font-mono); font-weight: 600; text-transform: none; letter-spacing: 0.04em; font-style: normal; color: var(--text-mute); }
+/* one column on a phone, two from 560px, three from 1000px; the $SEND reading always runs across the full width */
+body.lp .dash-grid > .dash-tile.is-send { grid-column: 1 / -1; }
+@media (min-width: 560px) and (max-width: 999.98px) {
+  /* nine tiles under the $SEND reading: the ninth closes its row — unless the video tile is hidden (no video file), when eight pair up */
+  body.lp .dash-grid:not(:has(> .dash-tile[hidden])) > .dash-tile:last-child { grid-column: 1 / -1; }
+}
+@media (min-width: 1000px) {
+  body.lp .dash-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  body.lp .dash-grid:has(> .dash-tile[hidden]) > .dash-tile:last-child { grid-column: span 2; }
+}
+/* a tile is an instrument panel: a hairline frame in its accent, corner ticks, a flat dark face */
+body.lp .dash-tile.is-scanner { --tile: var(--rh-green); }
+body.lp .dash-tile.is-swap, body.lp .dash-tile.is-wall { --tile: var(--green-bright); }
+body.lp .dash-tile {
+  border-radius: var(--r-1);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--tile) 6%, var(--ink-2)), var(--ink-2) 60%);
+  border: 1px solid color-mix(in srgb, var(--tile) 32%, var(--hair));
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent), 0 14px 34px rgba(0,0,0,0.42);
+}
+body.lp .dash-tile::before {
+  content: ''; position: absolute; inset: 5px; z-index: 1; pointer-events: none; border-radius: 0;
+  --tk: color-mix(in srgb, var(--tile) 80%, transparent);
+  background:
+    linear-gradient(var(--tk), var(--tk)) left top / 12px 1.5px no-repeat, linear-gradient(var(--tk), var(--tk)) left top / 1.5px 12px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right top / 12px 1.5px no-repeat, linear-gradient(var(--tk), var(--tk)) right top / 1.5px 12px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) left bottom / 12px 1.5px no-repeat, linear-gradient(var(--tk), var(--tk)) left bottom / 1.5px 12px no-repeat,
+    linear-gradient(var(--tk), var(--tk)) right bottom / 12px 1.5px no-repeat, linear-gradient(var(--tk), var(--tk)) right bottom / 1.5px 12px no-repeat;
+}
+/* the $SEND tile's scrim (.is-token::after, z 1) would paint over the ticks: lift them, still under the tile's content */
+body.lp .dash-tile.is-token::before { z-index: 2; }
+body.lp .dash-tile:hover { transform: none; border-color: color-mix(in srgb, var(--tile) 70%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--tile) 24%, transparent), 0 0 var(--glow-3) color-mix(in srgb, var(--tile) 14%, transparent), 0 14px 34px rgba(0,0,0,0.45); }
+body.lp .dash-tile:hover .dash-ico { transform: none; }
+body.lp .dash-ico { border-radius: 8px; background: color-mix(in srgb, var(--tile) 12%, var(--ink-1)); box-shadow: 0 0 var(--glow-1) color-mix(in srgb, var(--tile) 30%, transparent); }
+body.lp .dash-name { font-family: var(--font-body); font-weight: 800; letter-spacing: 0.01em; }
+/* sentence case and close tracking: from 1280px the floor is 19pt, and spaced capitals in a tile's third of the column wrapped to four lines */
+body.lp .dash-name-sub { font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.01em; color: var(--text-mute); }
+body.lp .dash-line { color: var(--text-dim); }
+body.lp .dash-live { border-radius: 4px; border-width: 1px; font-family: var(--font-mono); font-weight: 600; }
+body.lp .dash-live i { border-radius: 2px; box-shadow: 0 0 var(--glow-1) var(--rh-green); }
+body.lp .dash-tile.is-over .dash-live i { box-shadow: none; }   /* a settled board's LED is dark, like its word */
+/* the readings: telemetry figures */
+body.lp :is(.dash-big, .dash-tile .mcap-value, .beta-count, .price-big) {
+  font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums slashed-zero; letter-spacing: -0.01em;
+  text-shadow: 0 0 var(--glow-2) color-mix(in srgb, var(--tile, var(--green)) 40%, transparent);
+}
+body.lp .dash-tile .mcap-delta { font-family: var(--font-mono); font-weight: 600; }
+/* the $SEND reading across the grid: the figure gets the room, the way in sits at the right from 760px */
+body.lp .dash-tile.is-send .mcap-value { font-size: max(var(--text-floor), 2.2rem); font-size: max(var(--text-floor), clamp(1.6rem, 7cqi, 3.4rem)); }
+@media (min-width: 760px) {
+  body.lp .dash-tile.is-send { display: grid; grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "head head" "glance act"; align-items: end; gap: 0.6rem 1.6rem; }
+  body.lp .dash-tile.is-send > .dash-head { grid-area: head; }
+  body.lp .dash-tile.is-send > .dash-glance { grid-area: glance; }
+  body.lp .dash-tile.is-send > .dash-act { grid-area: act; margin-top: 0; }
+  body.lp .dash-tile.is-send .dash-foot { float: none; margin: 0; }
+}
+/* the new-here read: a quiet panel under the grid */
+body.lp .dash > .reassure { border-radius: var(--r-1); border: 1px solid var(--g-edge); background: var(--ink-2); }
+
+/* ---------- the sections: a hairline over each, a mono kicker over each title ---------- */
+body.lp main > section:not(.dash) { border-top: 1px solid color-mix(in srgb, var(--green) 16%, transparent); }
+body.lp main > section > .wrap > .section-title {
+  transform: none; font-family: var(--font-body); font-weight: 800; letter-spacing: 0.005em;
+  color: var(--text); text-shadow: 0 0 var(--glow-2) color-mix(in srgb, var(--green) 22%, transparent);
+}
+body.lp main > section > .wrap > .section-title[data-k]::before {
+  content: attr(data-k) / "";   /* a label for the eye: the heading itself is what a screen reader announces */
+  display: block; margin-bottom: 0.45rem;
+  font-family: var(--font-mono); font-weight: 600; font-size: max(var(--text-floor), 0.78rem); letter-spacing: 0.16em;
+  color: var(--green-bright); text-shadow: none;
+}
+
+/* ---------- the token: its facts on the left, its chart on the right from 900px ---------- */
+body.lp .lp-token { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1.4rem; border-radius: var(--r-2); border-color: var(--g-edge); }
+@media (min-width: 900px) {
+  body.lp .lp-token { grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr); align-items: start; }
+  body.lp .lp-token > .tok-banner { grid-column: 1 / -1; }
+}
+body.lp .lp-token-info { min-width: 0; }
+body.lp .contract-box .copy-btn { min-height: 44px; }   /* 39px on a tablet with a mouse: a 44px target at every width here */
+body.lp .lp-spec {
+  display: grid; gap: 0.4rem; margin: 0 0 1rem; padding: 0.75rem 0.9rem;
+  border: 1px solid var(--g-edge); border-radius: var(--r-1); background: color-mix(in srgb, var(--ink) 72%, transparent);
+}
+body.lp .lp-spec > div { display: grid; grid-template-columns: 6.2em minmax(0, 1fr); gap: 0.2rem 0.7rem; }
+body.lp .lp-spec dt { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--green-bright); font-size: max(var(--text-floor), 0.78rem); }
+body.lp .lp-spec dd { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); line-height: 1.45; overflow-wrap: anywhere; }
+@media (max-width: 420px) { body.lp .lp-spec > div { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- the beta, the guide: panels to match ---------- */
+body.lp .beta-card { border-radius: var(--r-2); }
+body.lp .lp-board-h { margin-top: 1.1rem; }
+body.lp .step { border-radius: var(--r-2); }
+body.lp .step:hover { transform: none; }
+body.lp .step-num { font-family: var(--font-mono); font-weight: 600; border-radius: 8px; }
+
+/* ---------- the swap: one pair, ETH → $SEND ---------- */
+body.lp .swap-panel {
+  border: 1px solid var(--g-edge); border-radius: var(--r-3); padding: clamp(1rem, 4vw, 2rem);
+  box-shadow: 0 0 var(--glow-3) color-mix(in srgb, var(--green) 10%, transparent), 0 24px 50px rgba(0,0,0,0.5);
+}
+body.lp .lp-swap-head {
+  display: flex; flex-wrap: wrap; align-items: baseline; justify-content: center; gap: 0.3rem 0.55rem;
+  font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem);
+}
+body.lp .lp-swap-head b { color: var(--green-bright); font-size: max(var(--text-floor), 1.3rem); letter-spacing: 0.02em; }
+body.lp .lp-swap-k { text-transform: uppercase; }
+body.lp .lp-swap-label {
+  display: block; margin-top: 1rem; text-align: center;
+  font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); font-size: max(var(--text-floor), 0.8rem);
+}
+body.lp .lp-amt-row { display: flex; flex-wrap: wrap; gap: 0.6rem; margin: 0.7rem 0 0.8rem; align-items: center; }
+body.lp .lp-amt { flex: 1 1 8rem; min-width: 0; margin: 0; font-family: var(--font-mono); font-weight: 600; font-size: max(var(--text-floor), 1.2rem); }
+body.lp .lp-swap-usd { margin: -0.3rem 0 0.8rem; text-align: center; }
+body.lp .lp-quote { margin-bottom: 1rem; }
+body.lp .lp-quote-line { margin-top: 0.3rem; }
+body.lp .lp-swap-btns { display: flex; flex-wrap: wrap; gap: 0.8rem; justify-content: center; }
+body.lp #swap-status { text-align: center; margin: 0.7rem 0 0; min-height: 1.2em; }
+body.lp .lp-pending { text-align: center; margin-top: 1rem; }
+body.lp .lp-inflight { font-weight: 800; color: var(--green-bright); }
+
+/* ---------- $SEND elsewhere: the coin's first home and the community account ---------- */
+body.lp .lp-links { display: grid; grid-template-columns: minmax(0, 1fr); gap: 1rem; }
+@media (min-width: 760px) { body.lp .lp-links { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+body.lp .lp-link {
+  display: flex; flex-direction: column; gap: 0.6rem; min-width: 0; padding: 1.1rem 1.15rem 1.15rem;
+  border: 1px solid var(--g-edge); border-radius: var(--r-2);
+  background: linear-gradient(180deg, color-mix(in srgb, var(--green) 6%, var(--ink-2)), var(--ink-2) 60%);
+}
+body.lp .lp-link h3 { margin: 0; font-weight: 800; font-size: max(var(--text-floor), 1.15rem); overflow-wrap: anywhere; }
+body.lp .lp-link p { margin: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.92rem); line-height: 1.5; }
+body.lp .lp-link .btn { margin-top: auto; align-self: flex-start; max-width: 100%; }
+body.lp .lp-link-tag { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.12em; color: var(--gold); font-size: max(var(--text-floor), 0.78rem); }
+
+/* ---------- motion: ⏸ and the OS setting stop the scope; the sweep goes, the rings stay still ---------- */
+html.motion-off body.lp .hero-logo-btn::after { animation: none; }
+html.motion-off body.lp .hero-logo-btn::before { animation: none; background: none; }
+@media (prefers-reduced-motion: reduce) {
+  body.lp .hero-logo-btn::before, body.lp .hero-logo-btn::after { animation: none; }
+  body.lp .hero-logo-btn::before { background: none; }
+}
+/* forced colours (Windows High Contrast): the decorative layers step aside, the frames become system lines */
+@media (forced-colors: active) {
+  body.lp .hero.hero-dash::before, body.lp .dash-tile::before, body.lp .hero-logo-btn::before, body.lp .hero-logo-btn::after { content: none; }
+  body.lp :is(.dash-tile, .lp-link, .lp-spec, .swap-panel) { border-color: CanvasText; }
+}

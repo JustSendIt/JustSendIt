@@ -30,8 +30,8 @@ try {
     /'<div class="chart-switch" data-pair="' \+ esc\(p\.pair\.address\) \+ '" data-sym="' \+ esc\(p\.token\.symbol \|\| ''\) \+ '" data-chain="' \+ esc\(ch\.slug\) \+ '" data-ds="' \+ esc\(ch\.ds \|\| ''\) \+ '" data-gt="' \+ esc\(ch\.gt \|\| ''\) \+ '" data-cf-unit data-cf-title="/.test(NP)   // the chain rides on the switch too (2026-10-23)
     && /'<div class="chart-src-row">' \+/.test(NP) && /wrap\.classList\.toggle\('has-src', any\);/.test(CJ)
     && /\.chart-switch\.has-src > \.chart-src-row \{ display: flex;/.test(CSS) && /\.chart-switch\.has-src \.oc-head \.cf-open \{ display: none; \}/.test(CSS) && /\.chart-src-row \{ display: none; \}/.test(CSS));
-  check('  ...every chart is named in the pop-up: $SEND and $GWC on the home page, the token\'s symbol elsewhere, "Value over time", the admin chart\'s title',
-    /data-cf-title="\$SEND price chart"/.test(IDX) && /data-cf-title="\$GWC price chart"/.test(IDX) && /data-cf-title="' \+ esc\(p\.token\.symbol \? '\$' \+ p\.token\.symbol \+ ' price chart' : 'Price chart'\) \+ '"/.test(WL)
+  check('  ...every chart is named in the pop-up: $SEND on the home page (its one chart since 2026-11-17), the token\'s symbol elsewhere, "Value over time", the admin chart\'s title',
+    /data-cf-title="\$SEND price chart"/.test(IDX) && (IDX.match(/data-cf-title=/g) || []).length === 1 && /data-cf-title="' \+ esc\(p\.token\.symbol \? '\$' \+ p\.token\.symbol \+ ' price chart' : 'Price chart'\) \+ '"/.test(WL)
     && /host\.setAttribute\('data-cf-title', 'Value over time'\);/.test(WC) && /data-cf-unit="clone" data-cf-title="' \+ esc\(title\) \+ '"/.test(ADM));
   check('  ...the wallet chart is moved in inside a .trk-dash (its styles live there) and followed if the report is drawn again while it is open',
     /host\.setAttribute\('data-cf-unit', ''\); host\.setAttribute\('data-cf-key', 'wallet-chart'\); host\.setAttribute\('data-cf-ctx', 'trk-dash'\);/.test(WC));

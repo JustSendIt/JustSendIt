@@ -16,7 +16,7 @@ Facts, as the site states them:
 
 ## Pages
 
-- [Home](https://sendrh.com/): live $SEND and $GWC charts, a how-to-buy guide for Robinhood Chain and a one-click swap you sign in your own wallet
+- [Home](https://sendrh.com/): the $SEND hub — a live on-chain $SEND chart, a how-to-buy guide for Robinhood Chain and a one-click ETH → $SEND swap you sign in your own wallet
 - [What is $SEND?](https://sendrh.com/about): what $SEND and $GWC are, how invite-only joining and the $100 wallet check work, and the rules of Send Power, Send Calls and communities
 - [White paper](https://sendrh.com/whitepaper): the rules behind Just Send It: Send Power and its caps, decay, boosts, Send Calls, communities, Send Squads, Rocket Run, the scanner on three chains, Market Data, Sendy and the honest limits
 - [The Send Wall](https://sendrh.com/wall): $SEND meme feed: sends, memes and live-tracked Send Calls, ranked by upvotes; anyone can read, posting is invite-only
