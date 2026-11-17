@@ -12580,10 +12580,18 @@ function rewriteHtml(buf) {
    takes it whatever VOICE_MEMOS says, and it can only be claimed onto its uploader's own wall
    (/api/profile/audio), never attached to a post. */
 const VOICE_MEMOS = process.env.VOICE_MEMOS === '1';
+/* The music player's songs, in the order "Play all" plays them (owner, 2026-11-17: "SEND IT 🚀" by @WisdomPrime123 beside the
+   theme, its maker linked to their page on X). Each file ships outside git like the theme (the rights are its maker's: .gitignore),
+   so /api/config lists only the songs whose file is on this machine, and the player is drawn only when one is (player.js). */
+const PLAYLIST = [
+  { id: 'theme', file: 'justsendit-audio.m4a', title: 'Just $Send It', note: 'the site’s theme', by: null },
+  { id: 'send-it', file: 'send-it-wisdomprime123.m4a', title: 'SEND IT 🚀', note: '', by: { name: '@WisdomPrime123', url: 'https://x.com/WisdomPrime123' } },
+];
 const OPTIONAL_MEDIA = {
   video: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'justsendit-full.mp4')),
   poster: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'full-send-poster.jpg')),
   audio: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'justsendit-audio.m4a')),
+  tracks: PLAYLIST.filter((t) => fs.existsSync(path.join(PUBLIC_DIR, 'assets', t.file))).map((t) => ({ id: t.id, src: '/assets/' + t.file, title: t.title, note: t.note, by: t.by })),
 };
 function notFoundPage(res, extraHeaders) {
   const html = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Page not found — Just Send It</title><meta name="robots" content="noindex">' +

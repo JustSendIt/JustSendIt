@@ -47,6 +47,8 @@ public/assets/justsendit-full.mp4
 # a frame of that video: same rights, same rule; the page hides the section when it is absent
 public/assets/full-send-poster.jpg
 public/assets/justsendit-audio.m4a
+# the music player's other songs: each one's rights are its maker's, so it ships beside the theme, never in git (server.js PLAYLIST)
+public/assets/send-it-wisdomprime123.m4a
 
 # ── Internal audit tracker — DO NOT COMMIT ──────────────────────────────────
 # 366 KB / 143 findings, 75 still marked open, four of them with step-by-step

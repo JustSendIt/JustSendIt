@@ -416,7 +416,8 @@ try {
   }
   if (browserRan) {
     const cfg = await (await fetch(BASE + '/api/config')).json();
-    cfg.media = Object.assign({}, cfg.media, { audio: true });
+    // the theme is here (its file ships outside git): the config's media says so, and lists it as the player's one song (server.js PLAYLIST)
+    cfg.media = Object.assign({}, cfg.media, { audio: true, tracks: [{ id: 'theme', src: '/assets/justsendit-audio.m4a', title: 'Just $Send It', note: 'the site’s theme', by: null }] });
     const themeTone = toneWav(6, 330);
     answer = (u) => { const pn = new URL(u).pathname; return pn === '/api/config' ? { type: 'application/json', body: Buffer.from(JSON.stringify(cfg)) } : pn === '/assets/justsendit-audio.m4a' ? { type: 'audio/wav', body: themeTone } : null; };
     const singer = mkUser(), fan = mkUser();
