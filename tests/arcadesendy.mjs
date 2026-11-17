@@ -124,7 +124,7 @@ try {
   const s34 = (/<section class="t-sec" id="s34">[\s\S]*?<\/section>/.exec(TERMS) || [''])[0];
   check('the Terms\' outside-links clause names sendy.gg as the exception to "we do not control them": a separate site, but we run it too', /We do not control them, do not endorse them/.test(s34) && /<p>The one exception to “we do not control them” is sendy\.gg, the game linked from the Arcade: it is a separate site, but we run it too\.<\/p>/.test(s34), s34.slice(-400));
   const tv = (/const TOS_VERSION = '([^']+)';/.exec(SRV) || [])[1];
-  check('  ...and the Terms\' version moved with the server\'s (2026-11-03)', tv === '2026-11-03' && /<p class="t-meta">Version 2026-11-03 · /.test(TERMS) && /\/\/ 2026-11-03: §34 says we run sendy\.gg too/.test(SRV), tv);
+  check('  ...and the Terms\' version moved with the server\'s (2026-11-03; the current one, 2026-11-17 for wall songs, keeps that line in its history)', tv === '2026-11-17' && /<p class="t-meta">Version 2026-11-17 · /.test(TERMS) && /\/\/ 2026-11-17: [^\n]*; 2026-11-03: §34 says we run sendy\.gg too/.test(SRV), tv);
 
   // the look
   check('the link is a full-width button at least 44 px tall (56 here), in the page font and the floor', /\.sgg-play \{[^}]*min-height: 56px;/.test(ACSS) && /\.sgg-play \{[^}]*font-size: max\(var\(--text-floor\)/.test(ACSS));
