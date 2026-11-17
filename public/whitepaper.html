@@ -16,7 +16,7 @@
 <meta property="og:title" content="$SEND White Paper 📄 How Just Send It works, rule by rule">
 <meta property="og:description" content="Send Power, decay, Send Calls, communities, Send Squads, Rocket Run, the scanner on three chains, Market Data, Sendy and the honest limits. Entertainment only.">
 <meta property="article:published_time" content="2026-09-13T01:45:10-04:00">
-<meta property="article:modified_time" content="2026-11-03">
+<meta property="article:modified_time" content="2026-11-17">
 <meta property="og:image" content="https://sendrh.com/assets/logo-og.png">
 <meta property="og:image:type" content="image/png">
 <meta property="og:image:width" content="1200">
@@ -38,7 +38,7 @@
       "headline": "$SEND White Paper — How Just Send It Works",
       "description": "The rules behind Just Send It: Send Power, decay, boosts, Send Calls, communities, Squads, Rocket Run, the scanner, Market Data and Sendy. Entertainment only.",
       "datePublished": "2026-09-13T01:45:10-04:00",
-      "dateModified": "2026-11-03",
+      "dateModified": "2026-11-17",
       "inLanguage": "en",
       "author": {
         "@type": "Organization",
@@ -539,7 +539,7 @@
 <div class="page">
 
   <header class="masthead">
-    <p class="eyebrow">White paper &middot; Version 1 &middot; Updated <time datetime="2026-11-03">3 November 2026</time></p>
+    <p class="eyebrow">White paper &middot; Version 1 &middot; Updated <time datetime="2026-11-17">17 November 2026</time></p>
     <h1>JustSendIt, explained plainly</h1>
     <p class="standfirst">A community website for two joke coins, with a points game, a risk scanner, a page of market figures, a helper who answers questions, and a rocket game whose only prize is a temporary points bonus. This is everything it does, what it does with your data and your wallet, and the exact numbers behind all of it &mdash; written so a twelve&#8209;year&#8209;old can follow every word.</p>
     <p class="byline">
@@ -650,9 +650,10 @@
         </ul>
         <p>Once you have a ticket, you can join with a crypto wallet or with an email and password. The code can also sign people in through Google, Facebook, X or Instagram, but each of those appears only when whoever runs the site has switched it on with that company&rsquo;s app keys; one that is not switched on is not offered at all. So the sign-in window always shows three ways in &mdash; <strong>🦊 Connect wallet</strong>, <strong>🔥 Burn Verification</strong> (for a wallet that cannot sign) and <strong>✉️ Email</strong> &mdash; and a social button appears beside them only once it is switched on. The invite is checked at every way in &mdash; and at nothing else on the site.</p>
         <p><strong>You pick your @username as you join.</strong> It is your public name, and you can sign in with it as well as with your email. Joining with a wallet asks for the name <em>first</em>, before the wallet connects, and can also take an email and password as a second way in &mdash; optional, and useful if you ever want to sign in without the wallet. Both forms offer to set up two-factor straight afterwards; that is optional too, and for the first hour of a new account nothing in its settings asks for a password. If the email you give already belongs to another account, the sign-up is <em>not</em> refused &mdash; a refusal would tell anyone with a ticket who is a member. Your account is made without that email: you sign in with your @username and password, and can set a different email later.</p>
+        <p><strong>With a ticket in hand, the last step is on the ticket itself.</strong> After the code (and a terms step, only where the operator has switched one on), the ticket says <em>Your ticket is valid</em> and asks for your @username; then, if you want them, an email and a password typed twice, under <em>Add an email &amp; password (optional)</em>; and whether to set up two-factor right after. The line beneath says that creating an account means you are 18 or over and accept the Terms and the Privacy policy. One press of <strong>Sign in with wallet &mdash; read-only 🦊</strong> closes the ticket and opens the sign-in window already asking your wallet for its one free signature &mdash; no transaction, no gas &mdash; and the account is made with the name you typed on the ticket; with the two-factor box ticked, the new account goes straight to Settings &rarr; Security. <strong>Use email instead</strong> opens the window&rsquo;s Email tab instead, filled in with what you typed, and the account is made when you press <em>Create Account ✨</em> there. Burn Verification keeps its own form, as before. Closing the ticket clears any password typed on it.</p>
         <h3>Making an account, and then using it</h3>
         <p>These are two different things here, and the difference is the point.</p>
-        <p><strong>An email is enough to make an account.</strong> No wallet, no signature, no coins. You can read every page, check in each day, and set up your own profile &mdash; your name, bio and colours &mdash; though that earns no points until the check below passes. Pictures are uploads like any other and wait for the check.</p>
+        <p><strong>An email is enough to make an account.</strong> No wallet, no signature, no coins. You can read every page, check in each day, and set up your own profile &mdash; your name, bio and colours &mdash; though that earns no points until the check below passes. Pictures, and a song for your wall, are uploads like any other and wait for the check.</p>
         <p><strong>A wallet is what lets you do things.</strong> Posting, calling, commenting, reacting, voting, joining a community &mdash; all of it waits behind one read-only check, which opens the moment you try, over whatever page you were on. It asks two questions of the chain, across every wallet you have linked:</p>
         <ul>
           <li><strong>Do you hold at least $100 of $SEND?</strong> Valued at the <strong>lower</strong> of the live price and the price the $SEND pool actually sat at over the last 24 hours &mdash; its time-weighted median, rebuilt from the pool&rsquo;s own reserves &mdash; so a minute-long pump cannot buy anyone through the door; a pump has to hold for half a day before it moves that median at all. If the live price is more than three times that median, or the chain cannot be read, the site refuses to value the bag and nothing is decided. A dust balance is not a holding, and there has to be a market buy behind the bag: a wallet that has only ever received $SEND from somewhere else has not bought any.</li>
@@ -751,7 +752,7 @@ Expiration Time: &lt;10 minutes later&gt;
           <p>So the honest summary is that the most sensitive fields are encrypted and the rest of the database is readable. And if the key were stolen along with the data, even the encrypted part would be open &mdash; which is why the key belongs somewhere the database backups are not.</p>
         </div>
         <h3>What is kept when something changes</h3>
-        <p>A member once lost a Conviction Play to one stray tap, and with it the date and the price it was pinned at: nothing kept an earlier copy, and the daily backups reached back a week. So the site now keeps a copy of a row as it was, before every change that matters and before every deletion, for these things: Conviction Plays, posts, comments (on posts and on a Sent It), Send Calls, your profile (name, picture, bio, colours and handles), your Diamond Hands streak, your community and squad memberships, your watchlist, your follows and your post alerts.</p>
+        <p>A member once lost a Conviction Play to one stray tap, and with it the date and the price it was pinned at: nothing kept an earlier copy, and the daily backups reached back a week. So the site now keeps a copy of a row as it was, before every change that matters and before every deletion, for these things: Conviction Plays, posts, comments (on posts and on a Sent It), Send Calls, your profile (name, picture, bio, colours, wall song and handles), your Diamond Hands streak, your community and squad memberships, your watchlist, your follows and your post alerts.</p>
         <p>Those copies are kept for as long as the account exists &mdash; the newest 5,000 per member &mdash; and deleting the account erases them with everything else. Only the site&rsquo;s admin can see them, and can put one entry back. Some things are never copied: anything scrambled or looked up by a key, anything used to sign in, IP addresses and wallets. Nor is anything a moderator takes down: a takedown erases the copies its own change just wrote, so abusive content is gone rather than one tap from coming back.</p>
       </section>
 
@@ -788,8 +789,9 @@ object-src  'none'
         <h3>Speed limits</h3>
         <p>Nearly every action has a cap on how often it can be repeated. Making Send Calls is limited to 10 attempts every 10 minutes, comments 25, joining communities 30, and starting a community 3 per day. Logins and wallet challenges are limited per IP address. The limits sit far above what a real person does and far below what a script needs.</p>
         <h3>Uploads</h3>
-        <p>The site does not trust what a file calls itself. It reads the first few bytes of every upload and checks they match a real image or video. A file named <code>cat.png</code> that is secretly a program fails that check.</p>
+        <p>The site does not trust what a file calls itself. It reads the first few bytes of every upload and checks they match a real image, video or song. A file named <code>cat.png</code> that is secretly a program fails that check.</p>
         <p>It also strips what a phone writes <em>inside</em> the file. A photo or video carries where it was taken and on what device &mdash; hidden fields in a JPEG, PNG, WebP or GIF, and the tag blocks in an MP4 or WebM, which is where a phone puts the location. Every upload has those removed before it can be served, and the pixels, sound and timing are left exactly as they were: a JPEG keeps its orientation, so a phone photo is not turned on its side, and colour profiles stay. Uploaded files are served to anyone byte for byte, so a file the site cannot read well enough to clean is refused rather than published as it came.</p>
+        <p>A wall&rsquo;s song is cleaned the same way. An MP3 loses every tag &mdash; the ID3 block at the front, and whatever a tagging program appended at the end (ID3v1, APE, Lyrics3 or a second ID3 block) &mdash; and a tag whose size cannot be measured refuses the file. What is left must be MPEG Layer III audio, checked over its first three frames. A WAV is rebuilt from its format, fact and data chunks alone, so the LIST/INFO chunk and every other chunk of names, places and software are dropped, and only plain PCM (8, 16, 24 or 32 bits) or 32-bit float, 1 to 8 channels at 8 to 192 kHz, is kept: other codecs a WAV can hold are refused.</p>
         <div class="tablewrap">
           <table>
             <caption>Upload size limits</caption>
@@ -798,6 +800,7 @@ object-src  'none'
               <tr><td class="name">JPEG, PNG, WebP</td><td class="num">20 MB</td></tr>
               <tr><td class="name">GIF</td><td class="num">25 MB</td></tr>
               <tr><td class="name">MP4, WebM video</td><td class="num">64 MB</td></tr>
+              <tr><td class="name">MP3, WAV (a wall&rsquo;s song)</td><td class="num">16 MB</td></tr>
             </tbody>
           </table>
         </div>
@@ -1270,6 +1273,11 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
         <p>If you paste a coin's address into a post, the site quietly replaces it with the coin's ticker, which anyone can tap to see its full details. Up to three addresses per post are converted this way.</p>
         <h3>Muting</h3>
         <p>On anyone's public profile there is a <strong>Moderation</strong> menu with a mute option. Muting is one-sided and private. Their posts and comments disappear from your feeds. Where they cannot be removed entirely, such as inside a list of people on a call, they appear greyed with a muted marker you can tap to unmute.</p>
+        <h3>A song on your wall</h3>
+        <p>Your own wall can play <strong>one song</strong>: an MP3, WAV or WAVE file of up to 16 MB, set from My Wall Style (on your dashboard, or in the pop-up on your wall). It belongs to the wall, not to a post &mdash; a song cannot be attached to one. It is stored as a file on the site&rsquo;s own disk under a random name, played from a public address that does not contain your name, and cleaned of its tags first (section 5). Replacing it, removing it, deleting your account or a moderator taking it down deletes the file. Only share a song you made or have the rights to share (Terms 10(c) and 11(e)): music reported by whoever owns it can be taken down.</p>
+        <p>When someone opens your wall, the song tries to start (after the 18+ question) and loops. Most browsers will not play sound until the visitor has pressed something; where the browser blocks it, the song starts on their first click or tap on the wall, or Enter or Space. Moving through the page with Tab or the arrows, typing in a box, or a press on the song&rsquo;s own player, the theme tune&rsquo;s player or the menu bar&rsquo;s ⏸ does not start it &mdash; and those last three, like the visitor playing or pausing it themselves, cancel the automatic start. A visible player on the wall lets any visitor pause it, and a pause sticks. A hidden tab pauses it, and coming back resumes it only if it was playing. One sound plays at a time: the theme tune&rsquo;s ▶ pauses the song, the song starting pauses the theme, and playing a voice memo or turning a video&rsquo;s sound on pauses the song. While the menu bar&rsquo;s ⏸ is on, a wall&rsquo;s song never starts by itself; pressing ⏸ pauses one that is playing and it stays paused; turning ⏸ off does not start it; and the song&rsquo;s own player still plays it when pressed.</p>
+        <h3>Reporting a wall</h3>
+        <p>Every post that is not yours has a ⚑ report control, and so does someone else&rsquo;s wall: <strong>⚑ Report</strong> beside Share reports the wall itself &mdash; its pictures, bio or song &mdash; to the moderators, with a sentence from you if you want. Signed out, it asks you to sign in first; you cannot report your own wall. Nothing is hidden automatically: a person decides. A moderator sees <strong>🧹 Take down song</strong> on a wall that has one, and on that wall&rsquo;s row in the moderation queue, where the song plays. It removes the song and its file, tells the owner in their notifications, and closes the open reports on that wall. Whenever a moderator takes down an uploaded file, its uploader is told whether it was their wall song, a picture on their wall, a picture or video in a post, or another file, and the open reports on every wall and post that used it are closed.</p>
         <h3>What is public and what is not</h3>
         <div class="tablewrap">
           <table>
@@ -1383,6 +1391,7 @@ boost earned  =  1 + (cash-out &minus; 1) / 4      capped at 5&times;
           <li><strong>The numbers in the menu bar are totals, with gaps.</strong> Views have been counted only since 13 October 2026, the live count starts again from zero whenever the server restarts, and the verified chart is not a history of past counts (Section 14c).</li>
           <li><strong>Encryption protects a stolen database, not a stolen server.</strong> If an attacker took the key as well as the data, the scrambling would not save you.</li>
           <li><strong>Sign in with Send rests on this site.</strong> It is one server, not a network: if the site is down, nobody can sign in to an app with it, and an app has to trust this site&rsquo;s word about who you are. An app that was handed your details can keep what it was handed; Revoke stops it getting more.</li>
+          <li><strong>A wall&rsquo;s song is not copy-protected.</strong> Its player offers no Download item (<code>controlslist=nodownload</code>), but that only tidies the menu: the file is served from a public address like every upload, and anyone who wants a copy can save it from there. Share only music you are happy for anyone to keep.</li>
           <li><strong>Rocket Run is fair but not provably fair.</strong> You are trusting the server's roll. Nothing is staked, so nothing is lost either way.</li>
           <li><strong>Points are not money.</strong> They cannot be cashed out, sold or transferred, and they never will be.</li>
           <li><strong>Nothing here is advice.</strong> The site shows what the blockchain says. What you do about it is yours to decide, and most new coins go to zero.</li>

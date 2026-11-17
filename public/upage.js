@@ -312,11 +312,18 @@ function paintAvatar(src) {
   // a cached image can be complete before it is in the page, and then 'load' never fires
   if (src && img.complete && img.naturalWidth > 0) { img.hidden = false; emo.hidden = true; }
 }
-/* The wall's song. Browsers will not start sound until a gesture, so a blocked start waits for the next
-   click or key. The control stays on the page either way: anyone can pause it (WCAG 1.4.2). The site's
-   own theme steps aside while this is playing. A hidden tab pauses it and picks up again on return. */
+/* The wall's song. Browsers will not start sound until a gesture, so a blocked start waits for the visitor's next press on
+   the page (armWallSong). The control stays on the page either way: anyone can pause it (WCAG 1.4.2). The site's own theme
+   steps aside while the song plays, and the song steps aside for any other sound the visitor starts (a voice memo, a video
+   with its sound on, the theme's own ▶). A hidden tab pauses it and picks up again on return.
+   The nav's ⏸ (html.motion-off, app.js — the one switch for motion and sound) covers the song too: while it is on, the song
+   never starts by itself — no start when the wall opens, no wait for a first press — and pressing it while the song plays
+   pauses the song as the visitor's own pause would (so nothing picks it up again). Turning it back off starts nothing. The
+   song's own ▶ still plays it whatever the switch says: that press is the visitor choosing this sound. */
 let wallSongWanted = false;
 let wallSongHold = false;   // a pause we asked for (tab hidden, age question) is not the visitor pressing pause
+let wallSongDisarm = null;  // ends the wait for a press, while there is one
+const soundPaused = () => document.documentElement.classList.contains('motion-off');
 function holdWallSong(audio) {
   wallSongHold = true;
   try { audio.pause(); } catch {}
@@ -327,33 +334,67 @@ function paintSong(src) {
   const audio = document.getElementById('wall-song-audio');
   if (!box || !audio) return;
   if (!src) {
+    if (wallSongDisarm) wallSongDisarm();
     wallSongWanted = false;
     holdWallSong(audio);
     audio.removeAttribute('src');
     try { audio.load(); } catch {}
     box.hidden = true;
+    const td = document.getElementById('wall-song-takedown'); if (td) td.hidden = true;
     return;
   }
   if (audio.getAttribute('src') === src && !box.hidden) return;
+  if (wallSongDisarm) wallSongDisarm();
   audio.src = src;
   box.hidden = false;
   const start = () => {
+    if (soundPaused()) return;   // the nav's ⏸ is on: the song waits for its own ▶
     document.dispatchEvent(new CustomEvent('jsi:wall-song'));
-    audio.play().then(() => { wallSongWanted = true; }).catch(() => armWallSong(audio));
+    audio.play().then(() => { wallSongWanted = true; }).catch((e) => { if (e && e.name === 'NotAllowedError') armWallSong(audio); });
   };
   if (window.AGE && AGE.needed) AGE.whenOk(start);
   else start();
 }
+/* The press that may start a blocked song: a click or tap anywhere on the wall, or Enter or Space — the gestures a browser
+   lets sound start from. Not Tab, an arrow or a modifier (someone moving through the page has not pressed anything), and
+   not typing in a box. A press on the song's own control, the theme player or the nav's ⏸ (motion and sound) is a choice
+   about sound in its own right: it ends the wait instead of starting the song. So does the song starting or pausing by any
+   other hand — its own ▶ and ⏸ never reach the page's listeners, and a visitor who paused it has answered. */
+const WALL_SONG_SOUND = '#wall-song, #music-player, #motion-btn';
 function armWallSong(audio) {
-  const fire = () => {
+  if (wallSongDisarm) wallSongDisarm();
+  const fire = (e) => {
+    const t = e.target && e.target.closest ? e.target : null;
+    if (e.type === 'keydown' && (e.repeat || (e.key !== 'Enter' && e.key !== ' ') || (t && t.closest('input, textarea, select, [contenteditable="true"]')))) return;
     cleanup();
+    if (t && t.closest(WALL_SONG_SOUND)) return;
+    if (soundPaused()) return;   // the ⏸ went on while it waited (another tab, a page restored with Back): no start
     document.dispatchEvent(new CustomEvent('jsi:wall-song'));
-    audio.play().then(() => { wallSongWanted = true; }).catch(() => {});
+    audio.play().then(() => { wallSongWanted = true; }).catch((err) => { if (err && err.name === 'NotAllowedError' && audio.getAttribute('src')) armWallSong(audio); });
   };
-  const targets = [[document, 'pointerdown'], [document, 'keydown'], [document, 'touchstart']];
-  const cleanup = () => targets.forEach(([t, e]) => t.removeEventListener(e, fire, true));
-  targets.forEach(([t, e]) => t.addEventListener(e, fire, { capture: true, once: true, passive: true }));
+  const cleanup = () => {
+    document.removeEventListener('click', fire, true);
+    document.removeEventListener('keydown', fire, true);
+    audio.removeEventListener('play', cleanup);
+    audio.removeEventListener('pause', cleanup);
+    if (wallSongDisarm === cleanup) wallSongDisarm = null;
+  };
+  document.addEventListener('click', fire, { capture: true, passive: true });
+  document.addEventListener('keydown', fire, { capture: true, passive: true });
+  audio.addEventListener('play', cleanup);
+  audio.addEventListener('pause', cleanup);
+  wallSongDisarm = cleanup;
 }
+/* The nav's ⏸ pressed (here, or in another tab of this browser: app.js sends the same event). On: the wait for a press ends and
+   a playing song pauses — not a hold, so the song's pause listener below takes it as the visitor's own and nothing resumes it.
+   Off: nothing starts. */
+document.addEventListener('jsi:sfx', (e) => {
+  if (!e.detail || e.detail.on !== false) return;
+  if (wallSongDisarm) wallSongDisarm();
+  wallSongWanted = false;   // said here as well: a pause while the tab is hidden is not taken as the visitor's
+  const audio = document.getElementById('wall-song-audio');
+  if (audio && !audio.paused) { try { audio.pause(); } catch {} }
+});
 document.addEventListener('jsi:age-open', () => {
   const audio = document.getElementById('wall-song-audio');
   if (audio && !audio.paused) { wallSongWanted = true; holdWallSong(audio); }
@@ -364,7 +405,22 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) { if (!audio.paused) holdWallSong(audio); }
   else if (wallSongWanted) audio.play().catch(() => {});
 });
-document.addEventListener('play', (e) => { if (e.target && e.target.id === 'wall-song-audio') wallSongWanted = true; }, true);
+/* One sound at a time. The song starting (however it was started) quiets the theme and anything else playing aloud; any other
+   sound the visitor starts — a voice memo, a video with its sound on — pauses the song, as the visitor pressing ⏸ would. */
+const otherSound = (m) => !!m && (m.tagName === 'AUDIO' || (m.tagName === 'VIDEO' && !m.muted));
+document.addEventListener('play', (e) => {
+  const song = document.getElementById('wall-song-audio');
+  if (!song || !e.target) return;
+  if (e.target === song) {
+    wallSongWanted = true;
+    document.dispatchEvent(new CustomEvent('jsi:wall-song'));
+    document.querySelectorAll('audio, video').forEach((m) => { if (m !== song && !m.paused && otherSound(m)) m.pause(); });
+  } else if (otherSound(e.target) && !song.paused) song.pause();
+}, true);
+document.addEventListener('volumechange', (e) => {   // a playing video unmuted is a sound the visitor chose
+  const song = document.getElementById('wall-song-audio');
+  if (song && !song.paused && e.target && e.target.tagName === 'VIDEO' && !e.target.muted && !e.target.paused) song.pause();
+}, true);
 document.addEventListener('pause', (e) => {
   if (e.target && e.target.id === 'wall-song-audio' && !wallSongHold && !document.hidden) wallSongWanted = false;
 }, true);
@@ -662,6 +718,42 @@ if (alertBtn) alertBtn.addEventListener('click', async () => {
   finally { alertBtn.disabled = false; }
 });
 
+/* ⚑ Report: the wall itself — its pictures, bio or song — to the moderators, by its @name (the page has no account number).
+   Someone else's wall only; signed out, it opens sign-in as every report control does. */
+const reportWallBtn = document.getElementById('report-wall-btn');
+if (reportWallBtn) reportWallBtn.addEventListener('click', async () => {
+  if (!(window.AUTH && AUTH.user)) { if (window.AUTH && AUTH.open) AUTH.open(); return; }
+  const reason = window.prompt('Why are you reporting @' + uname + '’s wall — its pictures, bio or song? (optional — a sentence helps the moderators)');
+  if (reason === null) return;
+  reportWallBtn.disabled = true;
+  try {
+    const j = await api('/api/report', { method: 'POST', body: { kind: 'user', username: uname, reason: String(reason).slice(0, 500) } });
+    sendToast(j.already ? 'You already reported this wall — thanks, it is in the queue' : '⚑ Reported. A moderator will look at it.');
+    reportWallBtn.setAttribute('aria-pressed', 'true');
+    reportWallBtn.textContent = '⚑ Reported';
+  } catch (err) { sendToast('⚠️ ' + err.message); }
+  finally { reportWallBtn.disabled = false; }
+});
+/* 🧹 Take down song: a moderator, on the wall itself, sends the takedown the admin queue has always had for an upload
+   (POST /api/admin/takedown kind 'upload'): the song and its file go, its owner is told, the reports on the wall close. */
+const songTakedown = document.getElementById('wall-song-takedown');
+if (songTakedown) songTakedown.addEventListener('click', async () => {
+  const song = document.getElementById('wall-song-audio');
+  const src = (song && song.getAttribute('src')) || '';
+  const name = src.startsWith('/uploads/') ? src.slice('/uploads/'.length) : '';
+  if (!name) return;
+  const note = window.prompt('Take down @' + uname + '’s wall song? A note for its owner (optional, shown in their notification):');
+  if (note === null) return;
+  songTakedown.disabled = true;
+  try {
+    await api('/api/admin/takedown', { method: 'POST', body: { kind: 'upload', name, note } });
+    paintSong(null);
+    sendToast('🧹 Song taken down — its owner is told');
+    if (window.SFX) SFX.play('remove');
+  } catch (err) { sendToast('⚠️ ' + err.message); }
+  finally { songTakedown.disabled = false; }
+});
+
 document.getElementById('share-btn').addEventListener('click', async () => {
   const url = location.origin + '/u/' + encodeURIComponent(uname);
   try {
@@ -707,6 +799,9 @@ async function loadPage() {
       dia.hidden = false;
     }
     applyTheme(u.theme);
+    const isMod = !!(window.AUTH && AUTH.user && AUTH.user.admin);
+    if (reportWallBtn) reportWallBtn.hidden = !!u.isMe;
+    if (songTakedown) songTakedown.hidden = !(isMod && !u.isMe && u.theme && u.theme.wall_audio);
     if (window.WallMedia) WallMedia.set(u);   // the picture and the banner open full screen; on your own wall, with your Wall Style
     if (u.isMe) {
       document.getElementById('edit-btn').hidden = false;

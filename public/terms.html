@@ -50,7 +50,8 @@
   .t-toc a:hover { text-decoration: underline; }
   .t-sec { margin: 0 0 1.8rem; scroll-margin-top: 1rem; }
   .t-sec h3 { color: var(--g-green-hi); font-size: max(var(--text-floor), 1.05rem); margin: 0 0 0.5rem; line-height: 1.35; }
-  .t-sec p { margin: 0.6rem 0; line-height: 1.7; color: #dfe5d6; font-size: max(var(--text-floor), 0.93rem); }
+  /* break-word: 9(e) and 9(g) spell out the 42-character burn address, which made a 320 px screen scroll sideways */
+  .t-sec p { margin: 0.6rem 0; line-height: 1.7; color: #dfe5d6; font-size: max(var(--text-floor), 0.93rem); overflow-wrap: break-word; }
   .t-sec b { color: var(--g-text); }
   .t-back { display: inline-flex; align-items: center; gap: 0.4rem; margin-bottom: 1.2rem;
     color: var(--g-green-hi); text-decoration: none; font-weight: 700; font-size: max(var(--text-floor), 0.9rem); }
@@ -67,7 +68,7 @@
        signed in and got here from a footer. -->
   <a class="t-back" href="/?invite=1">← Back to the invite</a> · <a class="t-back" href="/">Home 🏠</a>
   <h1 class="t-h1">Terms of Service</h1>
-  <p class="t-meta">Version 2026-11-03 · $Send / JustSendIt · <a href="mailto:SendRH@Atomicmail.io" style="color:var(--g-green-hi)">SendRH@Atomicmail.io</a></p>
+  <p class="t-meta">Version 2026-11-17 · $Send / JustSendIt · <a href="mailto:SendRH@Atomicmail.io" style="color:var(--g-green-hi)">SendRH@Atomicmail.io</a></p>
 
   <div class="t-lede">
     <p><b>The short version, and it is the honest one.</b></p>
@@ -247,9 +248,9 @@
 <h3>10. Acceptable Use</h3>
 <p>(a) The basic rule: use the Site the way a decent person would use a public community space, and do not use it to harm anyone, to break the law, or to make the Site worse for everyone else.</p>
 <p>(b) You are responsible for everything you post, publish, upload, send, vote on, or make with your account, and for the consequences of it. You — not us — are the author and publisher of what you put on the Site.</p>
-<p>(c) Uploads must be your own content, within the file types and size limits shown in the uploader, and free of malware. We may transcode, resize, compress, strip metadata from, or refuse any file.</p>
+<p>(c) Uploads must be your own content, or content you have the right to share, within the file types and size limits shown in the uploader, and free of malware. We may transcode, resize, compress, strip metadata from, or refuse any file.</p>
 <p>(d) Remember where you are. This is a community about assets that are extremely volatile and frequently go to zero. Talk about them as you like, but do not talk to other people in a way that pressures, misleads or frightens them into spending money.</p>
-<p>(e) If you think something on the Site breaches these rules, report it in the product where a report control exists, or email SendRH@Atomicmail.io with a link and a short explanation. Do not take enforcement into your own hands with pile-ons, brigading or doxxing.</p>
+<p>(e) If you think something on the Site breaches these rules, report it in the product where a report control exists (each post has one, and so does each member's wall: ⚑ Report, for its pictures, bio or song), or email SendRH@Atomicmail.io with a link and a short explanation. Do not take enforcement into your own hands with pile-ons, brigading or doxxing.</p>
 </section>
 
 <section class="t-sec" id="s11">
@@ -284,7 +285,7 @@
 
 <section class="t-sec" id="s13">
 <h3>13. Your Content and the Licence You Give Us</h3>
-<p>(a) "Your Content" means anything you post, upload or create on the Site: wall posts, comments, reactions, images, GIFs, videos, avatars, banners, usernames, bios, links, community names and descriptions, proposals, votes, wallet labels, and Send Calls.</p>
+<p>(a) "Your Content" means anything you post, upload or create on the Site: wall posts, comments, reactions, images, GIFs, videos, songs and other audio, avatars, banners, usernames, bios, links, community names and descriptions, proposals, votes, wallet labels, and Send Calls.</p>
 <p>(b) You keep ownership of Your Content. We do not claim it.</p>
 <p>(c) You give us a worldwide, non-exclusive, royalty-free, sublicensable and transferable licence to host, store, cache, reproduce, adapt (for formatting, resizing, transcoding and moderation), publish, display, distribute and perform Your Content, and to make it available to other users and to the public, for the purposes of operating, improving, moderating and promoting the Site and the Services. This licence includes using Your Content in previews, embeds, link cards, feeds, leaderboards, notifications, and in our own posts about the Site on social media.</p>
 <p>(d) The licence lasts as long as we host Your Content and for a reasonable period afterwards for backups, caches, moderation records and legal records. It survives the deletion of your account to the extent needed for those purposes, and it survives permanently for content that is public and designed to be permanent — see Send Calls Are Permanent.</p>

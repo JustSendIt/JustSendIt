@@ -318,6 +318,7 @@
     if (url) {
       const a = document.createElement('audio');
       a.controls = true; a.preload = 'metadata'; a.src = url;
+      a.setAttribute('controlslist', 'nodownload');   // no Download item in the control's menu (the file keeps its address: a menu item, not a lock)
       a.setAttribute('aria-label', 'Your wall song');
       zone.appendChild(a);
     } else {
@@ -380,7 +381,7 @@
     const state = { accent: t.accent || '', bg: t.wall_bg || '', avatar: u.avatar || '🚀' };
     container.innerHTML =
       '<div class="ws">' +
-        '<p class="ws-lead">Everything on your wall, in one place. Each change saves as you make it — your bio and links when you leave the box — and your wall shows it at once. A song plays for anyone who opens your wall.</p>' +
+        '<p class="ws-lead">Everything on your wall, in one place. Each change saves as you make it — your bio and links when you leave the box — and your wall shows it at once. A wall song starts for visitors once their browser allows sound — usually their first tap on your wall — but never by itself for a visitor who has paused sound with the ⏸ in the menu bar.</p>' +
         '<section class="ws-sec" id="ws-sec-avatar" aria-labelledby="ws-h-avatar" tabindex="-1">' +
           '<h3 class="ws-h" id="ws-h-avatar">🖼️ Profile picture</h3>' +
           '<p class="f-label">Photo or video <span>(replaces your emoji on your wall)</span></p>' +
@@ -407,8 +408,9 @@
         '</section>' +
         '<section class="ws-sec" id="ws-sec-song" aria-labelledby="ws-h-song" tabindex="-1">' +
           '<h3 class="ws-h" id="ws-h-song">🎵 Wall song</h3>' +
-          '<p class="f-label">MP3, WAV, or WAVE <span>(plays when anyone opens your wall — they can pause it)</span></p>' +
+          '<p class="f-label">MP3, WAV, or WAVE <span>(starts for visitors once their browser allows sound — usually their first tap on your wall, never by itself for one who has the menu bar\'s ⏸ on — and they can pause it)</span></p>' +
           '<div class="img-slot song-slot" id="ws-slot-song"></div>' +
+          '<p class="modal-note song-rights">Only a song you made or have the rights to share (<a href="/terms">Terms</a> 10(c) and 11(e)). Music reported by whoever owns it can be taken down.</p>' +
         '</section>' +
         '<section class="ws-sec" id="ws-sec-about" aria-labelledby="ws-h-about" tabindex="-1">' +
           '<h3 class="ws-h" id="ws-h-about">✍️ Bio and links</h3>' +
