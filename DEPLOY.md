@@ -445,45 +445,89 @@ never written to a log line, and is never sent anywhere but Telegram. If it leak
 
 ## SendRH.com follows GitHub
 
-SendRH.com is always what `main` of github.com/JustSendIt/JustSendIt holds, once it passes. The same Mac
-that publishes sendy.gg publishes this site. Cloudflare can't build or host it: it is one Node process
-with the SQLite database and the uploads, so Cloudflare only carries visitors to this Mac through the
-tunnel. The link to GitHub lives on this Mac instead, the same way sendy.gg's does.
+**How SendRH.com runs on the Mac today.** The live checkout is `~/justsendit-live`: a clone of its own, on branch
+`main`, whose `origin` is the development checkout. It is not under `~/Desktop` because launchd cannot read
+`~/Desktop`, `~/Documents` or `~/Downloads` (macOS privacy), and `~/Desktop/JustSendIt` is the development checkout,
+with its own test `data/` and `.env`. The LaunchAgent `com.justsendit.server` runs `caffeinate -s node server.js` in
+`~/justsendit-live` with `KeepAlive`, on `127.0.0.1:8642`, and the `cloudflared` tunnel carries sendrh.com to that
+port. Live's `data/`, `.env`, the keyring volume and the backups volume belong to that checkout and that plist's
+environment. Nothing in `ops/` changes any of them.
 
-- `com.sendrh.deploy` (LaunchAgent, template `ops/com.sendrh.deploy.plist`) runs `ops/auto-deploy.sh`
-  every 2 minutes, as GitHub's `main` last fetched has it.
-- A pass with nothing new takes a second and logs nothing. When `main` moved past what is live, it
-  checks the new commit out in its own build worktree (`~/sendrh-build`, `npm ci` when the lockfile
-  changed), runs `npm test`, and runs `ops/update-live.sh <commit>`. The live checkout
-  (`~/Desktop/JustSendIt`) moves to that commit. `data/`, `.env` and uploads stay. `com.sendrh.site`
-  restarts; the app drains on SIGTERM and checkpoints SQLite. `cloudflared` is left running.
-- Spaced out on the same terms as sendy.gg (owner, 2026-11-03: "space out the deploy to manage the load
-  of the machine memory. No rush"): a pass starts at least 30 minutes after the last deploy
-  (`DEPLOY_MIN_GAP`), only while the 5-minute load average is under 36 (`HEAVY_MAX_LOAD`), and not while
-  sendy.gg's own deploy holds `~/.config/sendy-heavy`. Otherwise the next tick tries again; the log says
-  once why it waits.
-- A commit that fails any step never goes live and isn't tried again; the next push is. Only a
-  fast-forward of what is live deploys by itself; a rewritten `main` waits for `ops/update-live.sh <commit>`
-  by hand. If `https://sendrh.com/healthz` does not answer after the restart, the previous commit is put
-  back and started again.
-- The log is `~/Library/Logs/sendrh-deploy/deploy.log`, with each attempt's full output beside it
-  (`<commit>.log`); the state is in `~/.config/sendrh-deploy`.
-
-A fetch does not check the commit out, so `ops/` is not in the live folder until the first
-deploy. `ops/install-mac.sh` is read from `origin/main` and writes both plists the same way:
+**The manual deploy:**
 
 ```sh
-ops/auto-deploy.sh --status              # live, GitHub, held or failed, the last lines of the log
-ops/auto-deploy.sh --hold "why"          # pushes still land on GitHub; nothing goes live
-ops/auto-deploy.sh --release             # the next pass deploys GitHub's main
-cd ~/Desktop/JustSendIt && git fetch origin main && git show origin/main:ops/install-mac.sh | bash
+~/justsendit-live/ops/auto-deploy.sh --hold "manual deploy"   # only once com.sendrh.deploy is installed: waits for a running pass
+cd ~/justsendit-live && git pull -q --ff-only && npm ci --omit=dev && launchctl kickstart -k gui/$(id -u)/com.justsendit.server
+curl -fsS http://127.0.0.1:8642/healthz && node scripts/live-check.mjs https://sendrh.com
+~/justsendit-live/ops/auto-deploy.sh --release                # afterwards, if the deploy agent is installed
 ```
 
-The first pass after that runs the full test suite before the live folder changes. On GitHub's
-runners that suite takes about 15 minutes. `cloudflared` stays up the whole time.
+**Following GitHub automatically (optional, off until a person installs it).** The LaunchAgent `com.sendrh.deploy`
+(`ops/com.sendrh.deploy.plist`) makes `main` of github.com/JustSendIt/JustSendIt go live once it passes. Nothing
+installs it by itself, and it starts held.
 
-The tunnel's ingress stays `service: http://127.0.0.1:8642`. Whoever can push to `main` decides what
-SendRH.com runs.
+- Every 2 minutes it runs a copy of the **live** commit's `ops/auto-deploy.sh`, never a script fetched from GitHub. A
+  pushed change to the deploy steps runs only once it has passed the tests and gone live through the steps before it.
+- It has its own clone of the public repo, `~/sendrh-repo` (HTTPS, so no key), and builds in `~/sendrh-build`, a
+  worktree of that clone. It never uses `~/Desktop/JustSendIt`, and refuses any folder under `~/Desktop`,
+  `~/Documents` or `~/Downloads`.
+- A pass deploys only when GitHub's `main` is a fast-forward of what is live, live is on `main` with no uncommitted
+  change, nothing is held, and GitHub reports `main` as a protected branch. It also waits for 30 minutes after the
+  last deploy (`DEPLOY_MIN_GAP`), for a 5-minute load average under 36 (`HEAVY_MAX_LOAD`), and for the one deploy
+  slot it shares with sendy.gg's deployer (`~/.config/sendy-heavy/deploy`), as the owner asked on 2026-11-03 ("space
+  out the deploy to manage the load of the machine memory. No rush"). A pass with nothing to do logs nothing, and a
+  reason to wait is logged once.
+- The build: `npm ci` when the commit's `package-lock.json` is not what `~/sendrh-build/node_modules` was installed
+  from, then `npm test`. Suites that fail are run once more on their own, because a busy Mac fails timing tests. The
+  pass fails only if they fail again, and the log names the suites that passed the second time.
+- Then the live commit's `ops/update-live.sh <commit>`. It installs the new `package-lock.json` with
+  `npm ci --omit=dev` in a folder beside live first, so live keeps its own `node_modules` until that has worked. Then
+  it fast-forwards live's `main` (`git merge --ff-only`, which never overwrites an untracked file), swaps the new
+  `node_modules` in, and runs `launchctl kickstart -k gui/$(id -u)/com.justsendit.server`. It never installs,
+  copies or bootstraps a LaunchAgent, and it kills no process by its port.
+- Healthy means a **new** process of `com.justsendit.server` answers `http://127.0.0.1:8642/healthz` within about
+  2 minutes. An answer from whatever else holds the port does not count: a server that loses the port stays alive
+  without listening. If the new commit is not healthy, the previous commit and its `node_modules` are put back,
+  restarted and checked the same way. **The database is not rolled back**: whatever the new commit's first boot
+  changed in it stays. If the previous commit is not healthy either, deploys are held and the log says SITE DOWN.
+- After that, `scripts/live-check.mjs https://sendrh.com` runs from outside, as the manual deploy does. If it fails
+  twice, 30 seconds apart, the new commit stays live and further deploys are held for a person. This Mac's resolver
+  fails now and then, so a DNS blip never rolls back a healthy deploy.
+- A commit whose tests fail, or that does not come up healthy, is not deployed and not tried again. `--retry` tries it
+  again, and so does the next push. A step that failed before live changed (the build worktree, the npm registry,
+  another update running) is tried again after 10 minutes, 3 times at most.
+- A rewritten `main`, a live checkout with a commit GitHub lacks, a live checkout off `main`, or uncommitted changes
+  in live: each waits for a person. A person can move live to any commit with
+  `~/justsendit-live/ops/update-live.sh <commit> --reset` (hold first; for a commit only GitHub has, run
+  `git -C ~/sendrh-repo fetch` and put `SENDRH_PROJECT=~/sendrh-repo` in front). A rollback that way lasts only
+  while deploys are held: after `--release`, GitHub's `main` deploys again unless it was recorded as failed.
+- The log is `~/Library/Logs/sendrh-deploy/deploy.log`, with each attempt's full output beside it (`<commit>.log`)
+  and launchd's own output in `launchd.log`. The state is in `~/.config/sendrh-deploy`.
+
+**Who decides what SendRH.com runs.** Code pushed to `main` runs on this Mac during `npm test`, as this Mac's user,
+before any person has looked at it. It can read everything that user can: the key volume, the backups, live's `.env`,
+`~/.ssh`, the tunnel's credentials. macOS's `sandbox-exec` cannot fence the tests in: the Chrome suites die inside it ("GPU
+process isn't usable") and the suite's own rehearsals cannot nest it. So before `--release`, protect `main` on
+GitHub: a pull request approved by the owner and a passing CI check, with no bypass, and no merge or push rights on
+`main` for the Cursor app or any other bot. A pass asks GitHub's public API and deploys nothing while `main` is
+unprotected. That API says only *that* `main` is protected, not which rules apply, so the rules are the owner's to
+check.
+
+**Installing it**, once a commit with this `ops/` is live by the manual deploy and `main` is protected:
+
+```sh
+~/justsendit-live/ops/install-mac.sh --yes     # clones ~/sendrh-repo if missing, loads com.sendrh.deploy HELD
+~/justsendit-live/ops/auto-deploy.sh --status  # live, GitHub, held / failed / retrying / running, the last log lines
+~/justsendit-live/ops/auto-deploy.sh --release # the next pass deploys GitHub's main
+~/justsendit-live/ops/auto-deploy.sh --hold "why"   # stop; waits for a pass already running to finish
+~/justsendit-live/ops/auto-deploy.sh --retry   # try a commit recorded as failed once more
+launchctl bootout gui/$(id -u)/com.sendrh.deploy  # remove the agent altogether
+```
+
+The installer refuses to run without `--yes`, from any copy but `~/justsendit-live/ops`, or while
+`com.justsendit.server` is not loaded. It does not touch the site's agent, port 8642, `cloudflared`, `data/` or
+`.env`. If an earlier installer left a second site agent, `com.sendrh.site`, it boots that out and removes its plist.
+The tunnel's ingress stays `service: http://127.0.0.1:8642`.
 
 ## Operate
 
@@ -491,9 +535,9 @@ SendRH.com runs.
 - **Logs:** `journalctl -u justsendit -f` (VPS) or the platform's log view. Whenever the process looks like
   production (`NODE_ENV=production`, an `https` `BASE_URL`, or `COOKIE_SECURE`/`TRUST_PROXY` set) the boot prints
   `⚠️` warnings if `BASE_URL`/`COOKIE_SECURE`/`TRUST_PROXY` look misconfigured — including a forgotten `BASE_URL`.
-- **Restart:** `sudo systemctl restart justsendit` on a VPS, or `launchctl kickstart -k gui/$(id -u)/com.sendrh.site` on the Mac. The app catches SIGTERM, finishes in-flight
-  requests, checkpoints the WAL, and exits cleanly — no corruption, no WAL bloat. A push to `main` does this
-  on its own once `com.sendrh.deploy` is installed.
+- **Restart:** `sudo systemctl restart justsendit` on a VPS, or `launchctl kickstart -k gui/$(id -u)/com.justsendit.server` on the Mac. The app catches SIGTERM, finishes in-flight
+  requests, checkpoints the WAL, and exits cleanly — no corruption, no WAL bloat. Once `com.sendrh.deploy` is
+  installed and released, a push to `main` that passes does this on its own.
 - **Backups (built in):** `data/app.db` is your entire user base. The server itself writes one consistent snapshot
   per UTC day to `data/backups/app-YYYY-MM-DD.db` (SQLite's online backup API via `node:sqlite` — safe while
   running, never blocks requests; one a day, the last 3 kept inside the data directory, 7 when `BACKUP_DIR` points outside it; set `BACKUP_DIR` to move them). **Copy that directory
