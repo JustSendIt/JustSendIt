@@ -217,6 +217,19 @@ try {
     && AGENT_CMD.includes('"$HOME/justsendit-live/ops/auto-deploy.sh"') && AGENT_CMD.includes('mv -f')
     && !/origin\/main|git /.test(AGENT_CMD) && !/Desktop/.test(plist)
     && /<key>EnvironmentVariables<\/key>\s*<dict>\s*<key>PATH<\/key>\s*<string>[^<]*<\/string>\s*<\/dict>/.test(plist), AGENT_CMD);
+  /* The repo is public: no file in ops/ or tests/ names the Mac's account, and the plist's own paths are placeholders that
+     install-mac.sh fills in. (The pattern is any concrete home folder under /Users, so this check names nobody either.) */
+  const tracked = (() => {
+    const r = spawnSync('git', ['ls-files', '-z', '--', 'ops', 'tests'], { cwd: ROOT, encoding: 'utf8', env: { ...baseEnv, ...gitEnv } });
+    if (r.status === 0 && r.stdout) return r.stdout.split('\0').filter(Boolean);
+    return ['ops', 'tests'].flatMap((d) => readdirSync(j(ROOT, d), { recursive: true, withFileTypes: true }).filter((e) => e.isFile()).map((e) => path.relative(ROOT, j(e.parentPath || e.path, e.name))));
+  })();
+  const named = tracked.filter((f) => /\/Users\/[A-Za-z0-9._-]/.test(readFileSync(j(ROOT, f), 'latin1')));
+  check('no tracked file in ops/ or tests/ holds a /Users/<account> path (' + tracked.length + ' files read)', tracked.length > 20 && named.length === 0, named.join(' '));
+  check('  ...the LaunchAgent\'s home folder, logs and node folder are placeholders the installer fills in',
+    /<key>WorkingDirectory<\/key>\s*<string>__HOME__<\/string>/.test(plist) && (plist.match(/<string>__HOME__\/Library\/Logs\/sendrh-deploy\/launchd\.log<\/string>/g) || []).length === 2
+    && /<key>PATH<\/key>\s*<string>__NODE_BIN__:\/opt\/homebrew\/bin:\/usr\/bin:\/bin:\/usr\/sbin:\/sbin<\/string>/.test(plist)
+    && /sed -e "s\|<string>__HOME__\|<string>\$HOME\|g" -e "s\|<string>__NODE_BIN__:\|<string>\$NODE_BIN:\|g"/.test(src['install-mac.sh']));
   check('update-live restarts com.justsendit.server and nothing else: no bootstrap, no plist copied, no detached checkout',
     /com\.justsendit\.server/.test(src['update-live.sh']) && /launchctl kickstart -k "\$LABEL"/.test(src['update-live.sh'])
     && !/bootstrap|LaunchAgents|--detach|checkout -q -f|checkout -f/.test(src['update-live.sh'].replace(/^#.*$/gm, '')));
@@ -549,17 +562,33 @@ try {
     const unloaded = install(own, ['--yes']);
     check('  ...nor when com.justsendit.server is not loaded', unloaded.status === 1 && /com\.justsendit\.server is not loaded/.test(unloaded.stderr) && !existsSync(w.agents));
     writeFileSync(j(w.fake, 'loaded'), LABEL + '\n' + SITE + '\n');
+    // a shell with no node: the agent's PATH could not be filled in, so nothing is written (only where no system node exists)
+    const bare = [w.bin, '/usr/bin', '/bin', '/usr/sbin', '/sbin'].join(':');
+    if (spawnSync('/bin/bash', ['-c', 'command -v node'], { encoding: 'utf8', env: { PATH: bare } }).status !== 0) {
+      const nodeless = install(own, ['--yes'], { PATH: bare });
+      check('  ...nor when no node answers in the shell it runs from (the agent\'s PATH is filled in from it)',
+        nodeless.status === 1 && /no node on PATH/.test(nodeless.stderr) && !existsSync(w.agents) && !existsSync(j(w.state, 'hold')), oneLine(nodeless.stderr));
+    } else console.log('NOTE a node answers on the system PATH here, so the "no node" refusal is not rehearsed');
     rmSync(w.repo, { recursive: true });
     mkdirSync(w.agents, { recursive: true });
     writeFileSync(j(w.agents, 'com.sendrh.site.plist'), '<plist/>');   // left by the 2026-11-06 installer
     const n0 = calls(w).length;
     const ok = install(own, ['--yes']);
     const made = calls(w).slice(n0);
+    // what it writes: the plist in git, with this account's home folder and the folder of the node the shell finds
+    const nodeDir = path.dirname(spawnSync('/bin/bash', ['-c', 'command -v node'], { encoding: 'utf8', env: envFor(w) }).stdout.trim());
+    const filled = read(j(w.live, 'ops', 'com.sendrh.deploy.plist')).split('<string>__HOME__').join('<string>' + w.home).split('<string>__NODE_BIN__:').join('<string>' + nodeDir + ':');
+    const wrote = read(j(w.agents, 'com.sendrh.deploy.plist'));
     check('with --yes it clones the deployer\'s repo, writes only com.sendrh.deploy, loads it HELD, and removes com.sendrh.site',
-      ok.status === 0 && git(w.repo, ['remote', 'get-url', 'origin']) === w.gh && read(j(w.agents, 'com.sendrh.deploy.plist')) === read(j(w.live, 'ops', 'com.sendrh.deploy.plist'))
+      ok.status === 0 && git(w.repo, ['remote', 'get-url', 'origin']) === w.gh && wrote === filled
       && !existsSync(j(w.agents, 'com.sendrh.site.plist')) && readdirSync(w.agents).join() === 'com.sendrh.deploy.plist' && /nothing deploys until/.test(read(j(w.state, 'hold')))
       && made.join(' | ') === ['print ' + SITE, 'bootout ' + 'gui/' + UID + '/com.sendrh.site', 'bootout gui/' + UID + '/com.sendrh.deploy', 'bootstrap gui/' + UID + ' ' + j(w.agents, 'com.sendrh.deploy.plist')].join(' | '),
       oneLine(ok.stdout + ok.stderr + made.join(' | ')));
+    const lint = spawnSync('/bin/bash', ['-c', 'command -v plutil >/dev/null 2>&1 || exit 0; plutil -lint -s "$1"', 'lint', j(w.agents, 'com.sendrh.deploy.plist')], { encoding: 'utf8' });
+    check('  ...with the placeholders filled in: this home folder for the agent\'s folder and logs, this node\'s folder first on its PATH, a valid plist',
+      wrote.includes('<key>WorkingDirectory</key>\n  <string>' + w.home + '</string>') && wrote.split('<string>' + w.home + '/Library/Logs/sendrh-deploy/launchd.log</string>').length === 3
+      && wrote.includes('<string>' + nodeDir + ':/opt/homebrew/bin:') && !/<string>__/.test(wrote) && nodeDir.startsWith('/') && lint.status === 0 && /deploy agent runs node from/.test(ok.stdout),
+      oneLine(nodeDir + ' ' + lint.stdout + lint.stderr));
     check('  ...and the site kept running in the same process: nothing was killed or restarted', sitePid(w) === pid && (await serving(w)) === 'one' && !made.some((x) => x.startsWith('kickstart')));
     const c = push(w, 'C', { 'app.txt': 'two\n' });
     const r = pass(w);

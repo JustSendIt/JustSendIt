@@ -17996,7 +17996,7 @@ const server = http.createServer(async (req, res) => {
         if ((mediaByIp.get(upIp) || 0) >= MEDIA_PER_IP) return bad(res, 'too many uploads in flight from this network — let them finish first', 429);
         const mime = String(req.headers['content-type'] || '').split(';')[0].trim().toLowerCase();
         const spec = UPLOAD_KINDS[mime];
-        if (!spec) return bad(res, 'unsupported media type — use JPG, PNG, WebP, GIF, MP4 or WebM', 415);
+        if (!spec) return bad(res, 'unsupported media type — use JPG, PNG, WebP, GIF, MP4 or WebM (a wall song: MP3 or WAV)', 415);
         if (spec.kind === 'audio' && !VOICE_MEMOS) return bad(res, 'voice memos are switched off', 415);
         const q0 = db.prepare('SELECT upload_bytes u FROM users WHERE id=?').get(me.id);
         if (q0 && q0.u >= UPLOAD_USER_QUOTA) return bad(res, 'you’ve hit your media storage limit — delete some old posts first', 413);
