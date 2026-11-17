@@ -50,7 +50,7 @@ try {
   const s10 = (/<section class="t-sec" id="s10">[\s\S]*?<\/section>/.exec(TERMS) || [''])[0], s11 = (/<section class="t-sec" id="s11">[\s\S]*?<\/section>/.exec(TERMS) || [''])[0];
   check('the uploader cites Terms 10(c) and 11(e), and they still say what it cites them for: uploads must be your own content; no music you have no right to use',
     /Only a song you made or have the rights to share \(<a href="\/terms">Terms<\/a> 10\(c\) and 11\(e\)\)\. Music reported by whoever owns it can be taken down\./.test(PROFILE)
-    && /<h3>10\. Acceptable Use<\/h3>/.test(s10) && /<p>\(c\) Uploads must be your own content/.test(s10)
+    && /<h3>10\. Acceptable Use<\/h3>/.test(s10) && /<p>\(c\) Uploads must be your own content, or content you have the right to share,/.test(s10)
     && /<h3>11\. Prohibited Conduct<\/h3>/.test(s11) && /<p>\(e\) Infringe anyone's copyright[^<]*music[^<]*you have no right to use/.test(s11));
 
   /* ═══ the README ═══ */
@@ -80,6 +80,13 @@ try {
     && /Someone else's wall carries ⚑ Report, which sends the wall itself — its pictures, bio or song — to the moderators\./.test(wallCard), wallCard.slice(0, 400));
   check('  ...and its ⏸ rule covers a wall\'s song (never starts by itself while on; off does not start it; its own player still plays it)',
     /pauses the site's sound effects and its decorative motion \(the ticker, the floating emoji\) together, and a wall's song with them, and this browser remembers it\. While it is on, a wall's song never starts by itself, and turning it off does not start one; the song's own player still plays it when you press it\. The theme tune has its own button/.test(ABOUT));
+  /* the docs describe the ⏸ rule as shipped: hold them to the code that does it, so docs without the code fail here */
+  const UPAGE = PUB('upage.js');
+  check('  ...and that ⏸ rule is in the wall song code (no start while motion-off, on open or on the first press; ⏸ pauses a playing song)',
+    /const soundPaused = \(\) => document\.documentElement\.classList\.contains\('motion-off'\)/.test(UPAGE) && (UPAGE.match(/if \(soundPaused\(\)\) return;/g) || []).length >= 2 && /document\.addEventListener\('jsi:sfx'/.test(UPAGE));
+  check('the privacy table has a row for the reports you file: seen only by moderators, the reported member not told who, deleted with your account; the deletion paragraph lists them',
+    /<tr><td>A report you file: what you reported \(a post, a comment or someone's wall\)[^<]*<\/td><td>[^<]*<\/td><td>Plain text, seen only by the site's moderators; the site does not tell the member you reported who reported them\. Deleted when you delete your account<\/td><\/tr>/.test(PRIV)
+    && /points ledger, uploads, posts and the reports you filed;/.test(PRIV) && /DELETE FROM reports WHERE reporter_id = \?/.test(SRC));
   check('  ...still Thirteen tools, thirteen cards', /Thirteen tools, one community\./.test(ABOUT) && (ABOUT.slice(ABOUT.indexOf('Everything You Can Do Here'), ABOUT.indexOf('Send Power ⚡ — the game')).match(/<details class="pillar reveal">/g) || []).length === 13);
 
   /* ═══ the White Paper ═══ */
@@ -89,7 +96,7 @@ try {
     && /Most browsers will not play sound until the visitor has pressed something; where the browser blocks it, the song starts on their first click or tap on the wall, or Enter or Space\./.test(s14)
     && /While the menu bar’s ⏸ is on, a wall’s song never starts by itself; pressing ⏸ pauses one that is playing and it stays paused; turning ⏸ off does not start it; and the song’s own player still plays it when pressed\./.test(s14), s14.slice(0, 300));
   check('  ...a wall\'s ⚑ Report and the song takedown, which tells the owner and closes the wall\'s reports',
-    /⚑ Report beside Share reports the wall itself — its pictures, bio or song — to the moderators/.test(s14) && /A moderator sees 🧹 Take down song on a wall that has one\. It removes the song and its file, tells the owner in their notifications, and closes the open reports on that wall\./.test(s14));
+    /⚑ Report beside Share reports the wall itself — its pictures, bio or song — to the moderators/.test(s14) && /A moderator sees 🧹 Take down song on a wall that has one, and on that wall’s row in the moderation queue, where the song plays\. It removes the song and its file, tells the owner in their notifications, and closes the open reports on that wall\./.test(s14));
   check('  ...§04 has the ticket\'s last step, and §05 the 16 MB row and the song\'s tags',
     /With a ticket in hand, the last step is on the ticket itself\./.test(flat(WP)) && /One press of Sign in with wallet — read-only 🦊 closes the ticket/.test(flat(WP))
     && /<tr><td class="name">MP3, WAV \(a wall&rsquo;s song\)<\/td><td class="num">16 MB<\/td><\/tr>/.test(WP) && /A wall’s song is cleaned the same way\. An MP3 loses every tag/.test(flat(WP)));

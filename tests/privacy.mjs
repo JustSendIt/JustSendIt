@@ -99,6 +99,8 @@ try {
     insCode.run(cRedeemed, u.id, Date.now(), Date.now(), null, createHash('sha256').update(passTok).digest('hex'), Date.now());
     insCode.run(cUsed, u.id, Date.now(), Date.now(), joiner.id, null, Date.now());
     insCode.run(cOthers, other.id, Date.now(), null, null, null, null);
+    // a report they filed about someone else's wall: it goes with them (reports are keyed by reporter_id, not user_id)
+    db.prepare('INSERT INTO reports (reporter_id, kind, target_id, reason, created_at) VALUES (?,?,?,?,?)').run(u.id, 'user', other.id, 'pv report ' + hex(3), Date.now());
 
     const del = await api('/api/account/delete', { method: 'POST', sid: u.sid, body: { confirm: 'DELETE', current: { code: totp(secret) } } });
     check('an account with an authenticator can delete itself (the factor arrives nested, as the page sends it)', del.status === 200 && del.j && del.j.ok, del.status + ' ' + (del.j && del.j.error));
@@ -108,6 +110,7 @@ try {
       row && row.twitter_handle == null && row.ig_handle == null && row.avatar_img == null && row.header_img == null && row.bg_img == null &&
       row.signup_ip == null && row.last_ip == null && row.age_at == null && row.twofa_secret == null && row.accent === '' && row.wall_bg === '',
       JSON.stringify(row && { t: row.twitter_handle, s: row.signup_ip, a: row.age_at }));
+    check('  ...the reports they filed are gone', db.prepare('SELECT COUNT(*) n FROM reports WHERE reporter_id=?').get(u.id).n === 0);
     for (const t of ['identities', 'sessions', 'notifications', 'uploads']) {
       check('  ...' + t + ' are gone', db.prepare(`SELECT COUNT(*) n FROM ${t} WHERE user_id=?`).get(u.id).n === 0);
     }

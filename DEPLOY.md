@@ -527,6 +527,10 @@ launchctl bootout gui/$(id -u)/com.sendrh.deploy  # remove the agent altogether
 The installer refuses to run without `--yes`, from any copy but `~/justsendit-live/ops`, or while
 `com.justsendit.server` is not loaded. It does not touch the site's agent, port 8642, `cloudflared`, `data/` or
 `.env`. If an earlier installer left a second site agent, `com.sendrh.site`, it boots that out and removes its plist.
+It also refuses when no `node` answers on the PATH of the shell it is run from: the plist in git holds `__HOME__` and
+`__NODE_BIN__` in place of any account's folders, and the installer fills them with your home folder and the folder of
+that `node`, so run it from a shell whose `node -v` is the Node 24 the site runs. It checks the result with
+`plutil -lint` and writes nothing if either step fails.
 The tunnel's ingress stays `service: http://127.0.0.1:8642`.
 
 ## Operate

@@ -1178,7 +1178,7 @@ it opens sign-in, as every report control does; your own wall has none, and the 
 a post or comment down (a Send Call post keeps its call row — calls are permanent — and loses its words and
 media), put an account in read‑only mode for a number of days or indefinitely, lift a restriction, or dismiss a
 report. Every action notifies the person it lands on, with the reason, and is written to the report it resolved.
-On a wall that has a song, a moderator also sees **🧹 Take down song** (on the wall itself): it removes the song and
+On a wall that has a song, a moderator also sees **🧹 Take down song** (on the wall itself, and on that wall's row in the moderation queue, which also plays the song): it removes the song and
 its file, tells the owner in their notifications ("Your wall song was removed by a moderator", with the note and the
 address to write to with questions) and closes the open reports on that wall. Any upload takedown
 (`POST /api/admin/takedown` with `kind: 'upload'`) tells the uploader whether it was their wall song, a picture on
