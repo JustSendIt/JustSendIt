@@ -397,7 +397,7 @@ try {
   check('the nav\'s ⏸ covers the wall song: no start on open or on a first press while it is on, a press on it pauses a playing song (as the visitor\'s own pause), ▶ again starts nothing',
     (UP2.match(/if \(soundPaused\(\)\) return;/g) || []).length === 2 && /const soundPaused = \(\) => document\.documentElement\.classList\.contains\('motion-off'\);/.test(UP2)
       && /document\.addEventListener\('jsi:sfx', \(e\) => \{\n  if \(!e\.detail \|\| e\.detail\.on !== false\) return;\n  if \(wallSongDisarm\) wallSongDisarm\(\);\n  wallSongWanted = false;/.test(UP2)
-      && /data-tip', 'Pauses or resumes the site\\'s sound effects, the ticker, floating emoji and other motion, and pauses a wall\\'s song — remembered on this device'/.test(read('app.js')));
+      && /data-tip', 'Pauses or resumes sound effects, the ticker, floating emoji and other decorative motion, and pauses a wall\\'s song — remembered on this device'/.test(read('app.js')));
   check('the song slot\'s Upload / Replace (a .file-label, like every file picker on the site) is a 44 px target', /\.file-label \{[^}]*min-height: 44px;/.test(CSS2) && !/\.file-label \{[^}]*min-height: 40px;/.test(CSS2));
   check('the voice-memo switch\'s note no longer says every audio upload is refused: a wall song (MP3 or WAV) is taken whatever VOICE_MEMOS says',
     !/the upload route refuses audio outright/.test(SRV2) && /A wall song \(MP3 or WAV, kind 'song'\) is not a voice memo/.test(SRV2));

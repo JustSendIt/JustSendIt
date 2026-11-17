@@ -718,7 +718,7 @@
     b.type = 'button'; b.id = 'motion-btn'; b.className = 'motion-btn';
     b.setAttribute('aria-pressed', String(off));
     b.setAttribute('aria-label', 'Pause motion and sound effects');   // one name; aria-pressed carries the state — a label that flips would announce the opposite of the state
-    b.setAttribute('data-tip', 'Pauses or resumes the site\'s sound effects, the ticker, floating emoji and other motion, and pauses a wall\'s song — remembered on this device');   // as tall a bubble as before the wall song was named in it: at the desktop text size a taller one covers the wall under the nav
+    b.setAttribute('data-tip', 'Pauses or resumes sound effects, the ticker, floating emoji and other decorative motion, and pauses a wall\'s song — remembered on this device');   // as tall a bubble as before the wall song was named in it: at the desktop text size a taller one covers the wall under the nav
     b.innerHTML = '<span aria-hidden="true">' + (off ? '▶' : '⏸') + '</span>';
     b.addEventListener('click', () => {
       off = !off;

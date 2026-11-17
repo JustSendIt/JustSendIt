@@ -39,7 +39,7 @@ try {
   // one pause for motion and sound
   check('the sounds are paused exactly when motion is: html.motion-off, set by the nav ⏸', /const muted = \(\) => root\.classList\.contains\('motion-off'\);/.test(SFX) && /if \(!SITE_ON \|\| muted\(\) \|\| document\.hidden\) return false;/.test(SFX));
   check('  ...the ⏸ says so (one name, the state in aria-pressed) and tells the sounds playing now to stop',
-    /b\.setAttribute\('aria-label', 'Pause motion and sound effects'\);/.test(APP) && /data-tip', 'Pauses or resumes the site\\'s sound effects, the ticker/.test(APP)
+    /b\.setAttribute\('aria-label', 'Pause motion and sound effects'\);/.test(APP) && /data-tip', 'Pauses or resumes sound effects, the ticker/.test(APP)
     && /document\.dispatchEvent\(new CustomEvent\('jsi:sfx', \{ detail: \{ on: !off \} \}\)\);/.test(APP) && /'Motion and sounds paused ⏸'/.test(APP));
   check('  ...and the slot machine obeys it too: no sound while paused, the reels\' whirr stopped on the press, the bulbs held still',
     /const paused = \(\) => !!\(window\.SFX && SFX\.muted\(\)\);/.test(SLOTS) && /if \(!A\.on \|\| paused\(\) \|\| document\.hidden\) return null;/.test(SLOTS) && /function cutBus\(\) \{/.test(SLOTS) && /document\.addEventListener\('jsi:sfx'/.test(SLOTS)

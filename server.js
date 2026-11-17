@@ -17101,7 +17101,7 @@ const server = http.createServer(async (req, res) => {
             db.prepare('DELETE FROM squads WHERE id = ?').run(sqr.id);
           }
           const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
-          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'reports', 'tracker_cache', 'wallet_hist', 'burn_proofs'])
+          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'tracker_cache', 'wallet_hist', 'burn_proofs'])
             try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
           OIDC.forgetUser(uid);   // Sign in with Send: every app it allowed (consents, codes, tokens) and every app it registered, with everyone's sign-ins to them
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
@@ -17113,6 +17113,7 @@ const server = http.createServer(async (req, res) => {
           for (const sqid of memberOf) { try { db.prepare('UPDATE squads SET member_count = (SELECT COUNT(*) FROM squad_members WHERE squad_id = ? AND verified = 1) WHERE id = ?').run(sqid, sqid); } catch {} }
           try { db.prepare('DELETE FROM mutes WHERE user_id = ? OR muted_id = ?').run(uid, uid); } catch {}
           try { db.prepare('DELETE FROM follows WHERE follower_id = ? OR followee_id = ?').run(uid, uid); } catch {}
+          db.prepare('DELETE FROM reports WHERE reporter_id = ?').run(uid);   // the reports they filed: keyed by reporter_id, so the user_id loop above never reached them (it sat in that list until 2026-11-17)
           try { db.prepare('DELETE FROM notifications WHERE actor_id = ?').run(uid); } catch {}
           db.prepare('DELETE FROM posts WHERE user_id = ? AND call_id IS NULL').run(uid);
           db.prepare("UPDATE posts SET text = '[deleted]', image = NULL WHERE user_id = ?").run(uid);   // the Send Call widgets stay, the words go
