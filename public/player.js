@@ -79,11 +79,20 @@
       } catch { return false; }
     }
 
+    /* A press on ▶ (or on the nudge) is the visitor choosing the theme — on a wall with a song too: the song pauses and the
+       theme plays. Only the starts nobody pressed for (a returning listener's resume, the first-gesture arming) give way to a
+       wall song (tryPlay). The song starting again quiets the theme (jsi:wall-song, below). */
+    async function playChosen() {
+      const song = document.getElementById('wall-song-audio');
+      if (song && !song.paused) song.pause();
+      try { await audio.play(); setUI(true); set('1'); hideHint(); return true; }
+      catch { return false; }
+    }
     btn.addEventListener('click', async () => {
-      if (audio.paused) { if (!(await tryPlay()) && !wallSongOn() && window.sendToast) sendToast('Browser blocked audio — tap again 🎵'); }
-      else if (!audio.paused) { audio.pause(); setUI(false); set('0'); hideHint(); }
+      if (audio.paused) { if (!(await playChosen()) && window.sendToast) sendToast('Browser blocked audio — tap again 🎵'); }
+      else { audio.pause(); setUI(false); set('0'); hideHint(); }
     });
-    hint.addEventListener('click', () => tryPlay());
+    hint.addEventListener('click', () => playChosen());
     vol.addEventListener('input', () => {
       audio.volume = vol.value / 100;
       try { localStorage.setItem('mp-vol', vol.value); } catch {}
