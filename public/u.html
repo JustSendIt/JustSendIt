@@ -89,6 +89,8 @@
         <button class="btn btn-ghost btn-sm btn-alert" id="alert-btn" type="button" aria-pressed="false" hidden data-tip="Notifies you when they post or call — they are never told">🔔 Alerts</button>
         <a class="btn btn-ghost btn-sm" id="edit-btn" href="/profile#sec-account" hidden data-tip="Opens Settings on your dashboard with your avatar, username, bio and links ready to change">Edit profile ✏️</a>
         <button class="btn btn-ghost btn-sm" id="share-btn" type="button" aria-label="Share — copy link to this wall" data-tip="Copies a link to this wall to your clipboard">Share 🔗</button>
+        <!-- someone else's wall only: the wall itself (its pictures, bio or song) to the moderators, as each post has its own ⚑ -->
+        <button class="btn btn-ghost btn-sm" id="report-wall-btn" type="button" hidden aria-label="Report this wall" data-tip="Reports this wall — its pictures, bio or song — to the moderators">⚑ Report</button>
         <div class="mod-wrap" id="mod-wrap" hidden>
           <button class="btn btn-ghost btn-sm mod-trigger" id="mod-trigger" type="button" aria-haspopup="menu" aria-expanded="false" aria-controls="mod-menu" data-tip="Opens a menu to mute or unmute this sender">🛡️ Moderation <span class="mod-caret" aria-hidden="true">▾</span></button>
           <div class="mod-menu" id="mod-menu" role="menu" aria-labelledby="mod-trigger" hidden></div>
@@ -98,7 +100,9 @@
     <h1 class="wall-name display" id="pub-name-line">@<span id="pub-username">…</span></h1>
     <div class="wall-song" id="wall-song" hidden>
       <span class="wall-song-label" id="wall-song-label">Wall song</span>
-      <audio id="wall-song-audio" controls loop preload="none" aria-labelledby="wall-song-label"></audio>
+      <audio id="wall-song-audio" controls controlslist="nodownload" loop preload="none" aria-labelledby="wall-song-label"></audio>
+      <!-- moderators only (upage.js shows it to an admin account; the server refuses anyone else) -->
+      <button class="btn btn-ghost btn-sm" id="wall-song-takedown" type="button" hidden data-tip="Moderators only: removes this song and its file, closes the reports on this wall and tells its owner">🧹 Take down song</button>
     </div>
     <p class="mod-note" id="mod-note" hidden></p>
     <div class="wall-badges">
