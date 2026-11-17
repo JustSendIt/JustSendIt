@@ -7,9 +7,10 @@
      · controlslist=nodownload is not copy protection, and no page says it is;
      · the Terms sections the uploader cites (10(c) and 11(e)) still say what it cites them for;
      · the policy's and the Terms' versions moved with the server's TOS_VERSION;
-     · the deploy agent is described only in README §5 (§1–4 are what Sendy reads to every visitor), as not installed.
+     · there is no deploy agent: README §5 and DEPLOY.md describe the hand deploy only, and no tracked file names a Mac account.
    Static: it reads files and starts nothing. */
-import { readFileSync } from 'node:fs';
+import { readFileSync, existsSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { ROOT, SERVER_JS } from './_paths.mjs';
 
@@ -69,9 +70,26 @@ try {
   check('  ...VOICE_MEMOS refuses voice-memo audio only (WebM, MP4/M4A, Ogg); a wall song is accepted whatever it says',
     /`VOICE_MEMOS=1` turns on voice notes in the composers\. Off by default, at both ends: the recorder is not wired in and the upload route refuses voice-memo audio — WebM, MP4\/M4A and Ogg \(memos already posted still play\)\. A wall's song is not a voice memo and has no switch: the upload route accepts an MP3 or WAV whatever `VOICE_MEMOS` says/.test(tech)
     && !/the upload route refuses audio \(/.test(README));
-  check('  ...§5 points at ops/ and DEPLOY.md as an agent that is not installed, deployed by hand today, no home-folder paths; §1–4 (read to every visitor by Sendy) say nothing of ops',
-    /`ops\/` holds an optional deploy agent that is \*\*not installed\*\*/.test(tech) && /SendRH\.com is deployed by hand by its operator after the tests pass/.test(tech) && /a rollback puts the code back, never the database/.test(tech) && /No data or credentials go to GitHub\./.test(tech)
-    && !/~\/|\/Users\//.test(tech) && !/ops\/|auto-deploy|update-live|install-mac/.test(head) && !/push(es|ed)? to `?main`? (go|goes|are|is) live (automatically|by itself)/i.test(README));
+  check('  ...§5 says SendRH.com is deployed by hand and follows nothing by itself: no deploy agent, no home-folder paths; §1–4 (read to every visitor by Sendy) say nothing of ops',
+    /SendRH\.com is deployed by hand by its operator after the tests pass; a push to `main` changes nothing on the site until then, and nothing on the site follows GitHub by itself \(DEPLOY\.md → \*SendRH\.com on the Mac\*\)\. No data or credentials go to GitHub\./.test(tech)
+    && !/ops\/|auto-deploy|update-live|install-mac|deploy agent/.test(tech) && !/~\/|\/Users\//.test(tech) && !/ops\/|auto-deploy|update-live|install-mac/.test(head)
+    && !/push(es|ed)? to `?main`? (go|goes|are|is) live (automatically|by itself)/i.test(README));
+
+  /* ═══ the deploy agent is gone (owner, 2026-11-17: "delete the auto-deploy and stick with the current server process") ═══ */
+  const DEP = readFileSync(path.join(ROOT, 'DEPLOY.md'), 'utf8');
+  const macSec = DEP.slice(DEP.indexOf('\n## SendRH.com on the Mac'), DEP.indexOf('\n## Operate'));
+  check('DEPLOY.md: the Mac section is the hand deploy of com.justsendit.server in ~/justsendit-live, and no deploy agent is described anywhere',
+    macSec.length > 200 && macSec.includes('launchctl kickstart -k gui/$(id -u)/com.justsendit.server') && macSec.includes('cd ~/justsendit-live && git pull -q --ff-only')
+    && /Nothing follows\nGitHub by itself/.test(macSec) && !/com\.sendrh|auto-deploy|update-live|install-mac|sendrh-repo|sendrh-build|sendrh-deploy|follows GitHub\n/.test(DEP), macSec.slice(0, 300));
+  check('  ...and there is no ops/ folder to install from', !existsSync(path.join(ROOT, 'ops')));
+  /* No tracked file names a Mac account: the pattern is any concrete home folder under /Users, so this check names nobody either.
+     (A deploy file once carried one into git history, 2026-11-06; the history was rewritten on 2026-11-17.) */
+  const tracked = (() => {
+    const g = spawnSync('git', ['ls-files', '-z'], { cwd: ROOT, encoding: 'utf8' });
+    return g.status === 0 && g.stdout ? g.stdout.split('\0').filter(Boolean) : [];
+  })();
+  const named = tracked.filter((f) => { try { return /\/Users\/(?!<)[A-Za-z0-9._-]/.test(readFileSync(path.join(ROOT, f), 'latin1')); } catch { return false; } });
+  check('no tracked file holds a /Users/<account> path (' + tracked.length + ' files read)', tracked.length > 300 && named.length === 0, named.join(' '));
 
   /* ═══ About ═══ */
   const wallCard = flat((/<span class="pillar-title">The Send Wall<\/span>[\s\S]*?<\/details>/.exec(ABOUT) || [''])[0]);
