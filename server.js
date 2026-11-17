@@ -11440,6 +11440,47 @@ function clientIp(req) {
   }
   return ipKey(req.socket.remoteAddress) || 'unknown';
 }
+/* Sanctions geoblock (owner, 2026-11-17: "add blocking of comprehensively sanctioned countries and regions"). The site
+   follows US sanctions law, which bars serving places under comprehensive US embargo, and OFAC's guidance for crypto
+   services expects IP geolocation blocking for them. The default is the US list as of November 2026: Cuba, Iran, North
+   Korea, and Ukraine's Crimea and Sevastopol, Donetsk and Luhansk regions. Syria is not on it: Executive Order 14312 ended
+   that programme on 1 July 2025. SANCTIONED_PLACES replaces the list (ISO 3166-1 countries; ISO 3166-2 regions written
+   CC-RR, e.g. UA-43); set it empty to switch the block off.
+   Where a visitor connects from comes from Cloudflare: CF-IPCountry always, CF-Region-Code only when the zone's "Add
+   visitor location headers" managed transform is on. Both are believed under the same rule as CF-Connecting-IP, TRUST_CF=1
+   and a request from our own proxy, because anyone reaching the origin directly could write them. Without the region
+   header the regions cannot be told apart from the rest of Ukraine; the log says so once rather than blocking the country. */
+const SANCTIONED_DEFAULT = 'CU,IR,KP,UA-43,UA-40,UA-14,UA-09';
+const SANCTIONED = new Set(String(process.env.SANCTIONED_PLACES ?? SANCTIONED_DEFAULT).toUpperCase().split(',').map(s => s.trim()).filter(s => /^[A-Z]{2}(-[A-Z0-9]{1,3})?$/.test(s)));
+const SANCTIONED_REGIONS = [...SANCTIONED].some(s => s.includes('-'));
+let regionWarned = false;
+const sanctionLogged = new Set();
+function sanctionedPlace(req) {
+  if (!SANCTIONED.size || !TRUST_CF || !(TRUST_PROXY_HOPS > 0) || !peerIsTrustedProxy(req.socket.remoteAddress)) return null;
+  const cc = String(req.headers['cf-ipcountry'] || '').trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(cc)) return null;   // XX (unknown) and T1 (Tor) are not places
+  if (SANCTIONED.has(cc)) return cc;
+  const rc = String(req.headers['cf-region-code'] || '').trim().toUpperCase();
+  if (rc) return SANCTIONED.has(cc + '-' + rc) ? cc + '-' + rc : null;
+  if (SANCTIONED_REGIONS && !regionWarned) { regionWarned = true; console.warn('[sanctions] Cloudflare sends no CF-Region-Code, so the sanctioned regions (' + [...SANCTIONED].filter(s => s.includes('-')).join(', ') + ') cannot be told apart from the rest of their country and are NOT blocked. Turn on Cloudflare\'s "Add visitor location headers" managed transform (Rules → Transform Rules → Managed Transforms).'); }
+  return null;
+}
+const SANCTION_PAGE = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><title>Not available in your region · SendRH.com</title>'
+  + '<style>body{margin:0;min-height:100vh;display:grid;place-items:center;background:#05030e;color:#e9e6f5;font:max(16px,1rem)/1.55 system-ui,-apple-system,sans-serif;padding:1.5rem}main{max-width:34rem}h1{font-size:max(22px,1.5rem);margin:0 0 .8rem}a{color:#7ef0b0}</style></head>'
+  + '<body><main><h1>SendRH.com is not available in your region</h1>'
+  + '<p>This site follows US sanctions law, which does not allow it to serve people in Cuba, Iran, North Korea, or the Crimea, Donetsk and Luhansk regions of Ukraine. Your connection appears to come from one of these places, so the site is closed to it.</p>'
+  + '<p>If you think your location has been read wrongly, write to <a href="mailto:SendRH@Atomicmail.io">SendRH@Atomicmail.io</a>.</p></main></body></html>';
+function sanctionsBlock(res, p, place) {
+  if (!sanctionLogged.has(place) && sanctionLogged.size < 32) { sanctionLogged.add(place); console.log('[sanctions] blocked a visitor from ' + place + ' (said once per place)'); }
+  // no-store: a 451 must never sit in Cloudflare's cache, where it would answer visitors from everywhere else
+  const head = { 'Cache-Control': 'no-store, private', 'X-Robots-Tag': 'noindex', ...SEC_HEADERS };
+  if (p.startsWith('/api/') || p.startsWith('/oauth/') || p.startsWith('/.well-known/')) {
+    res.writeHead(451, { ...head, 'Content-Type': 'application/json; charset=utf-8' });
+    return res.end('{"error":"SendRH.com is not available in your region.","code":"region_blocked"}');
+  }
+  res.writeHead(451, { ...head, 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'" });
+  return res.end(SANCTION_PAGE);
+}
 const SEC_HEADERS = {
   'X-Content-Type-Options': 'nosniff',
   'X-Frame-Options': 'DENY',
@@ -14920,7 +14961,7 @@ function settleBeta() {
 
    Deliberately NOT a security boundary on private data — that is what sessions and the per-route guards
    are for. This decides who may make an account. */
-const TOS_VERSION = '2026-11-17';   // 2026-11-17: wall songs (§13(a) audio, §10(e) the wall's report control); 2026-11-03: §34 says we run sendy.gg too (the Arcade links to it); 2026-10-23: the swap paragraphs cover the Swap in my wallet button (Ethereum and Solana routers, Jupiter); 2026-10-22: §9(g) — a burn proof takes any amount; 2026-10-21: ETH as well as $SEND; 2026-10-14: the Arcade's slot machine joined Rocket Run in §§1, 2, 31 and 45
+const TOS_VERSION = '2026-11-17';   // 2026-11-17: wall songs (§13(a) audio, §10(e) the wall's report control) and the sanctions block (§4(c)); 2026-11-03: §34 says we run sendy.gg too (the Arcade links to it); 2026-10-23: the swap paragraphs cover the Swap in my wallet button (Ethereum and Solana routers, Jupiter); 2026-10-22: §9(g) — a burn proof takes any amount; 2026-10-21: ETH as well as $SEND; 2026-10-14: the Arcade's slot machine joined Rocket Run in §§1, 2, 31 and 45
 /* The terms-acceptance step is HIDDEN unless TOS_GATE=1: the page, the scroll-to-the-end box and the
    need_tos refusal all sit behind this one switch. The tests run with it on so the flow stays covered. */
 const TOS_GATE = process.env.TOS_GATE === '1';
@@ -16147,6 +16188,9 @@ const server = http.createServer(async (req, res) => {
      built from it while they render; this keeps those URLs out of search results. setHeader merges with whatever
      each route later passes to writeHead, so no route can forget it. */
   if (p.startsWith('/api/')) res.setHeader('X-Robots-Tag', 'noindex');
+  // a visitor in a place under comprehensive US sanctions gets the 451 page and nothing else (sanctionedPlace above)
+  const blockedAt = sanctionedPlace(req);
+  if (blockedAt) return sanctionsBlock(res, p, blockedAt);
   /* One hostname. A request that arrives on www.<host> — a DNS record somebody added, a proxy that serves
      both names — goes to the apex before anything else happens. Left alone, the pages would render on www
      and then every POST would fail the Origin check against BASE_URL: a site that looks broken rather than

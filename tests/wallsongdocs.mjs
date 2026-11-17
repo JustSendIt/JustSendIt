@@ -28,7 +28,7 @@ try {
   /* ═══ the versions ═══ */
   const tv = (/const TOS_VERSION = '([^']+)';/.exec(SRC) || [])[1];
   check('TOS_VERSION is 2026-11-17, its comment saying why first, the older history kept after it', tv === '2026-11-17'
-    && /const TOS_VERSION = '2026-11-17';   \/\/ 2026-11-17: wall songs \(§13\(a\) audio, §10\(e\) the wall's report control\); 2026-11-03: §34 says we run sendy\.gg too/.test(SRC), tv);
+    && /const TOS_VERSION = '2026-11-17';   \/\/ 2026-11-17: wall songs \(§13\(a\) audio, §10\(e\) the wall's report control\) and the sanctions block \(§4\(c\)\); 2026-11-03: §34 says we run sendy\.gg too/.test(SRC), tv);
   check('  ...and the Terms and the Privacy Policy show that version', /<p class="t-meta">Version 2026-11-17 · \$Send \/ JustSendIt/.test(TERMS) && /<p class="t-meta">Version 2026-11-17 · \$Send \/ JustSendIt/.test(PRIV));
 
   /* ═══ the Privacy Policy ═══ */
