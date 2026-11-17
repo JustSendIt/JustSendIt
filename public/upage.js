@@ -315,10 +315,15 @@ function paintAvatar(src) {
 /* The wall's song. Browsers will not start sound until a gesture, so a blocked start waits for the visitor's next press on
    the page (armWallSong). The control stays on the page either way: anyone can pause it (WCAG 1.4.2). The site's own theme
    steps aside while the song plays, and the song steps aside for any other sound the visitor starts (a voice memo, a video
-   with its sound on, the theme's own ▶). A hidden tab pauses it and picks up again on return. */
+   with its sound on, the theme's own ▶). A hidden tab pauses it and picks up again on return.
+   The nav's ⏸ (html.motion-off, app.js — the one switch for motion and sound) covers the song too: while it is on, the song
+   never starts by itself — no start when the wall opens, no wait for a first press — and pressing it while the song plays
+   pauses the song as the visitor's own pause would (so nothing picks it up again). Turning it back off starts nothing. The
+   song's own ▶ still plays it whatever the switch says: that press is the visitor choosing this sound. */
 let wallSongWanted = false;
 let wallSongHold = false;   // a pause we asked for (tab hidden, age question) is not the visitor pressing pause
 let wallSongDisarm = null;  // ends the wait for a press, while there is one
+const soundPaused = () => document.documentElement.classList.contains('motion-off');
 function holdWallSong(audio) {
   wallSongHold = true;
   try { audio.pause(); } catch {}
@@ -343,6 +348,7 @@ function paintSong(src) {
   audio.src = src;
   box.hidden = false;
   const start = () => {
+    if (soundPaused()) return;   // the nav's ⏸ is on: the song waits for its own ▶
     document.dispatchEvent(new CustomEvent('jsi:wall-song'));
     audio.play().then(() => { wallSongWanted = true; }).catch((e) => { if (e && e.name === 'NotAllowedError') armWallSong(audio); });
   };
@@ -362,6 +368,7 @@ function armWallSong(audio) {
     if (e.type === 'keydown' && (e.repeat || (e.key !== 'Enter' && e.key !== ' ') || (t && t.closest('input, textarea, select, [contenteditable="true"]')))) return;
     cleanup();
     if (t && t.closest(WALL_SONG_SOUND)) return;
+    if (soundPaused()) return;   // the ⏸ went on while it waited (another tab, a page restored with Back): no start
     document.dispatchEvent(new CustomEvent('jsi:wall-song'));
     audio.play().then(() => { wallSongWanted = true; }).catch((err) => { if (err && err.name === 'NotAllowedError' && audio.getAttribute('src')) armWallSong(audio); });
   };
@@ -378,6 +385,16 @@ function armWallSong(audio) {
   audio.addEventListener('pause', cleanup);
   wallSongDisarm = cleanup;
 }
+/* The nav's ⏸ pressed (here, or in another tab of this browser: app.js sends the same event). On: the wait for a press ends and
+   a playing song pauses — not a hold, so the song's pause listener below takes it as the visitor's own and nothing resumes it.
+   Off: nothing starts. */
+document.addEventListener('jsi:sfx', (e) => {
+  if (!e.detail || e.detail.on !== false) return;
+  if (wallSongDisarm) wallSongDisarm();
+  wallSongWanted = false;   // said here as well: a pause while the tab is hidden is not taken as the visitor's
+  const audio = document.getElementById('wall-song-audio');
+  if (audio && !audio.paused) { try { audio.pause(); } catch {} }
+});
 document.addEventListener('jsi:age-open', () => {
   const audio = document.getElementById('wall-song-audio');
   if (audio && !audio.paused) { wallSongWanted = true; holdWallSong(audio); }

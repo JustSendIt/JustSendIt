@@ -938,7 +938,8 @@ section { padding: 3.6rem 1.25rem; position: relative; }
   /* the 📷 control is a <label> and the 🎤 control beside it is a <button>: a button does not inherit the
      page font and brings the UA's outset border, so both are set here or the pair does not match */
   font-family: inherit; border: 0;
-  display: inline-flex; align-items: center; justify-content: center; gap: 0.35em; text-align: center; min-height: 40px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.35em; text-align: center;
+  min-height: 44px;   /* a finger's target (the wall song's Upload/Replace among them), as tall as the controls beside it */
 }
 .file-label:hover { background: var(--ctl-fill-hi); color: var(--ctl-ink); }
 .wall-feed { max-width: 640px; margin: 0 auto; display: grid; gap: 1.2rem; }
@@ -5360,6 +5361,9 @@ html.motion-off #matrix-rain { display: none; }
 .adm-reason { font-style: italic; margin: 0.3rem 0; }
 .adm-quote { margin: 0.4rem 0; padding: 0.5rem 0.8rem; border-left: 3px solid var(--green); background: var(--g-wash); border-radius: 6px; white-space: pre-wrap; word-break: break-word; }
 .adm-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; margin-top: 0.6rem; }
+/* a reported wall's song, to hear before taking it down: as tall as the wall's own player (44 px at least), never wider than the row */
+.adm-song { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.6rem; margin: 0.4rem 0; }
+.adm-song audio { width: min(100%, 22rem); height: max(44px, 2.4rem); }
 /* daily active users (admin.html): two bar charts drawn with plain boxes, one height each, and every number in the table under them */
 .adm-dau-ctl { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .adm-dau-range { display: flex; flex-wrap: wrap; gap: 0.35rem; }
