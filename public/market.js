@@ -2807,8 +2807,8 @@
         counts ? 'down · up' + (counts.flat ? ' · ' + counts.flat + ' unchanged' : '') + (counts.none ? ' · ' + counts.none + ' with no change given' : '') : 'how many of the 100 largest moved each way', 'Opens the bubble map, coloured by each coin’s 24 h move'),
       coinTile(up, '🚀 Biggest gainer, 24 h', 'Opens {n}’s on-chain data'),
       coinTile(dn, '🩸 Biggest faller, 24 h', 'Opens {n}’s on-chain data'),
-      dom && val(dom.v != null ? dom.v : dom.dominance) != null
-        ? glTile('coin', dom.id, '👑 ' + (dom.symbol || 'Largest coin') + ' dominance', esc(domText(val(dom.v != null ? dom.v : dom.dominance))), 'its share of the whole market (CoinGecko)', 'Opens ' + (dom.name || dom.symbol || 'the largest coin') + '’s card and its on-chain data')
+      dom && val(dom.fig) != null
+        ? glTile('coin', dom.id, '👑 ' + (dom.symbol || 'Largest coin') + ' dominance', esc(domText(val(dom.fig))), 'its share of the whole market · ' + srcLine(fig(dom.fig)), 'Opens ' + coinName(coinRow(dom.id) || dom) + '’s card and its on-chain data')
         : glTile('map', '', '👑 Dominance', nr, 'the largest coin’s share of the market', 'Opens the bubble map, where the three largest show their dominance'),
       glTile('chain', 'robinhood', '⛓️ Robinhood Chain', rh && val(rh.tvl) != null ? esc(usd(val(rh.tvl))) + ' <small>TVL</small>' : nr,
         rh ? (val(rh.volume) != null ? 'DEX volume ' + esc(usd(val(rh.volume))) + ' · ' : '') + srcLine(fig(rh.tvl)) : 'its TVL and DEX volume (DefiLlama)', 'Opens Robinhood Chain in the main view: its TVL, volume, fees, activity, top tokens and new pools'),
