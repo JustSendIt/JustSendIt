@@ -88,7 +88,7 @@ check('the fixtures are the contract\'s shapes: a list of datasets with id, titl
 {
   const DATA = PUB('data.html'), PRIV = PUB('privacy.html'), README = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'), ENV = fs.readFileSync(path.join(ROOT, '.env.example'), 'utf8');
   const SRV = fs.readFileSync(path.join(ROOT, 'server.js'), 'utf8');
-  const RES = ['me', 'users', 'posts', 'comments', 'calls', 'communities', 'leaderboard', 'competition', 'chains', 'chain', 'chain-history', 'chain-snapshots', 'tokens', 'token', 'pools', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'rwa', 'rwa-token'];
+  const RES = ['me', 'users', 'posts', 'comments', 'calls', 'communities', 'leaderboard', 'competition', 'chains', 'chain', 'chain-history', 'chain-snapshots', 'tokens', 'token', 'pools', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'rwa', 'rwa-token', 'heatmap', 'movers'];
   const listed = (r) => DATA.includes('<tr><td><code>' + r + '</code></td>'), opened = (r) => DATA.includes('<details class="dk-res"><summary><code>' + r + '</code>');
   const curl = (r) => new RegExp('<summary><code>' + r + '</code>[\\s\\S]*?curl -H "Authorization: Bearer sk_…"[\\s\\S]*?/api/data/v1/' + r + '\\b[\\s\\S]*?<pre class="dk-pre">\\{ data').test(DATA);
   check('/data documents every Send API resource, old and new: listed in the index, and each with a curl request and the shape that comes back',
