@@ -192,11 +192,15 @@ function fmtUsd(n, small) {
 
 /* ---- landing page token cards ---- */
 async function initTokenCards() {
-  let missing = Object.keys(TOKENS);
+  /* only the coins this page has a card for: the landing page shows $SEND alone since 2026-11-17, and a coin with no card
+     must never count as "missing" — that kept a 30-second re-read going for a card nobody could see */
+  const keys = Object.keys(TOKENS).filter(k => document.getElementById('price-' + k));
+  if (!keys.length) return;
+  let missing = keys.slice();
   try {
     const pairs = await fetchPairs();
     missing = [];
-    for (const key of Object.keys(TOKENS)) {
+    for (const key of keys) {
       const p = pairs[key]; if (!p) { missing.push(key); continue; }
       const price = document.getElementById('price-' + key);
       const chg = document.getElementById('chg-' + key);

@@ -249,11 +249,12 @@ try {
   const I = heads['index.html'].s, body = I.slice(I.indexOf('<body'));
   const coin = (id) => home.find((n) => n['@id'] === ORIGIN + '/#' + id);
   const addr = (id) => coin(id) && coin(id).identifier && coin(id).identifier.value;
-  check('$SEND (SEND IT) and $GWC are entities on the home page, each with its contract address — the same address the page shows', ['send', 'gwc'].every((id) => coin(id) && coin(id)['@type'] === 'Thing' && /^0x[0-9a-fA-F]{40}$/.test(addr(id)) && body.includes(addr(id)))
-    && coin('send').name === 'SEND IT' && coin('send').alternateName.includes('$SEND') && coin('gwc').alternateName.includes('$GWC'), ['send', 'gwc'].map(addr).join(' '));
-  check('  ...the home page is about the site and both coins, and no coin carries a price or an offer', JSON.stringify((home.find((n) => n['@id'] === ORIGIN + '/#webpage') || {}).about) === JSON.stringify([{ '@id': ORIGIN + '/#organization' }, { '@id': ORIGIN + '/#send' }, { '@id': ORIGIN + '/#gwc' }])
-    && ['send', 'gwc'].every((id) => !/offers|price|marketCap/i.test(JSON.stringify(coin(id)))));
-  check('the home page says plainly, in its HTML, what Just Send It is (and its description names it)', /<p class="hero-lede">Just Send It \(sendrh\.com\) is an independent community site for \$SEND, the SEND IT memecoin, and \$GWC on Robinhood Chain\. Entertainment only, not affiliated with Robinhood\.<\/p>/.test(I)
+  // the home page is about $SEND alone since 2026-11-17 (owner: "remove anything mentioning GWC on the landing page")
+  check('$SEND (SEND IT) is an entity on the home page, with its contract address — the same address the page shows; no other coin is', !!coin('send') && coin('send')['@type'] === 'Thing' && /^0x[0-9a-fA-F]{40}$/.test(addr('send')) && body.includes(addr('send'))
+    && coin('send').name === 'SEND IT' && coin('send').alternateName.includes('$SEND') && home.filter((n) => n['@type'] === 'Thing').length === 1, addr('send'));
+  check('  ...the home page is about the site and $SEND, and the coin carries no price or offer', JSON.stringify((home.find((n) => n['@id'] === ORIGIN + '/#webpage') || {}).about) === JSON.stringify([{ '@id': ORIGIN + '/#organization' }, { '@id': ORIGIN + '/#send' }])
+    && !/offers|price|marketCap/i.test(JSON.stringify(coin('send'))));
+  check('the home page says plainly, in its HTML, what Just Send It is (and its description names it)', /<p class="hero-lede">Just Send It \(sendrh\.com\) is an independent community site for \$SEND, the SEND IT memecoin on Robinhood Chain\. Entertainment only, not affiliated with Robinhood\.<\/p>/.test(I)
     && /^Just Send It is /.test(heads['index.html'].meta('description')[0]));
   check('  ...and so does the About page, first thing', /<p class="one-line"><b>Just Send It<\/b> \(sendrh\.com\) is a /.test(A));
   check('the About FAQ answers the brand questions first: what Just Send It, $SEND (SEND IT), a Sender and "Send It" are', JSON.stringify(visible.slice(0, 4).map((x) => x.q)) === JSON.stringify(['What is Just Send It?', 'What is $SEND (SEND IT)?', 'What is a Sender?', 'What does “Send It” mean here?']),
@@ -261,7 +262,7 @@ try {
   check('  ...the $SEND answer gives the contract the home page shows, and says the name is shared by other tokens', visible[1] && visible[1].a.includes(addr('send')) && /Other tokens on other chains also use the name SEND/.test(visible[1].a) && /checked 2026-10-15 — CoinMarketCap and Dexscreener list a SEND/.test(A));
   const L = read('llms.txt');
   const llmsLinks = [...L.matchAll(/\]\((https:\/\/sendrh\.com[^)]*)\)/g)].map((m) => m[1]);
-  check('llms.txt: the llmstxt.org shape (an H1, a one-paragraph summary, link lists), both contract addresses as the page shows them', /^# Just Send It\n\n> Just Send It \(sendrh\.com\) is /.test(L) && /\n## Pages\n/.test(L) && /\n## Optional\n/.test(L) && L.includes(addr('send')) && L.includes(addr('gwc')));
+  check('llms.txt: the llmstxt.org shape (an H1, a one-paragraph summary, link lists), the $SEND contract address as the page shows it', /^# Just Send It\n\n> Just Send It \(sendrh\.com\) is /.test(L) && /\n## Pages\n/.test(L) && /\n## Optional\n/.test(L) && L.includes(addr('send')));
   check('  ...every link to the site is an indexable page', llmsLinks.length >= 8 && llmsLinks.every((u) => files.filter(isIndexable).map(urlOf).includes(u)), llmsLinks.filter((u) => !files.filter(isIndexable).map(urlOf).includes(u)).join(','));
   check('  ...and it keeps the site\'s rules: entertainment only, not affiliated with Robinhood, the maintainers\' holdings disclosed, no promise it cannot keep', /Entertainment only, not financial advice\. Not affiliated with, endorsed by, or sponsored by Robinhood Markets, Inc\./.test(L) && /The people who run it hold \$SEND and \$GWC\./.test(L)
     && !/unhackable|guarantee|locked liquidity|LP (is )?(locked|burned)|safe investment|\bbuy now\b|to the moon/i.test(L));

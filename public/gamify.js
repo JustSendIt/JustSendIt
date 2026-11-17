@@ -90,7 +90,7 @@
      capLine() below appends the real figure from g.rules.dailyCap at render time, so it cannot drift again. */
   const EARN_DESC = {
     egg: 'You found one of the hidden ghosts. A hundred haunt the site; each pays once — if today\'s allowance is full, it pays on a later visit.',
-    swap: 'Swap ETH for $SEND or $GWC via the in-page swap. Verified on-chain — the biggest fixed award on the board.',
+    swap: 'Swap ETH for $SEND on the home page, or for $SEND or $GWC with 🚀 Swap in my wallet on a token\'s Scanner detail. Verified on-chain — the biggest fixed award on the board.',
     connect_wallet: 'Link a wallet holding $SEND/$GWC (read-only signature, or a burn proof for a wallet that can’t sign). Once per wallet.',
     first_post: 'A one-time bonus for your very first post on the Send Wall.',
     post: 'Post on the Send Wall — memes, gains, pain.',

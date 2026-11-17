@@ -77,8 +77,6 @@ footer .nav-foot a { display: inline-flex; align-items: center; min-height: 44px
 @media (pointer: coarse) { input, select, textarea { font-size: max(var(--text-floor), max(16px, 1em)); } }
 
 /* Nothing below ~11.5px. Each of these was measured under it on a phone. */
-.og-tag { font-size: max(var(--text-floor), 0.72rem); }                          /* was 0.58rem ≈ 9.3px */
-.og-timer i { font-size: max(var(--text-floor), 0.7rem); }                       /* was 0.57rem ≈ 9.1px */
 .notif-badge { font-size: var(--nav-fs-badge); }                                  /* sized with its circle (styles.css --notif-badge): ~12–13px bold, always inside it */
 .np-stat-lbl, .np-liq-lbl { font-size: max(var(--text-floor), 0.72rem); }        /* was 0.66rem ≈ 10.6px */
 .np-slide-newtag { font-size: max(var(--text-floor), 0.72rem); }
@@ -322,8 +320,8 @@ html .cmp-val small { white-space: normal; }
   .lb-win { min-height: 44px; }
   .trk-w-btn { min-width: 44px; min-height: 44px; }
 }
-/* more sub-11px text: OG timer captions and tag, chart source, bar/x-axis captions, the holders-only badge */
-.og-timer i, .og-tag, .np-vbar i, .sc-x i, .oc-src, .post-lock { font-size: max(var(--text-floor), 0.72rem); }
+/* more sub-11px text: chart source, bar/x-axis captions, the holders-only badge */
+.np-vbar i, .sc-x i, .oc-src, .post-lock { font-size: max(var(--text-floor), 0.72rem); }
 
 /* the swap's quick-amount presets: 44px everywhere, not only under pointer:coarse — a touch-screen laptop
    reports pointer:fine and was getting ~30px targets */
@@ -499,7 +497,7 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
 /* ═══ Home (/) — wide screens. Load after base.css. Every rule sits at 1280px and up; nothing narrower changes. ═══
    Two section forms share one geometry — the title column is base.css's rail (--rail), the content line is the rail plus
    --rail-gap — so every left edge on the page lines up:
-     · the masthead (tokens, beta, guide, swap, the Wall teaser): the title and its introduction side by side under one
+     · the masthead (the token, beta, guide, swap, $SEND elsewhere): the title and its introduction side by side under one
        rule, the content across the whole column underneath — for sections whose content is wide or many-part;
      · the rail (the video, Rocketize — base.css as it is): title and introduction stacked at the left, one object beside. */
 @media (min-width: 1280px) {
@@ -520,7 +518,7 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   .hero-dash .dash-title { justify-content: flex-start; align-items: baseline; gap: 0.2rem 1rem; transform: none; margin-bottom: 1rem; }
   .hero-dash .dash-title::after { content: ''; flex: 1 1 4rem; align-self: center; height: 2px; background: var(--house-rule); }
   .hero-dash .dash-title-sub { font-family: var(--font-serif); font-style: italic; font-weight: 400; letter-spacing: 0.005em; }
-  /* three across (four rows of the twelve); four across once the column is 1680px */
+  /* three across: the $SEND reading over three rows of the nine tiles (landing.css) */
   .hero-dash .dash-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
   /* a deploy with no video file drops the video tile (app.js): the last tile then closes its row instead of leaving a hole */
   .hero-dash .dash-grid:has(> .dash-tile[hidden]) > .dash-tile:last-child { grid-column: span 2; }
@@ -529,22 +527,18 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   .hero-dash .dash-foot { float: none; margin: 0 0 0.45rem; }
 
   /* ---------- the masthead ---------- */
-  #tokens > .wrap, #beta > .wrap, #guide > .wrap, #swap > .wrap, #origin + section > .wrap {
+  #tokens > .wrap, #beta > .wrap, #guide > .wrap, #swap > .wrap, #send-links > .wrap {
     display: grid; grid-template-columns: var(--rail) minmax(0, 1fr); column-gap: var(--rail-gap); align-items: start;
   }
-  :is(#tokens, #beta, #guide, #swap, #origin + section) > .wrap > .section-title { grid-column: 1; grid-row: 1; float: none; width: auto; margin-bottom: 0; text-align: left; }
+  :is(#tokens, #beta, #guide, #swap, #send-links) > .wrap > .section-title { grid-column: 1; grid-row: 1; float: none; width: auto; margin-bottom: 0; text-align: left; }
   /* the introduction continues the title's rule, so the two read as one head */
-  :is(#tokens, #beta, #guide, #swap, #origin + section) > .wrap > .section-title + .section-sub {
+  :is(#tokens, #beta, #guide, #swap, #send-links) > .wrap > .section-title + .section-sub {
     grid-column: 2; grid-row: 1; float: none; width: auto; max-width: none; margin: 0; padding: 1.05rem max(0px, calc(100% - 58ch)) 0 0; text-align: left;
     border-top: 2px solid var(--house-rule);
   }
-  :is(#tokens, #beta, #guide, #swap) > .wrap > :where(:not(.section-title, .section-title + .section-sub)) { grid-column: 1 / -1; margin-left: 0; margin-right: 0; }
-  :is(#tokens, #beta, #guide, #swap) > .wrap > :nth-child(3) { margin-top: 2.2rem; }
+  :is(#tokens, #beta, #guide, #swap, #send-links) > .wrap > :where(:not(.section-title, .section-title + .section-sub)) { grid-column: 1 / -1; margin-left: 0; margin-right: 0; }
+  :is(#tokens, #beta, #guide, #swap, #send-links) > .wrap > :nth-child(3) { margin-top: 2.2rem; }
 
-  /* the tokens: the two coins side by side across the column */
-  #tokens .token-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.6rem; }
-  /* the tokenomics note under them: two newspaper columns, set left, under a rule */
-  #tokens > .wrap > .token-grid + .section-sub { margin-top: 2rem !important; max-width: none; columns: 2; column-gap: var(--rail-gap); text-align: left; border-top: 2px solid var(--house-rule); padding-top: 1rem; }
 
   /* the beta: the card across the column — what the top ten keep | why it resets, and the board under them in two
      columns (1–5, then 6–10: read down, then across); the small print at a reading measure */
@@ -587,7 +581,6 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   #swap .swap-panel > * { break-inside: avoid; }
   #swap .swap-panel :is(a, button, input, select, [tabindex]) { scroll-margin-top: calc(var(--nav-h, 64px) + 0.75rem); }
   #swap .swap-panel > .swap-note { break-before: column; margin-top: 0; }
-  #swap .swap-panel > div:nth-child(1), #swap .swap-panel > div:nth-child(3) { font-family: var(--font-mono); font-weight: 600 !important; letter-spacing: 0.06em; }
 
   /* ---------- the rail sections ---------- */
   /* Rocketize: the three steps as one row on the content line */
@@ -603,15 +596,6 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   #rocketize .rz-editor { grid-template-columns: minmax(0, 1fr) minmax(0, 34rem); }
   #rocketize .rz-tools { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
   #rocketize .rz-tools > .rz-group:first-child { grid-column: 1 / -1; }
-
-  /* the origin pair: on the page's column, so its edges line up with the sections above */
-  #origin .origin-pair { max-width: var(--page-max); }
-  #origin .og-site-tag { font-family: var(--font-mono); font-weight: 600; }
-
-  /* the Wall teaser: the title | its introduction with the way in under it */
-  #origin + section > .wrap { grid-template-rows: auto 1fr; }
-  #origin + section > .wrap > .section-title { grid-row: 1 / span 2; }
-  #origin + section > .wrap > .btn { grid-column: 2; grid-row: 2; justify-self: start; align-self: start; margin: 1.4rem 0 0; }
 
   /* the floating field: pinned to the wider column's edge wherever its own place would reach the tiles (eggs 16 and 17
      live on the 7th and 4th glyphs, so none is hidden) */
@@ -645,11 +629,6 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
     display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); grid-template-rows: auto auto auto 1fr auto auto;
   }
   #guide .step:first-child > div:last-child:not(:has(.g1-more[aria-expanded="true"])) > .g1-wallets { margin-top: 0; }
-}
-
-@media (min-width: 2000px) {
-  /* the 1680px column: the twelve tiles four across, three rows */
-  .hero-dash .dash-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
 
 /* ─── The Wall, Support and a member's wall (wall.html, support.html, u.html) ─── */
@@ -1560,7 +1539,7 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   .about-hero ~ #safe .warn-box { max-width: none; }
 
   /* Ready? the four doors two by two while the column is narrow, four across from 1600px — never three and an orphan. */
-  .about-hero ~ #join .do-grid { max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
+  .about-hero ~ #send-links .do-grid { max-width: none; grid-template-columns: repeat(2, minmax(0, 1fr)); margin-top: 0; }
 
   /* ─────────────────────────── /whitepaper ─────────────────────────── */
   /* The reading measure stays what it is today (840px of running text, about 68 characters a line). The width goes
@@ -1651,7 +1630,7 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   /* the words get the width their three buttons need on one line (≈1,010px); the logo takes the rest */
   .about-hero > .hero-content { grid-template-columns: minmax(0, 1fr) minmax(0, 1010px); }
   .about-hero .hero-logo { width: clamp(280px, 19vw, 480px); }
-  .about-hero ~ #join .do-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .about-hero ~ #send-links .do-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   /* the status rows' labels take the mono label voice once the half column is wide enough (≈700px) to keep
      label and figure on one line each */
   .np-wrap:has(> #dk-status) .dk-stat > span { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
