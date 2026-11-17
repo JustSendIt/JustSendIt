@@ -5,8 +5,10 @@
    Drives the real API for what the pop-up saves (each piece on its own, nothing else touched; handles tidied; isMe only for the
    owner), and reads the page code for what the browser does (checked in a muted headless Chrome when it was built). The wall
    song (sections 3–7): what is kept as one, reporting a wall and a moderator's takedown through the real API, and the song on a
-   real wall in a muted headless Chrome that blocks sound until a press (Tab, the nav's ⏸, the visitor's own pause, the theme
-   tune, a voice memo, 44 px on a phone, the Report and takedown buttons). Throwaway rows only, removed at the end. */
+   real wall in a muted headless Chrome that blocks sound until a press (Tab, the nav's ⏸ — before the wall opens, while the
+   song plays, and the song's own ▶ under it — the visitor's own pause, the theme tune, a voice memo, 44 px on a phone, the
+   Report and takedown buttons, and the moderators' queue playing a reported wall's song and taking it down). Throwaway rows
+   only, removed at the end (their song files too). */
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { createHash, randomBytes } from 'node:crypto';
@@ -385,6 +387,18 @@ try {
       && (WS2.match(/once their browser allows sound/g) || []).length >= 2 && /once their browser allows sound/.test(PH2)
       && /you made or have the rights to share/.test(WS2) && /you made or have the rights to share/.test(PH2));
   check('both song controls are at least 44 px tall (2.4rem is 38.4 px on a phone)', /\.song-slot audio, \.wall-song audio \{[^}]*height: max\(44px, 2\.4rem\);/.test(CSS2));
+  const ADM = read('admin.js');
+  check('the moderators\' queue row for a reported wall: its @name opens the wall, its song plays there (no Download item, nothing fetched until ▶), 44 px tall',
+    /'<a href="\/u\/' \+ encodeURIComponent\(t\.username\) \+ '">@' \+ esc\(t\.username\) \+ '<\/a>'/.test(ADM)
+      && /<audio controls controlslist="nodownload" preload="none" src="' \+ esc\(t\.wallAudio\) \+ '"/.test(ADM) && /\.adm-song audio \{[^}]*height: max\(44px, 2\.4rem\);/.test(CSS2));
+  check('  ...and "🧹 Take down song" there names the file, which the click sends as the upload takedown ({kind: \'upload\', name}), not a number',
+    /data-act="takedown" data-kind="upload" data-name="' \+ esc\(songFile\) \+ '" data-tip="[^"]{8,}">🧹 Take down song<\/button>/.test(ADM)
+      && /b\.dataset\.kind === 'upload' \? \{ kind: 'upload', name: b\.dataset\.name, note \} : \{ kind: b\.dataset\.kind, id: Number\(b\.dataset\.id\), note \}/.test(ADM));
+  check('the nav\'s ⏸ covers the wall song: no start on open or on a first press while it is on, a press on it pauses a playing song (as the visitor\'s own pause), ▶ again starts nothing',
+    (UP2.match(/if \(soundPaused\(\)\) return;/g) || []).length === 2 && /const soundPaused = \(\) => document\.documentElement\.classList\.contains\('motion-off'\);/.test(UP2)
+      && /document\.addEventListener\('jsi:sfx', \(e\) => \{\n  if \(!e\.detail \|\| e\.detail\.on !== false\) return;\n  if \(wallSongDisarm\) wallSongDisarm\(\);\n  wallSongWanted = false;/.test(UP2)
+      && /data-tip', 'Pauses or resumes the site\\'s sound effects, the ticker, floating emoji and other motion, and pauses a wall\\'s song — remembered on this device'/.test(read('app.js')));
+  check('the song slot\'s Upload / Replace (a .file-label, like every file picker on the site) is a 44 px target', /\.file-label \{[^}]*min-height: 44px;/.test(CSS2) && !/\.file-label \{[^}]*min-height: 40px;/.test(CSS2));
   check('the voice-memo switch\'s note no longer says every audio upload is refused: a wall song (MP3 or WAV) is taken whatever VOICE_MEMOS says',
     !/the upload route refuses audio outright/.test(SRV2) && /A wall song \(MP3 or WAV, kind 'song'\) is not a voice memo/.test(SRV2));
 
@@ -432,6 +446,37 @@ try {
       check('a press on the nav\'s ⏸ (pause motion and sound) does not start the song, and ends the wait: the next press elsewhere does not start it either',
         afterSwitch === true && (await ev(SONG + '.paused')) === true, 'after the switch paused=' + afterSwitch);
     });
+    /* The nav's ⏸ is the one switch for motion and sound, the wall song included (lead's decision, 2026-11-17). A new page that
+       starts with it on (as a visitor who pressed it earlier would), and a count of every time the page's script asks the song
+       to play: a browser that refuses sound until a press would hide an attempt, the count does not. */
+    const MOTION_OFF = 'try { localStorage.setItem("send.motion", "off"); } catch (e) {} window.__songPlays = 0; (function () { var op = HTMLMediaElement.prototype.play;'
+      + ' HTMLMediaElement.prototype.play = function () { if (this && this.id === "wall-song-audio") window.__songPlays++; return op.apply(this, arguments); }; })();';
+    await step('the nav\'s ⏸ already on when the wall opens', async () => {
+      const { identifier } = await cdp('Page.addScriptToEvaluateOnNewDocument', { source: MOTION_OFF });
+      try {
+        const shown = await openWall(singer.name, fan);
+        const st = await ev('({ off: document.documentElement.classList.contains("motion-off"), pressed: document.getElementById("motion-btn") && document.getElementById("motion-btn").getAttribute("aria-pressed"), tries: window.__songPlays, paused: ' + SONG + '.paused })');
+        check('with the nav\'s ⏸ already on, the wall shows its song and never asks it to play when the wall opens', shown && st.off === true && st.pressed === 'true' && st.tries === 0 && st.paused === true, JSON.stringify(st));
+        await press('#pub-bio'); await sleep(900);
+        const after = await ev('({ tries: window.__songPlays, paused: ' + SONG + '.paused })');
+        check('  ...nor on the visitor\'s first press elsewhere on the wall: there is no wait for one', after.tries === 0 && after.paused === true, JSON.stringify(after));
+        await press('#wall-song-audio', 20);   // the control's own ▶
+        check('  ...while the song\'s own ▶ still plays it, ⏸ or not: that press is the visitor choosing it', !!(await until('!' + SONG + '.paused', 4000)) && (await ev('document.documentElement.classList.contains("motion-off")')) === true);
+      } finally { await cdp('Page.removeScriptToEvaluateOnNewDocument', { identifier }); }
+    });
+    await step('the nav\'s ⏸ pressed while the song plays', async () => {
+      await openWall(singer.name, fan);
+      await press('#pub-bio');
+      if (!(await until('!' + SONG + '.paused', 4000))) throw new Error('the song did not start on the first press');
+      await press('#motion-btn'); await sleep(500);
+      const pausedBySwitch = await ev(SONG + '.paused');
+      await press('#pub-bio'); await sleep(900);
+      const afterPress = await ev(SONG + '.paused');
+      check('a playing song pauses when the nav\'s ⏸ is pressed, and stays paused: the next press on the wall does not start it again', pausedBySwitch === true && afterPress === true, 'paused by the switch ' + pausedBySwitch + ', after a press ' + afterPress);
+      await press('#motion-btn'); await sleep(900);
+      const back = await ev('({ off: document.documentElement.classList.contains("motion-off"), paused: ' + SONG + '.paused })');
+      check('  ...and turning the ⏸ back off (its ▶) does not start it', back.off === false && back.paused === true, JSON.stringify(back));
+    });
     await step('the visitor\'s own pause', async () => {
       await openWall(singer.name, fan);
       await press('#wall-song-audio', 20);   // the control's own ▶, at its left end (its presses never reach the page's listeners)
@@ -473,6 +518,54 @@ try {
       await openWall(singer.name, singer);
       check('  ...there is no Report button on your own wall, and only a moderator sees "🧹 Take down song"',
         (await ev(HIDDEN('report-wall-btn'))) === true && noTip === true && (await ev(HIDDEN('wall-song-takedown'))) === true);
+    });
+    await step('the moderators\' queue: a reported wall\'s song, heard and taken down there', async () => {
+      const singer2 = mkUser();
+      const up2 = await uploadRaw(singer2, 'audio/wav', toneWav(4, 523));
+      const set2 = await call(singer2, 'POST', '/api/profile/audio', { audio: up2.j && up2.j.url });
+      const rep2 = await call(fan, 'POST', '/api/report', { kind: 'user', username: singer2.name, reason: 'not theirs to share' });
+      const file2 = songName(up2);
+      const rid = (db.prepare("SELECT id FROM reports WHERE reporter_id = ? AND kind = 'user' AND target_id = ? AND resolved_at IS NULL").get(fan.id, singer2.id) || {}).id;
+      if (!(up2.status === 200 && set2.status === 200 && rep2.status === 200 && rid)) throw new Error('setup: ' + up2.status + ' ' + set2.status + ' ' + rep2.status + ' ' + rid);
+      await cdp('Network.clearBrowserCookies');
+      await cdp('Network.setCookie', { name: 'jsi_age', value: '18', url: BASE });
+      await cdp('Network.setCookie', { name: 'sid', value: admin.sid, url: BASE });
+      await cdp('Emulation.setDeviceMetricsOverride', { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+      await cdp('Page.navigate', { url: BASE + '/admin' });
+      const ROW = 'document.querySelector("#adm-list [data-rid=\\"' + rid + '\\"]")';
+      if (!(await until('!!' + ROW, 10000))) throw new Error('the report is not in the admin queue');
+      await sleep(1500);   // the queue is drawn more than once as the page signs in, and a row arrives with a short scale-in
+      const seen = await ev('(() => { const r = ' + ROW + ', a = r.querySelector("a[href^=\\"/u/\\"]"), au = r.querySelector("audio"), b = r.querySelector("button[data-kind=\\"upload\\"]");'
+        + ' return { href: a && a.getAttribute("href"), name: a && a.textContent, src: au && au.getAttribute("src"), cl: au && au.getAttribute("controlslist"), pre: au && au.getAttribute("preload"), h: au && au.getBoundingClientRect().height,'
+        + ' btn: b && b.textContent, file: b && b.dataset.name, tip: b ? (b.dataset.tip || "") : "" }; })()');
+      check('the moderators\' queue shows a reported wall with its @name linked to the wall and its song in a player (no Download item, 44 px or taller)',
+        seen.href === '/u/' + encodeURIComponent(singer2.name) && seen.name === '@' + singer2.name && seen.src === '/uploads/' + file2 && seen.cl === 'nodownload' && seen.pre === 'none' && seen.h >= 44, JSON.stringify(seen));
+      await press('#adm-list [data-rid="' + rid + '"] audio', 20);   // its own ▶: a moderator hears it before deciding
+      check('  ...and the song plays there', !!(await until('(() => { const a = ' + ROW + '.querySelector("audio"); return !!a && !a.paused; })()', 4000)));
+      await ev('window.prompt = () => "not theirs to share"; true');
+      await press('#adm-list [data-rid="' + rid + '"] button[data-kind="upload"]');
+      const gone = await until('(() => { const r = ' + ROW + '; return !r; })()', 6000);
+      const u2 = db.prepare('SELECT wall_audio FROM users WHERE id = ?').get(singer2.id);
+      const closed2 = db.prepare('SELECT resolved_at, action FROM reports WHERE id = ?').get(rid);
+      const told2 = db.prepare("SELECT text FROM notifications WHERE user_id = ? AND icon = '🧹' ORDER BY id DESC").get(singer2.id);
+      check('  ..."🧹 Take down song" there (described, 8+ characters) takes it down by its file: the wall is silent, the file deleted, its owner told with the note, the report closed and gone from the open queue',
+        seen.btn === '🧹 Take down song' && seen.file === file2 && seen.tip.length >= 8 && !!gone && u2 && u2.wall_audio === null && !existsSync(path.join(DATA_DIR, 'uploads', file2))
+          && closed2 && closed2.resolved_at > 0 && closed2.action === 'takedown' && told2 && /wall song/.test(told2.text) && /not theirs to share/.test(told2.text),
+        JSON.stringify({ gone: !!gone, u2, closed2, told2 }));
+      await cdp('Emulation.setDeviceMetricsOverride', { width: 320, height: 800, deviceScaleFactor: 1, mobile: true });
+      const up3 = await uploadRaw(singer2, 'audio/wav', toneWav(2, 523));
+      await call(singer2, 'POST', '/api/profile/audio', { audio: up3.j && up3.j.url });
+      await call(other, 'POST', '/api/report', { kind: 'user', username: singer2.name, reason: 'again' });
+      const rid3 = (db.prepare("SELECT id FROM reports WHERE reporter_id = ? AND kind = 'user' AND target_id = ? AND resolved_at IS NULL").get(other.id, singer2.id) || {}).id;
+      await cdp('Page.navigate', { url: BASE + '/admin' });
+      const ROW3 = 'document.querySelector("#adm-list [data-rid=\\"' + rid3 + '\\"]")';
+      if (!(await until('!!' + ROW3, 10000))) throw new Error('the second report is not in the admin queue');
+      await sleep(1500);
+      const fit = await ev('(() => { const r = ' + ROW3 + ', rr = r.getBoundingClientRect(), a = r.querySelector("audio").getBoundingClientRect(), b = r.querySelector("button[data-kind=\\"upload\\"]").getBoundingClientRect();'
+        + ' return { iw: innerWidth, row: Math.round(rr.right), audio: Math.round(a.right), btn: Math.round(b.right), ah: a.height, bh: b.height }; })()');
+      check('  ...and at 320 px the row\'s player and button stay inside the row and the screen, the player 44 px tall',
+        fit.row <= fit.iw && fit.audio <= fit.row && fit.btn <= fit.row && fit.ah >= 44, JSON.stringify(fit));
+      try { const f3 = songName(up3); if (f3) await call(admin, 'POST', '/api/admin/takedown', { kind: 'upload', name: f3, note: 'test clean-up' }); } catch {}
     });
     await step('"🧹 Take down song" for a moderator', async () => {
       await openWall(singer.name, admin);

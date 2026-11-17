@@ -74,6 +74,12 @@ try {
     db.prepare(`UPDATE users SET twofa_method='totp', twofa_secret=?, twofa_enabled_at=?, twitter_handle='leaver_x', ig_handle='leaver_ig',
       avatar_img=?, header_img=?, bg_img=?, signup_ip=?, last_ip=?, age_at=?, accent='#123456', wall_bg='x' WHERE id=?`)
       .run(secret, Date.now(), files[0], files[1], files[2], hex(32), hex(32), Date.now(), u.id);
+    /* their wall song: a file on disk named only in users.wall_audio (no uploads row, so it is the column the deletion has to
+       read for it — the uploads-row path is the 'upload' file above), three MPEG-1 Layer III frames */
+    const frame = Buffer.alloc(417, 0); frame[0] = 0xff; frame[1] = 0xfb; frame[2] = 0x90;
+    const song = hex(12) + '.mp3';
+    writeFileSync(path.join(UPLOADS, song), Buffer.concat([frame, frame, frame])); made.files.push(song);
+    db.prepare('UPDATE users SET wall_audio = ? WHERE id = ?').run(song, u.id);
     db.prepare("INSERT INTO identities (user_id, type, identifier, identifier_enc, linked_at) VALUES (?,?,?,?,?)").run(u.id, 'wallet', hex(32), wallet, Date.now());
     db.prepare('INSERT INTO uploads (name, user_id, bytes, kind, created_at, claimed) VALUES (?,?,?,?,?,1)').run(files[3], u.id, 100, 'image', Date.now());
     db.prepare('INSERT INTO notifications (user_id, kind, icon, text, created_at) VALUES (?,?,?,?,?)').run(u.id, 'alert', '🔗', 'hello', Date.now());
@@ -106,6 +112,7 @@ try {
       check('  ...' + t + ' are gone', db.prepare(`SELECT COUNT(*) n FROM ${t} WHERE user_id=?`).get(u.id).n === 0);
     }
     check('  ...the files behind the profile pictures are removed from disk', files.every((f) => !existsSync(path.join(UPLOADS, f))), files.filter((f) => existsSync(path.join(UPLOADS, f))).join(','));
+    check('  ...and the wall song: its file is gone from disk and the row no longer names it', !existsSync(path.join(UPLOADS, song)) && row && row.wall_audio == null, JSON.stringify({ onDisk: existsSync(path.join(UPLOADS, song)), wall_audio: row && row.wall_audio }));
     check('  ...a draft proposal is gone, an opened one keeps its tally but not its words or network',
       db.prepare("SELECT COUNT(*) n FROM proposals WHERE author_id=? AND status='draft'").get(u.id).n === 0 &&
       db.prepare("SELECT COUNT(*) n FROM proposals WHERE author_id=? AND status='open' AND title='[deleted]' AND body='' AND author_ip IS NULL").get(u.id).n === 1);
@@ -122,7 +129,7 @@ try {
     check('  ...accounts deleted before this rule get the same at boot', /DELETE FROM invite_codes WHERE user_id IS NULL AND (?:admin = 0 AND )?owner_id IN \(SELECT id FROM users WHERE deleted_at IS NOT NULL\)/.test(SRC)
       && /DELETE FROM invite_codes WHERE owner_id = \? AND user_id IS NULL/.test(SRC));
     const pub = await api('/api/users/deleted-' + u.id);
-    check('  ...and the public profile carries nothing that identifies them', pub.status !== 200 || (!/leaver_x|leaver_ig/.test(pub.text) && !files.some((f) => pub.text.includes(f))), pub.status);
+    check('  ...and the public profile carries nothing that identifies them (no picture, no song)', pub.status !== 200 || (!/leaver_x|leaver_ig/.test(pub.text) && ![...files, song].some((f) => pub.text.includes(f))), pub.status);
   }
 
   /* ═══ 2. no endpoint hands one person's private data to anybody else ═══ */

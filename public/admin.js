@@ -33,12 +33,17 @@
       (t.image ? '<p><a href="' + esc(t.image) + '" target="_blank" rel="noopener">attached media ↗</a></p>' : '');
     else if (r.kind === 'comment') what = '<p><b>Comment #' + t.id + '</b> by @' + esc(t.username) + ' on post #' + t.postId + '</p>' + (t.text ? '<blockquote class="adm-quote">' + esc(t.text) + '</blockquote>' : '');
     else if (r.kind === 'hopcomment') what = '<p><b>Comment #' + t.id + '</b> by @' + esc(t.username) + ' under @' + esc(t.sender) + '’s Sent It on Send Call #' + t.callId + '</p>' + (t.text ? '<blockquote class="adm-quote">' + esc(t.text) + '</blockquote>' : '');
-    else what = '<p><b>@' + esc(t.username) + '</b> (user #' + t.id + ')' + (t.deleted ? ' — account deleted' : t.restrictLevel ? ' — currently restricted' + (t.restrictedUntil ? ' until ' + when(t.restrictedUntil) : '') : '') + '</p>';
+    /* a reported wall: its @name opens the wall, and its song (target.wallAudio, '/uploads/<file>') plays here, so it can be
+       heard before it is taken down. The takedown names the file, as POST /api/admin/takedown {kind: 'upload', name} asks. */
+    else what = '<p><b>' + (t.deleted ? '@' + esc(t.username) : '<a href="/u/' + encodeURIComponent(t.username) + '">@' + esc(t.username) + '</a>') + '</b> (user #' + t.id + ')' + (t.deleted ? ' — account deleted' : t.restrictLevel ? ' — currently restricted' + (t.restrictedUntil ? ' until ' + when(t.restrictedUntil) : '') : '') + '</p>' +
+      (t.wallAudio ? '<p class="adm-song">🎵 Wall song: <audio controls controlslist="nodownload" preload="none" src="' + esc(t.wallAudio) + '" aria-label="The wall song of @' + esc(t.username) + '"></audio></p>' : '');
+    const songFile = t && t.wallAudio ? String(t.wallAudio).split('/').pop() : '';
     const open = !r.resolved_at;
     const actions = !open ? '<p class="modal-note">Resolved ' + when(r.resolved_at) + ' — ' + esc(r.action || '') + '</p>' :
       '<div class="adm-actions">' +
         (t && r.kind === 'post' ? '<button class="btn btn-sm btn-primary" data-act="takedown" data-kind="post" data-id="' + t.id + '" data-tip="Removes the post (or its text and media, for a Send Call) and tells the author">Take down post</button>' : '') +
         (t && (r.kind === 'comment' || r.kind === 'hopcomment') ? '<button class="btn btn-sm btn-primary" data-act="takedown" data-kind="' + r.kind + '" data-id="' + t.id + '" data-tip="Removes the comment and tells the author">Take down comment</button>' : '') +
+        (songFile ? '<button class="btn btn-sm btn-primary" data-act="takedown" data-kind="upload" data-name="' + esc(songFile) + '" data-tip="Removes this wall\'s song and its file, tells the owner and closes the reports on this wall">🧹 Take down song</button>' : '') +
         (t && t.userId ? '<button class="btn btn-sm" data-act="restrict" data-uid="' + t.userId + '" data-tip="Puts the author in read-only mode for 7 days">Restrict author 7d</button>' : '') +
         '<button class="btn btn-sm btn-ghost" data-act="dismiss" data-rid="' + r.id + '" data-tip="Closes the report with no action">Dismiss</button>' +
       '</div>';
@@ -163,7 +168,8 @@
       if (b.dataset.act === 'takedown') {
         const note = window.prompt('Note for the author (optional, shown in their notification):') ;
         if (note === null) { b.disabled = false; st.textContent = ''; return; }
-        await post('/api/admin/takedown', { kind: b.dataset.kind, id: Number(b.dataset.id), note });
+        // an upload (a wall's song) is named by its file; a post or a comment by its number
+        await post('/api/admin/takedown', b.dataset.kind === 'upload' ? { kind: 'upload', name: b.dataset.name, note } : { kind: b.dataset.kind, id: Number(b.dataset.id), note });
         if (window.SFX) SFX.play('remove');
       } else if (b.dataset.act === 'restrict') {
         const reason = window.prompt('Reason (the person sees it):', 'breaking the community rules');

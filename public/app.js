@@ -705,7 +705,8 @@
    under it) and remembers the choice in this browser. State animations — toasts, meter fills, focus —
    are deliberately not on that list. The same switch pauses the site's sound effects (sfx.js — owner, 2026-10-13:
    "users can pause those sounds also through the pause button in the nav bar that also pauses animations"): one ⏸,
-   motion and sound together. The theme tune keeps its own button. */
+   motion and sound together. The theme tune keeps its own button. A wall's song (upage.js) answers to it as well: ⏸ pauses it
+   and keeps it from starting by itself, ▶ again starts nothing, and the song's own ▶ still plays it. */
 (function () {
   const KEY = 'send.motion';
   const root = document.documentElement;
@@ -717,7 +718,7 @@
     b.type = 'button'; b.id = 'motion-btn'; b.className = 'motion-btn';
     b.setAttribute('aria-pressed', String(off));
     b.setAttribute('aria-label', 'Pause motion and sound effects');   // one name; aria-pressed carries the state — a label that flips would announce the opposite of the state
-    b.setAttribute('data-tip', 'Pauses or resumes the site\'s sound effects, the ticker, floating emoji and other decorative motion — remembered on this device');
+    b.setAttribute('data-tip', 'Pauses or resumes the site\'s sound effects, the ticker, floating emoji and other motion, and pauses a wall\'s song — remembered on this device');   // as tall a bubble as before the wall song was named in it: at the desktop text size a taller one covers the wall under the nav
     b.innerHTML = '<span aria-hidden="true">' + (off ? '▶' : '⏸') + '</span>';
     b.addEventListener('click', () => {
       off = !off;
