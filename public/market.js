@@ -1125,6 +1125,7 @@
     if (r.dataset.retry === 'list') { memo.clear(); loadList(); } else if (r.dataset.retry === 'view') { memo.clear(); loadView(); } else if (r.dataset.retry === 'scan') { const h = $('mkt-scan-host'); if (h) { h._asked = false; loadScan(h); } }
     else if (r.dataset.retry === 'rwa') { const h = $('mkt-rwa-host'); if (h) { memo.clear(); loadRwa(h); } }
     else if (r.dataset.retry === 'map') { memo.delete('/api/market/heatmap'); loadMap(false); }
+    else if (r.dataset.retry === 'movers') { memo.delete('/api/market/movers'); loadMovers(); }   // on the line under the banner, outside the strip
     else if (r.dataset.retry === 'search' && form) { memo.clear(); if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event('submit', { cancelable: true })); }
   });
 
@@ -2782,10 +2783,7 @@
     if (mvEl.src) mvEl.src.innerHTML = 'Ranked by the size of the 24 h move, either way, among CoinGecko’s 100 largest coins' + (at ? ' · read ' + agoEl(at) : '') +
       (MV.fail ? ' · <span class="mkt-err-t">the newest read failed (' + esc(MV.fail.text) + '), so these are from ' + agoEl(MV.at) + '</span>' : '') + ' · not advice, never a tip to buy';
   }
-  if (mvEl.sec) mvEl.sec.addEventListener('click', (e) => {
-    const b = e.target.closest('[data-mover]'); if (b) { openCoin(coinRow(b.dataset.mover)); return; }
-    if (e.target.closest('[data-retry="movers"]')) { memo.delete('/api/market/movers'); loadMovers(); }
-  });
+  if (mvEl.sec) mvEl.sec.addEventListener('click', (e) => { const b = e.target.closest('[data-mover]'); if (b) openCoin(coinRow(b.dataset.mover)); });
 
   /* ---------- the market at a glance: one tile per headline figure, each a way into the part of the page with more ---------- */
   function glTile(kind, arg, k, v, sub, tip, cls) {

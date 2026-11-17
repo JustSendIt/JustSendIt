@@ -100,7 +100,7 @@ const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const WINDOWS = (() => { const db = new DatabaseSync(':memory:'); MD.migrate(db); return MD.createMarketData({ db, fetchJson: async () => ({ ok: false, status: 0, data: null, reason: 'no vendor in this test' }) }); })();
 const CHAIN_WINS = ['24h', '7d', '30d'], TOKEN_WINS = ['24h', '6h', '1h', '5m'];
 /* what the browser walk can make the fake do, as the real server does when a source cannot be read */
-const FAKE = { log: [], unavailable: new Set(), zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, pulse: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0, heatmapDown: false, heatmapPatch: null };
+const FAKE = { log: [], unavailable: new Set(), zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, pulse: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0, heatmapDown: false, heatmapPatch: null, moversDown: false, moversPatch: null, me: null, callsTop: null, other: [] };
 // the logo proxy: DefiLlama's chain icons draw (any PNG will do for the walk) except Solana's, which fails as a missing picture does
 const LOGO_PNG = readFileSync(path.join(PUB, 'assets', 'logo-128.png')), LOGO_BROKEN = /rsz_solana/;
 const none = (why, src, at) => ({ v: null, src, at, why });
@@ -206,6 +206,39 @@ function fakeHeatmap(q) {
   const counts = { up: 0, down: 0, flat: 0, none: 0, drawn: 0 };
   for (const r of rows) { if (r.mcap.v == null) continue; counts.drawn++; const c = r.change24h.v; if (c == null) counts.none++; else if (c === 0) counts.flat++; else if (c > 0) counts.up++; else counts.down++; }
   return [200, Object.assign({}, j, { limit, stables, rows, counts })];
+}
+/* the biggest movers (/api/market/movers): lib/marketdata.js's own answer (movers.json, worked out from the same read as heatmap.json) */
+function fakeMovers() {
+  if (FAKE.moversDown) return [503, { error: 'The biggest moves could not be read just now' }];
+  return [200, FAKE.moversPatch ? FAKE.moversPatch(FIX('movers.json')) : FIX('movers.json')];
+}
+/* the dashboard layer's reads outside /api/market/ (2026-11-17): a member's watchlist and calls, the most-called tokens and a token's
+   lookup, in the server's shapes (server.js watchlistView, topCalledTokens, /api/calls/mine/ids). A signed-in member is FAKE.me; their
+   watchlist and their one call are $SEND, whose Scanner profile is scan-robinhood-<SEND>.json; the most-called list is $SEND (priced
+   from that profile) and USDG (no price read, with the server's reason) */
+const scanPairOf = () => FIX('scan-robinhood-' + SEND + '.json').pair;
+function fakeCallsTop(w) {
+  const at = Date.now() - 20e3, sp = scanPairOf();
+  return { window: w, since: at - (w === '7d' ? 7 : 1) * 864e5, at, ranked: 'distinct callers, then calls, then the newest call', rows: [
+    { token: SEND, symbol: sp.token.symbol, name: sp.token.name, pair: sp.pair.address, callers: w === '7d' ? 5 : 3, calls: w === '7d' ? 6 : 4, lastAt: at - 3600e3,
+      market: { price: sp.market.priceUsd, change24h: sp.priceChange.h24, mcap: sp.market.marketCap, mcapIs: 'mcap', mcapLabel: 'market cap', at, src: 'dexscreener' }, marketWhy: null },
+    { token: USDG, symbol: 'USDG', name: 'Global Dollar', pair: null, callers: 1, calls: 1, lastAt: at - 5 * 3600e3, market: null,
+      marketWhy: 'no price could be read for this token just now (Dexscreener, a minute at a time) — tried again on the next read' }],
+    notes: ['Public Send Calls only, by members whose call met the $5,000 liquidity floor at entry; squad calls are private and never counted here.', 'Not advice, never a tip to buy. Do your own research.'] };
+}
+function fakeOther(u) {
+  const p = u.pathname, q = u.searchParams, me = FAKE.me;
+  if (p === '/api/me') return me ? [200, { user: me }] : [401, { error: 'not signed in' }];
+  if (p === '/api/watchlist/ids') return [200, me ? { ids: [scanPairOf().pair.address], tokens: [SEND] } : { ids: [], tokens: [] }];
+  if (p === '/api/watchlist') return me ? [200, { items: [Object.assign({}, scanPairOf(), { _wl: { added_at: Date.now() - 3600e3, source: 'live' } })] }] : [401, { error: 'sign in first' }];
+  if (p === '/api/calls/mine/ids') return me ? [200, { calls: [{ id: 7, token: SEND, createdAt: Date.now() - 2 * 3600e3, squadId: null }] }] : [401, { error: 'sign in first' }];
+  if (p === '/api/calls/top-tokens') {
+    const w = q.get('window') || '24h';
+    if (!['24h', '7d'].includes(w)) return [400, { error: 'bad window — one of: 24h, 7d' }];
+    return [200, FAKE.callsTop ? FAKE.callsTop(w) : fakeCallsTop(w)];
+  }
+  if (p === '/api/pairs/lookup') return String(q.get('token') || '').toLowerCase() === SEND ? [200, { pair: scanPairOf() }] : [404, { notFound: true, error: 'No trading pool was found for this token.' }];
+  return null;
 }
 function fakeAnswer(u) {
   const q = u.searchParams, p = u.pathname, qo = Object.fromEntries(q);
@@ -313,6 +346,7 @@ function fakeAnswer(u) {
   }
   if (p === '/api/market/scan') {
     const chain = q.get('chain') || '', addr = String(q.get('address') || '').toLowerCase(), f = 'scan-' + chain + '-' + addr + '.json';
+    if (FAKE.scanAs && FAKE.scanAs[chain + ':' + addr]) return [200, FAKE.scanAs[chain + ':' + addr]];
     if (existsSync(path.join(FIXDIR, f))) return [200, FIX(f)];
     return [503, { unavailable: true, message: 'The chain could not be read for this token just now — nothing here is a judgement about it.' }];
   }
@@ -329,6 +363,7 @@ function fakeAnswer(u) {
   if (p === '/api/market/rwa') return fakeRwa(q);
   if (p === '/api/market/rwa/token') return fakeRwaToken(q);
   if (p === '/api/market/heatmap') return fakeHeatmap(q);
+  if (p === '/api/market/movers') return fakeMovers();
   if (p === '/api/market/new-pools') return [200, { chain: q.get('chain') || 'robinhood', rows: (FIX('chain-robinhood.json').newPools || []).slice(0, Number(q.get('limit')) || 20) }];
   if (p === '/api/market/status') return [200, { collectors: [], tables: [] }];
   return [404, { error: 'not found' }];
@@ -354,7 +389,8 @@ function startFake(port, opts = {}) {
         if (what === 'rwa' && FAKE.rwaDelay) await new Promise((r) => setTimeout(r, FAKE.rwaDelay));
         try { const [code, body] = fakeAnswer(u); return json(code, body); } catch (e) { return json(500, { error: String(e && e.message) }); }
       }
-      if (u.pathname === '/api/me') return json(401, { error: 'not signed in' });
+      const other = fakeOther(u);
+      if (other) { FAKE.other.push(u.pathname + u.search); return json(other[0], other[1]); }
       return json(404, { error: 'not in the fake' });
     }
     let f = u.pathname === '/' ? 'index.html' : decodeURIComponent(u.pathname.slice(1));
@@ -468,6 +504,7 @@ async function realAnswers() {
   const hm = { coins: MM.parseMarkets(FIXMD('heatmap-cg-top100.json'), T), global: MM.parseGlobal(FIXMD('heatmap-cg-global.json')), stables: MM.parseStables(FIXMD('heatmap-cg-stables.json')), lore: MM.parseLore(FIXMD('heatmap-lore-top100.json'), T) };
   stSet('heatmap', Object.fromEntries(Object.entries(hm).map(([k, p]) => { const o = Object.assign({ readAt: T }, p); delete o.ok; return [k, o]; })));
   out.heatmap = J(md.heatmap({})); out.heatmapCut = J(md.heatmap({ limit: '50', stables: '0' }));
+  out.movers = J(md.movers());
   return out;
 }
 /* the shape of one answer against another: every key in one is in the other, with the same kind (object, array, number, string,
@@ -563,7 +600,7 @@ async function browserWalk() {
     // each part of the walk on its own: one that breaks is a failure of its own, the rest still run, and the fake is put back as it was
     const step = async (name, fn) => {
       try { await fn(); } catch (e) { check(name + ' (the walk broke here)', false, e && e.message); }
-      finally { Object.assign(FAKE, { pulse: null, zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0, heatmapDown: false, heatmapPatch: null }); FAKE.unavailable.clear(); }
+      finally { Object.assign(FAKE, { pulse: null, zeroReserve: false, candleGaps: false, customNoCandles: false, searchWhy: null, searchExtra: null, tokensDelay: null, rwaList: null, rwaDown: false, rwaTokenDown: false, rwaDelay: 0, heatmapDown: false, heatmapPatch: null, moversDown: false, moversPatch: null, me: null, callsTop: null, scanAs: null }); FAKE.unavailable.clear(); }
     };
     await step('every width: the chain view and a token view fit, on the text floor', async () => {
       const fits = [];
@@ -1750,6 +1787,147 @@ async function browserWalk() {
       check('  ...under reduced motion it appears at once (no fade)', rm.cls === 'mkt-map-svg' && rm.op === '1' && parseFloat(rm.tr) <= 0.001, JSON.stringify(rm));
     });
 
+    /* ═══ the dashboard layer (owner, 2026-11-17): the movers banner, the market at a glance, a coin's on-chain data, Watchlist and Calls ═══ */
+    const MVF = FIX('movers.json');
+    const moversReady = () => until('document.querySelectorAll("#mkt-movers-win .mkt-movers-list:not(.mkt-movers-dup) [data-mover]").length === 10 && document.querySelectorAll("#mkt-glance-grid .mkt-gl").length === 8');
+    const modalReady = () => until('(() => { const m = document.getElementById("token-modal"); return m && !m.hasAttribute("hidden") && !document.querySelector("#tm-body .tm-loading"); })()');
+    const modal = () => ev('(() => { const m = document.getElementById("token-modal"), f = m.querySelector(".tm-full"); return { open: !m.hasAttribute("hidden"), title: document.getElementById("tm-title").textContent, lead: (m.querySelector(".tm-lead") || {}).textContent || "", msg: (m.querySelector(".tm-msg") || {}).textContent || "", dash: !!m.querySelector(".tkd-head"), full: f && !f.hidden ? f.getAttribute("href") : null }; })()');
+    const closeModal = async () => { await ev('document.querySelector("#token-modal .tm-x").click(), true'); await until('document.getElementById("token-modal").hasAttribute("hidden")'); };
+    await step('the movers banner: the ten biggest moves, in order, moving where motion is wanted', async () => {
+      await go('/market', 1280); await moversReady();
+      const b = await ev('(() => { const w = document.getElementById("mkt-movers-win"), tr = w.querySelector(".mkt-movers-track"), lists = w.querySelectorAll(".mkt-movers-list"), first = [...lists[0].querySelectorAll("[data-mover]")];'
+        + ' return { ids: first.map((x) => x.dataset.mover), texts: first.map((x) => x.textContent), dup: lists.length === 2 && lists[1].getAttribute("aria-hidden") === "true" && lists[1].inert === true && lists[1].querySelectorAll("[data-mover]").length === 10,'
+        + ' anim: getComputedStyle(tr).animationName, state: getComputedStyle(tr).animationPlayState, dur: tr.style.getPropertyValue("--mv-dur"), src: document.getElementById("mkt-movers-src").textContent, tips: first.every((x) => (x.dataset.tip || "").length >= 8) }; })()');
+      const want = MVF.rows.map((r) => r.id), t0 = b.texts[0] || '';
+      check('the banner runs the ten coins of /api/market/movers in its order (the biggest 24 h move either way first), each with its ticker, price and move, a description on every one; the copy that closes the loop is hidden from readers and the keyboard',
+        JSON.stringify(b.ids) === JSON.stringify(want) && /^ENA\$0\.1665▼ −20\.1%$/.test(t0) && /^HYPE/.test(b.texts.join('|')) === false && b.dup && b.tips, JSON.stringify(b).slice(0, 600));
+      check('  ...it moves (one loop, its length setting its speed) and says what it ranks, when it was read, and that it is not advice',
+        b.anim === 'mkt-mv' && b.state === 'running' && /^\d+s$/.test(b.dur) && /Ranked by the size of the 24 h move, either way, among CoinGecko’s 100 largest coins/.test(b.src) && /not advice, never a tip to buy/.test(b.src), JSON.stringify({ anim: b.anim, state: b.state, dur: b.dur, src: b.src }));
+      const r = await ev('(() => { const b = document.getElementById("mkt-movers").getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()');
+      await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: r[0], y: r[1], button: 'none' }); await sleep(150);
+      const hov = await ev('getComputedStyle(document.querySelector(".mkt-movers-track")).animationPlayState');
+      await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 880, button: 'none' }); await sleep(150);
+      await ev('document.querySelector("#mkt-movers-win [data-mover]").focus({ preventScroll: true }), true'); await sleep(80);
+      const foc = await ev('getComputedStyle(document.querySelector(".mkt-movers-track")).animationPlayState');
+      await ev('document.activeElement.blur(), true');
+      const still = '(() => { const w = document.getElementById("mkt-movers-win"), tr = w.querySelector(".mkt-movers-track"); return { anim: getComputedStyle(tr).animationName, dup: getComputedStyle(w.querySelector(".mkt-movers-dup")).display, ox: getComputedStyle(w).overflowX }; })()';
+      await ev('document.documentElement.classList.add("motion-off"), true'); const off = await ev(still); await ev('document.documentElement.classList.remove("motion-off"), true');
+      await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] }); const rm = await ev(still); await cdp('Emulation.setEmulatedMedia', { features: [] });
+      const stillOK = (x) => x.anim === 'none' && x.dup === 'none' && x.ox === 'auto';
+      check('  ...it stops under a pointer and while a mover has the keyboard; under ⏸ (html.motion-off) and the reduced-motion setting it does not move at all: the copy goes and the row scrolls by hand',
+        hov === 'paused' && foc === 'paused' && stillOK(off) && stillOK(rm), JSON.stringify({ hov, foc, off, rm }));
+      const lay = {};
+      for (const w of [320, 390]) { await go('/market', w); await moversReady(); lay[w] = await ev(LAYOUT); }
+      check('  ...at 320 and 390 px the banner and the glance fit: no sideways scroll, nothing outside the column, no text under the floor',
+        [320, 390].every((w) => lay[w].sw <= lay[w].iw && !lay[w].out.length && !lay[w].small.length), JSON.stringify(lay).slice(0, 600));
+      FAKE.moversDown = true; await go('/market', 1280);
+      await until('!!document.querySelector("#mkt-movers-src [data-retry=movers]")');
+      const down = { t: await textOf('#mkt-movers-win'), retry: await ev('!!document.querySelector("#mkt-movers-src [data-retry=movers]")') };
+      FAKE.moversDown = false; await ev('document.querySelector("#mkt-movers-src [data-retry=movers]").click(), true'); const back = await moversReady();
+      check('  ...a read that fails says why with a Try again, never an empty banner or a made-up move, and Try again reads it again',
+        /could not be read just now/i.test(down.t) && down.retry && !!back, JSON.stringify(down));
+    });
+
+    await step('the market at a glance: one tile per headline figure, each a way in', async () => {
+      await go('/market', 1280); await moversReady(); await until('/\\$SEND/.test(document.getElementById("mkt-glance-grid").textContent)');
+      const tiles = await ev('[...document.querySelectorAll("#mkt-glance-grid .mkt-gl")].map((t) => ({ k: t.querySelector(".mkt-gl-k").textContent, v: t.querySelector(".mkt-gl-v").textContent, s: t.querySelector(".mkt-gl-s").textContent, kind: t.dataset.glance, arg: t.dataset.arg || "", tip: (t.dataset.tip || "").length }))');
+      const T = (re) => tiles.find((t) => re.test(t.k)) || { v: '', s: '' };
+      check('the glance: the market cap ($2.59T, CoinGecko), the 100\'s breadth from the server\'s counts, the biggest gainer and faller, Bitcoin\'s dominance from its fig, Robinhood Chain, your watchlist (sign in) and the most-called token — each tile a button that says where it goes',
+        tiles.length === 8 && tiles.every((t) => t.tip >= 8) && /\$2\.59\s?T/.test(T(/Crypto market cap/).v) && /CoinGecko/.test(T(/Crypto market cap/).s)
+        && /▼ 88/.test(T(/Top 100/).v) && /▲ 11/.test(T(/Top 100/).v) && /1 unchanged/.test(T(/Top 100/).s)
+        && /^HYPE/.test(T(/gainer/).v) && /▲ \+10\.4%/.test(T(/gainer/).v) && T(/gainer/).arg === 'hyperliquid' && /^ENA/.test(T(/faller/).v) && T(/faller/).arg === 'ethena'
+        && /^👑 BTC dominance/.test(T(/dominance/).k) && /59\.6%/.test(T(/dominance/).v) && T(/dominance/).arg === 'bitcoin'
+        && T(/watchlist/).v === 'Sign in' && /\$SEND/.test(T(/Most called/).v) && /3 members called it/.test(T(/Most called/).s), JSON.stringify(tiles).slice(0, 900));
+      await ev('document.querySelector("#mkt-glance-grid [data-glance=tab][data-arg=calls]").click(), true'); await listReady();
+      const toCalls = { sel: await ev('document.getElementById("mkt-tab-calls").getAttribute("aria-selected")'), url: await ev('location.search') };
+      await ev('document.querySelector("#mkt-glance-grid [data-glance=chain]").click(), true'); await viewReady();
+      const toChain = { url: await ev('location.search'), vh: await textOf('#mkt-vh') };
+      check('  ...the most-called tile opens the Calls tab (in the address), the Robinhood Chain tile its chain in the main view',
+        toCalls.sel === 'true' && toCalls.url === '?chain=robinhood&tab=calls' && /Robinhood/.test(toChain.vh), JSON.stringify({ toCalls, toChain }));
+    });
+
+    await step('a coin pressed anywhere opens its on-chain data: a token contract its dashboard, any other coin its card', async () => {
+      const ENA = MVF.rows.find((r) => r.id === 'ethena').onchain.address, WLD = MVF.rows.find((r) => r.id === 'worldcoin-wld').onchain.address;
+      const sp = FIX('scan-robinhood-' + SEND + '.json');
+      const reKey = (addr, sym, name) => { const j = JSON.parse(JSON.stringify(sp)); j.chain = 'ethereum'; j.pair.chain = 'ethereum'; Object.assign(j.pair.token, { address: addr, symbol: sym, name }); return j; };
+      FAKE.scanAs = { ['ethereum:' + ENA]: reKey(ENA, 'ENA', 'Ethena') };
+      await go('/market', 1280); await moversReady();
+      const o0 = FAKE.other.length, m0 = FAKE.log.length;
+      await ev('(() => { const b = document.querySelector("#mkt-movers-win [data-mover=ethena]"); b.focus({ preventScroll: true }); b.click(); })(), true'); await modalReady();
+      const ena = await modal();
+      check('a mover with a token contract on a chain the Scanner reads (Ethena on Ethereum) opens the site\'s token popup: the Scanner\'s dashboard from a quiet /api/market/scan read on that chain (never the Robinhood Chain lookup), a line saying where the figures come from, and a full page that names the chain',
+        ena.open && /Ethena \$ENA/.test(ena.title) && ena.dash && /^CoinGecko #46 · \$0\.1665/.test(ena.lead) && /token contract on Ethereum, read from the chain/.test(ena.lead) && ena.full === '/newpairs?scan=' + ENA + '&chain=ethereum'
+        && FAKE.log.slice(m0).includes('/api/market/scan?chain=ethereum&address=' + ENA) && !FAKE.other.slice(o0).some((x) => x.startsWith('/api/pairs/lookup')), JSON.stringify(ena));
+      await key('Escape', 'Escape', 27); await until('document.getElementById("token-modal").hasAttribute("hidden")');
+      const ret = await ev('document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.mover || document.activeElement.id : ""');
+      await ev('document.querySelector("#mkt-movers-win [data-mover=\\"worldcoin-wld\\"]").click(), true'); await modalReady();
+      const wld = await modal(); await closeModal();
+      check('  ...Esc closes it and gives the mover its focus back; a contract the chain could not be read for says so in the server\'s words, under the same line — never a verdict',
+        ret === 'ethena' && wld.open && !wld.dash && /^⏳ The chain could not be read for this token just now — nothing here is a judgement about it\./.test(wld.msg) && /token contract on Ethereum/.test(wld.lead), JSON.stringify({ ret, wld }));
+      await ev('document.querySelector("#mkt-map .mkt-bub[data-coin=ethena]").dispatchEvent(new MouseEvent("click", { bubbles: true })), true'); await modalReady();
+      const bub = await modal(); await closeModal();
+      await ev('document.querySelector("#mkt-glance-grid [data-glance=coin][data-arg=ethena]").click(), true'); await modalReady();
+      const tile = await modal(); await closeModal();
+      check('  ...the same coin\'s bubble on the map and its glance tile open the same popup',
+        /Ethena \$ENA/.test(bub.title) && bub.dash && /Ethena \$ENA/.test(tile.title) && tile.dash, JSON.stringify({ bub, tile }));
+      await ev('document.querySelector("#mkt-glance-grid [data-glance=coin][data-arg=hyperliquid]").click(), true');
+      await until('!document.getElementById("mkt-map-card").hidden && /On-chain/.test(document.getElementById("mkt-map-card").textContent)');
+      const hype = await ev('(() => { const c = document.getElementById("mkt-map-card"), b = c.querySelector("[data-coin-chain]"); return { t: c.textContent, chain: b ? b.dataset.coinChain : null, tip: b ? (b.dataset.tip || "").length : 0, modal: !document.getElementById("token-modal").hasAttribute("hidden") }; })()');
+      await ev('document.querySelector("#mkt-map-card [data-coin-chain]").click(), true');
+      await until('location.search === "?chain=hyperliquid"'); await viewReady();
+      const hv = await textOf('#mkt-vh');
+      await ev('document.querySelector("#mkt-movers-win [data-mover=\\"pearl-2\\"]").click(), true');
+      await until('!document.getElementById("mkt-map-card").hidden && /^PEARL/.test(document.getElementById("mkt-map-card").textContent)');
+      const pearl = await textOf('#mkt-map-card .mkt-coin-oc');
+      check('  ...a chain\'s own coin (Hyperliquid, from its glance tile) opens its card, whose ⛓️ On-chain box opens its chain\'s data in the main view; a coin with no contract the site reads (Pearl, from the banner) opens its card saying so',
+        !hype.modal && hype.chain === 'hyperliquid' && hype.tip >= 8 && /⛓️ On-chain/.test(hype.t) && /Hyperliquid/.test(hv)
+        && /No token contract|no contract/i.test(pearl) && /Robinhood Chain, Ethereum or Solana/.test(pearl), JSON.stringify({ hype: Object.assign({}, hype, { t: hype.t.slice(0, 300) }), hv, pearl }));
+    });
+
+    await step('the Watchlist and Calls tabs, signed out and signed in', async () => {
+      await go('/market?chain=robinhood&tab=watch', 1280); await listReady();
+      const o0 = FAKE.other.length;
+      const wOut = { list: await textOf('#mkt-list'), btn: await ev('!!document.querySelector("#mkt-list [data-mkt-signin]")'), sel: await ev('document.getElementById("mkt-tab-watch").getAttribute("aria-selected")') };
+      await go('/market?chain=robinhood&tab=calls', 1280); await listReady();
+      const cOut = await ev('({ cap: document.getElementById("mkt-cap").textContent, rows: [...document.querySelectorAll("#mkt-list .mkt-row")].map((r) => r.textContent), popup: [...document.querySelectorAll("#mkt-list .mkt-row")].every((r) => r.getAttribute("aria-haspopup") === "dialog"), foot: document.getElementById("mkt-foot") ? document.getElementById("mkt-foot").textContent : "" })');
+      check('signed out: Watchlist asks you to sign in (and reads nothing private); Calls lists the most-called tokens by distinct members — $SEND with its price and move, USDG saying why it has no price — each row opening a popup, and calls are never advice',
+        /Sign in to keep a watchlist/.test(wOut.list) && wOut.btn && wOut.sel === 'true' && !FAKE.other.slice(o0).some((x) => x === '/api/watchlist' || x.startsWith('/api/calls/mine'))
+        && /last 24 hours/.test(cOut.cap) && cOut.rows.length === 2 && /SEND IT \$SEND/.test(cOut.rows[0]) && /3 members called it/.test(cOut.rows[0]) && /\$0\.0001702/.test(cOut.rows[0]) && /2\.55% in 24 h/.test(cOut.rows[0]) && !/you called it/.test(cOut.rows.join())
+        && /Not available/.test(cOut.rows[1]) && /no price could be read for this token just now/.test(cOut.rows[1]) && cOut.popup, JSON.stringify({ wOut, cOut }).slice(0, 900));
+      await ev('document.querySelector("#mkt-ctl-calls [data-cwin=\\"7d\\"]").click(), true'); await until('location.search === "?chain=robinhood&tab=calls&cwin=7d"'); await listReady();
+      const c7 = { cap: await textOf('#mkt-cap'), first: await textOf('#mkt-list .mkt-row'), asked: FAKE.other.filter((x) => x.startsWith('/api/calls/top-tokens')).slice(-1)[0] };
+      const o1 = FAKE.other.length;
+      await ev('document.querySelector("#mkt-list .mkt-row[data-tm-token=\\"' + SEND + '\\"]").click(), true'); await modalReady();
+      const sm = await modal(); await closeModal();
+      check('  ...7 days is a chip that puts cwin=7d in the address and asks for that window; a row opens $SEND\'s dashboard from the Robinhood Chain lookup, its full page with no chain named',
+        /last 7 days/.test(c7.cap) && /5 members called it/.test(c7.first) && c7.asked === '/api/calls/top-tokens?window=7d' && sm.dash && /SEND/.test(sm.title) && sm.full === '/newpairs?scan=' + SEND
+        && FAKE.other.slice(o1).includes('/api/pairs/lookup?token=' + SEND), JSON.stringify({ c7, sm }));
+      FAKE.me = { username: 'mdwalk', displayName: 'MD Walk' };
+      await go('/market?chain=robinhood&tab=watch', 1280); await until('/1 token/.test(document.getElementById("mkt-cap").textContent)');
+      const o2 = FAKE.other.length;
+      const wIn = await ev('({ cap: document.getElementById("mkt-cap").textContent, rows: [...document.querySelectorAll("#mkt-list .mkt-row")].map((r) => r.textContent), star: !!document.querySelector("#mkt-list .mkt-star"), tile: [...document.querySelectorAll("#mkt-glance-grid .mkt-gl")].map((t) => t.textContent).find((x) => /watchlist/.test(x)) || "" })');
+      await ev('document.querySelector("#mkt-list .mkt-row").click(), true'); await modalReady();
+      const wm = await modal(); await closeModal();
+      check('signed in: the Watchlist tab lists your saved tokens with their price and move (★), the glance counts them, and a row draws its dashboard at once from the saved row (no second read)',
+        /1 token/.test(wIn.cap) && wIn.rows.length === 1 && /SEND IT \$SEND/.test(wIn.rows[0]) && /\$0\.0001702/.test(wIn.rows[0]) && wIn.star && /1 token/.test(wIn.tile) && wm.dash && !FAKE.other.slice(o2).some((x) => x.startsWith('/api/pairs/lookup')),
+        JSON.stringify({ wIn, wm }).slice(0, 700));
+      await go('/market?chain=robinhood&tab=calls', 1280); await until('/you called it/.test(document.getElementById("mkt-list").textContent)');
+      const cIn = await ev('[...document.querySelectorAll("#mkt-list .mkt-row")].map((r) => ({ t: r.textContent, star: !!r.querySelector(".mkt-star") }))');
+      check('  ...and the Calls tab marks the token you called ("you called it", from /api/calls/mine/ids) and the one you watch (★) — the others neither',
+        /you called it/.test(cIn[0].t) && cIn[0].star && !/you called it/.test(cIn[1].t) && !cIn[1].star && FAKE.other.includes('/api/calls/mine/ids'), JSON.stringify(cIn).slice(0, 500));
+    });
+
+    await step('Jump to: one press from any part of a long view', async () => {
+      await go('/market', 1280);
+      await until('document.querySelectorAll("#mkt-view .mkt-jump [data-jump-to]").length >= 3');
+      const j = await ev('[...document.querySelectorAll("#mkt-view .mkt-jump [data-jump-to]")].map((b) => ({ to: b.dataset.jumpTo, t: b.textContent, here: !!document.getElementById(b.dataset.jumpTo), tip: (b.dataset.tip || "").length }))');
+      await ev('document.querySelector("#mkt-view .mkt-jump [data-jump-to=\\"mkt-tt-h\\"]").click(), true');
+      await until('Math.abs(document.getElementById("mkt-tt-h").getBoundingClientRect().top - (parseFloat(getComputedStyle(document.getElementById("mkt-tt-h")).scrollMarginTop) || 0)) < 40', 4000);
+      const at = await ev('({ top: Math.round(document.getElementById("mkt-tt-h").getBoundingClientRect().top), focus: document.activeElement && document.activeElement.id })');
+      check('a chain view has a "Jump to" row naming only the parts it drew, in their order; "Top tokens" brings that part to the top of the screen and gives it the focus',
+        j.length >= 3 && j.every((x) => x.here && x.tip >= 8) && j.some((x) => x.to === 'mkt-tt-h' && x.t === 'Top tokens') && at.focus === 'mkt-tt-h' && at.top >= 0 && at.top < 300, JSON.stringify({ j, at }));
+    });
+
     check('no script error from market.js anywhere on the walk', ours().length === 0, ours().map((x) => (x.exception && x.exception.description || x.text || '').split('\n')[0]).slice(0, 3).join(' | '));
     if (exceptions.length > ours().length) notes.push((exceptions.length - ours().length) + ' script error(s) from other scripts on the faked page (not this page\'s): ' + exceptions.filter((x) => !ours().includes(x)).map((x) => (x.exception && x.exception.description || x.text || '').split('\n')[0]).slice(0, 3).join(' | '));
   } catch (e) {
@@ -2382,7 +2560,7 @@ async function runSuite() {
       ...['spy', 'gme'].map((k) => ['rwacard/rwa-token-' + k + '.json', RWACARD('rwa-token-' + k + '.json'), R.rwa.spy]),
       ['rwacard/rwa-token-tslaon.json', RWACARD('rwa-token-tslaon.json'), R.rwa.ondo], ['rwacard/rwa-token-gme-memecoin.json', RWACARD('rwa-token-gme-memecoin.json'), R.rwa.notRwa],
       ['rwacard/rwa-token-usdg.json', RWACARD('rwa-token-usdg.json'), R.rwa.notRwaStable],
-      ['heatmap.json', FIX('heatmap.json'), R.heatmap],
+      ['heatmap.json', FIX('heatmap.json'), R.heatmap], ['movers.json', FIX('movers.json'), R.movers],
     ];
     /* a key lib adds only in a state the answer it is held to is not in: a failed read's reason (reads.<k>.why, Robinhood's API down) and
        chainlinkWhy beside a null chainlink (a ticker Chainlink has no feed for) — dropped from the frozen copy before the comparison when
@@ -2429,6 +2607,9 @@ async function runSuite() {
     check('  ...the bubble map\'s answer on that database is the fixture\'s, coin for coin (the same 100 in the same order, the same figures, the same checks), and cut the same way by the route and by the fake',
       JSON.stringify(R.heatmap.rows.map((r) => [r.id, r.mcap.v, r.change24h.v, r.stable, r.check.status])) === JSON.stringify(FIX('heatmap.json').rows.map((r) => [r.id, r.mcap.v, r.change24h.v, r.stable, r.check.status]))
       && JSON.stringify(R.heatmapCut.rows.map((r) => r.id)) === JSON.stringify(fb('/api/market/heatmap?limit=50&stables=0').rows.map((r) => r.id)) && R.heatmapCut.rows.length === 40 && R.heatmapCut.counts.drawn === 40);
+    const mvIds = (j) => JSON.stringify(['rows', 'gainers', 'losers'].map((k) => j[k].map((r) => [r.id, r.change24h.v])).concat([j.counts, j.dominance.map((d) => [d.id, d.fig.v])]));
+    check('  ...the movers answer on that database is the fixture\'s, mover for mover (the same ten, five gainers, five losers, counts and dominance): worked out from the same read as the map',
+      mvIds(R.movers) === mvIds(FIX('movers.json')) && R.movers.rows.length === 10 && R.movers.ranked === 'absolute 24 h move, either way', mvIds(R.movers).slice(0, 300));
     check('  ...and so does every answer the fake builds for itself (a chain with no history, a token from the list, a custom window, an unavailable token, a search with Dexscreener down, an RWA token\'s facts, the RWA lists sorted and filtered, the bubble map cut)', !fdrift.length && R.unavailable.unavailable === true && typeof R.searchDown.why === 'string',
       fdrift.map(([n, d]) => n + ': ' + d.slice(0, 4).join('; ')).join(' | '));
     check('  ...market.js knows which chains the server reads a token on, and which the Scanner reads, from the server\'s own lists',
