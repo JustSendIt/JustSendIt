@@ -1,6 +1,16 @@
 /* Muted users may now check in. Proves: the route no longer 403s, the 60 points are paid, the absence
    streak is held at zero, the mute still costs READONLY_PCT, and an active (unmuted) user with underwater
-   calls is NOT newly charged. Throwaway accounts only; everything is deleted in the finally block. */
+   calls is NOT newly charged. Throwaway accounts only; everything is deleted in the finally block.
+
+   ON EITHER SIDE OF THE BETA'S END. The tick this suite waits for runs settleBeta() before the decay sweep, and the
+   settle zeroes every balance. From 2026-11-17 (BETA_END_MS) the test server's first tick was that settle, so the
+   fixtures were already at 0 when decay looked, and the three drain checks failed: "200000 (expected ~2000)". That
+   was not decay stopping after the beta (decay never reads the beta); it was the one-off reset landing inside the
+   wait. A server that comes up after the end now settles at once, and records it so it never runs again, so these
+   fixtures are made in the world the live site is in from now on (over, settled, decay running), and before the end
+   in the world it was in until then. If the settle is still due inside the wait (a server that was up through the
+   end, within its first five minutes after it), one check says so and the decay checks stand down, rather than
+   reporting the reset as three decay failures. */
 import { DatabaseSync } from 'node:sqlite';
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -122,10 +132,16 @@ try {
   check('a check-in that paid 0 points writes no ledger row (the state that used to read as absent)',
     !db.prepare("SELECT 1 FROM points_events WHERE user_id = ? AND kind = 'daily'").get(cappedOut.id));
 
+  /* The tick settles the beta before it sweeps, and the settle zeroes every balance — so if it is still due inside the wait
+     (over but unsettled, or an end inside the next 5.5 min), the drains below would measure the reset, not decay. */
+  const beta = await api('/api/beta');
+  const settleDue = !!(beta.j && !beta.j.settled && (beta.j.over || beta.j.endsAt < Date.now() + 340000));
+  check('the beta settle is not due inside the wait (it would zero these balances before decay saw them)', !settleDue, JSON.stringify(beta.j && { endsAt: beta.j.endsAt, over: beta.j.over, settled: beta.j.settled }));
+
   console.log('waiting up to 5.5 min for one decay sweep tick...');
   const t0 = Date.now();
   let mutedDrained = null, plainDrained = null;
-  while (Date.now() - t0 < 335000) {
+  while (!settleDue && Date.now() - t0 < 335000) {
     await new Promise((r2) => setTimeout(r2, 5000));
     const m = db.prepare('SELECT points, decay_streak, decay_at FROM users WHERE id=?').get(mutedActive.id);
     const q = db.prepare('SELECT points, decay_streak, decay_at FROM users WHERE id=?').get(plainActive.id);
@@ -133,7 +149,8 @@ try {
       check('a checked-in account has its absence streak reset to 0', q.decay_streak === 0, q.decay_streak);
       break; }
   }
-  if (mutedDrained === null) console.log('(sweep did not run inside the window — decay assertions skipped, not failed)');
+  if (settleDue) console.log('(the beta settle is due inside the wait — the decay assertions stood down; see the check above)');
+  else if (mutedDrained === null) console.log('(sweep did not run inside the window — decay assertions skipped, not failed)');
   else {
     check('a muted account that checked in STILL pays the read-only rate', mutedDrained > 0, mutedDrained + ' points');
     check('  ...and it is about 1% of the balance', Math.abs(mutedDrained - 2000) <= 20, mutedDrained + ' (expected ~2000)');

@@ -53,9 +53,15 @@ try {
   }
   const row = lb.j && (lb.j.top || []).find(r => r.rank === 1);
   check('/api/leaderboard (Arena, Hall of Fame) sends each row\'s username, with its capitals', row && row.username === '__bl_Top_' + tag, lb.status + ' ' + JSON.stringify(row));
-  const beta = await get('/api/beta', me.sid);
+  /* Live standings while the beta runs; after it, the frozen board of the ten who were badged (beta_rank). Past the end
+     (2026-11-17) the throwaway row is put on that board, so it is the frozen board's rows that are checked, not nothing. */
+  let beta = await get('/api/beta', me.sid);
+  if (beta.j && beta.j.settled) {
+    db.prepare('UPDATE users SET beta_rank = 1, beta_points = points WHERE id = ?').run(top.id);
+    beta = await get('/api/beta', me.sid);
+  }
   const brow = beta.j && (beta.j.top || []).find(r => r.username === '__bl_Top_' + tag);
-  check('/api/beta (home page standings) sends each row\'s username', !!brow, beta.status + ' ' + JSON.stringify(beta.j && (beta.j.top || []).slice(0, 2)));
+  check('/api/beta (home page standings, or the final board once the beta is settled) sends each row\'s username', !!brow, beta.status + ' ' + JSON.stringify(beta.j && { settled: beta.j.settled, top: (beta.j.top || []).slice(0, 2) }));
   const wall = await get('/api/users/' + encodeURIComponent('__bl_Top_' + tag), me.sid);
   check('  ...and the link it makes, /u/<that name>, opens that person\'s wall', wall.status === 200 && wall.j && wall.j.user && wall.j.user.username === '__bl_Top_' + tag, wall.status);
 } catch (e) {

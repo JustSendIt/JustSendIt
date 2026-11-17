@@ -130,7 +130,8 @@ try {
   check('  ...and the ticket prints that number', tB.status === 200 && tB.j.ticket && tB.j.ticket.sendId === nB && tB.j.ticket.number === nB, JSON.stringify(tB.j && tB.j.ticket && [tB.j.ticket.sendId, tB.j.ticket.number]));
   check('  ...the code: assigned the moment an account is made, backfilled at boot in order of joining, unique', /const id = Number\(r\.lastInsertRowid\);\s*\n\s*assignSendNo\(id\);/.test(SRC) && /SELECT id FROM users WHERE send_no IS NULL AND system = 0 ORDER BY created_at, id/.test(SRC) && /CREATE UNIQUE INDEX IF NOT EXISTS users_send_no ON users\(send_no\)/.test(SRC) && /assignSendNos\(\);/.test(SRC));
   check('  ...and the ticket page and card are found by the Send ID, which is what they print', /FROM users WHERE send_no = \? AND system = 0'\)\.get\(Number\(tc\[1\]\)\)/.test(SRC) && /FROM users WHERE send_no = \? AND system = 0'\)\.get\(Number\(tp\[1\]\)\)/.test(SRC) && /sendId: u\.send_no, joinedAt: u\.created_at/.test(SRC) && /const url = SITE_ORIGIN \+ '\/t\/' \+ sendNoOf\(me\);/.test(SRC));
-  check('  ...with the Gold OG deadline for the rocket', typeof t.goldEndsAt === 'number' && t.goldEndsAt > Date.now(), t.goldEndsAt && new Date(t.goldEndsAt).toISOString().slice(0, 10));
+  // either side of it: open until the deadline, closed after (this asserted "still ahead" and failed the day it passed)
+  check('  ...with the Gold OG deadline for the rocket, open until it and closed after', typeof t.goldEndsAt === 'number' && t.goldOpen === (Date.now() <= t.goldEndsAt), t.goldEndsAt && new Date(t.goldEndsAt).toISOString().slice(0, 10) + ' open=' + t.goldOpen);
   const again = await api('/api/gate/invites', { cookie: u.sid });
   check('  ...asking twice does not mint more', again.j.ticket.codes.length === 10, again.j.ticket.codes.length);
 
@@ -155,7 +156,17 @@ try {
   check('  ...ending on the published beta date (2026-11-17)', silver === '2026-11-17', silver);
   check('  ...90 days after the first coin launched', Math.round((beta.j.endsAt - 1787157963000) / 864e5) === 90, Math.round((beta.j.endsAt - 1787157963000) / 864e5) + ' days');
   check('  ...top 10, badge worth 2x', beta.j.topN === 10 && beta.j.badgeMult === 2);
-  check('  ...not settled yet', beta.j.settled === false && beta.j.over === false);
+  check('  ...and Gold OG closes with it: the rocket\'s deadline is the beta\'s end', t.goldEndsAt === beta.j.endsAt, t.goldEndsAt + ' vs ' + beta.j.endsAt);
+  /* Either side of the end. Before it the beta is open and unsettled; after it, over AND settled — a server that comes up
+     after the end settles at once, and one that was up through it on its next tick, so a test server is never "over but
+     not settled". This asserted "not settled yet" until 2026-11-17 and failed from then on. */
+  const isOver = Date.now() >= beta.j.endsAt;
+  const settleRow = db.prepare('SELECT at FROM beta_settle WHERE id = 1').get();
+  check(isOver ? '  ...over, and settled (the end has passed), with the settle recorded once in its own row' : '  ...open, and not settled yet (the end is still ahead)',
+    beta.j.over === isOver && beta.j.settled === isOver && !!settleRow === isOver, JSON.stringify({ over: beta.j.over, settled: beta.j.settled, row: settleRow || null }));
+  check('  ...the code: the settle runs as the server comes up as well as on the tick, and "once, ever" is that row — not members who may not exist yet',
+    /\ntry \{ settleBeta\(\); \} catch \{\}\nassignSendNos\(\);/.test(SRC) && /if \(betaSettling \|\| !betaOver\(\) \|\| betaSettledAt\(\) != null\) return false;/.test(SRC)
+    && /db\.prepare\('INSERT INTO beta_settle \(id, at, members\) VALUES \(1, \?, \?\)'\)\.run\(t, members\);\s*\n\s*db\.exec\('COMMIT'\);/.test(SRC) && /const settled = betaSettledAt\(\) != null;/.test(SRC));
 
   // the badge's boost joins the additive stack
   db.prepare('UPDATE users SET points = 5000 WHERE id = ?').run(u.id);

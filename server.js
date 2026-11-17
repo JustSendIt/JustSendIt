@@ -14871,23 +14871,32 @@ function betaStandings(n) {
                      WHERE system = 0 AND points > 0 ORDER BY points DESC, id ASC LIMIT ?`).all(n || BETA_TOP_N);
 }
 
+/* "Once, ever" is recorded HERE, in one row, not read off the members' own rows. It used to be "does any
+   member carry beta_settled_at" — so on a database with nobody in it at the end (a fresh one: the test
+   server's, a new deployment) the pass ran, recorded nothing, and ran again on the next tick, wiping
+   whoever had arrived since: people who were never in the beta. A database that settled before this row
+   existed (the live site, 2026-11-17) is read into it from those members' rows, once, at boot. */
+db.exec('CREATE TABLE IF NOT EXISTS beta_settle (id INTEGER PRIMARY KEY CHECK (id = 1), at INTEGER NOT NULL, members INTEGER NOT NULL)');
+db.prepare(`INSERT OR IGNORE INTO beta_settle (id, at, members)
+            SELECT 1, MIN(beta_settled_at), COUNT(*) FROM users WHERE beta_settled_at IS NOT NULL HAVING COUNT(*) > 0`).run();
+const betaSettledAt = () => { const r = db.prepare('SELECT at FROM beta_settle WHERE id = 1').get(); return r ? r.at : null; };
+
 /* Runs once, ever. Badges the top ten, records what everyone finished on, then zeroes every balance.
    One transaction: a half-applied reset would leave some people with a beta score and some without,
    which is exactly the unfairness the reset exists to remove. */
 let betaSettling = false;
 function settleBeta() {
-  if (betaSettling || !betaOver()) return false;
-  const done = db.prepare('SELECT COUNT(*) n FROM users WHERE beta_settled_at IS NOT NULL').get().n;
-  if (done > 0) return false;
+  if (betaSettling || !betaOver() || betaSettledAt() != null) return false;
   betaSettling = true;
   try {
     const top = betaStandings(BETA_TOP_N);
     const t = now();
     db.exec('BEGIN');
     // everyone's final score is kept, so the board can be shown after the reset and the reset can be checked
-    db.prepare('UPDATE users SET beta_points = points, beta_settled_at = ? WHERE system = 0').run(t);
+    const members = db.prepare('UPDATE users SET beta_points = points, beta_settled_at = ? WHERE system = 0').run(t).changes;
     top.forEach((u, i) => db.prepare('UPDATE users SET beta_rank = ? WHERE id = ?').run(i + 1, u.id));
     db.prepare('UPDATE users SET points = 0 WHERE system = 0').run();
+    db.prepare('INSERT INTO beta_settle (id, at, members) VALUES (1, ?, ?)').run(t, members);
     db.exec('COMMIT');
     for (const [i, u] of top.entries()) {
       notify(u.id, ['🥇', '🥈', '🥉'][i] || '🏅',
@@ -16366,7 +16375,7 @@ const server = http.createServer(async (req, res) => {
          after the reset it is the record of how it finished. */
       if (p === '/api/beta' && req.method === 'GET') {
         const over = betaOver();
-        const settled = db.prepare('SELECT COUNT(*) n FROM users WHERE beta_settled_at IS NOT NULL').get().n > 0;
+        const settled = betaSettledAt() != null;
         const rows = settled
           ? db.prepare('SELECT id, username, avatar, beta_points AS points, beta_rank FROM users WHERE beta_rank > 0 ORDER BY beta_rank').all()
           : betaStandings(BETA_TOP_N).map((u, i) => ({ ...u, beta_rank: i + 1 }));
@@ -21891,7 +21900,11 @@ function runDecaySweep() {
 }
 
 const decayTimer = setInterval(() => { try { settleBeta(); } catch {} try { runDecaySweep(); } catch {} }, 5 * 60 * 1000);
-assignSendNos();     // Send IDs for members from before the column, in the order they joined (a no-op after the first boot)
+/* A server that comes up after the end settles now, not on its first tick five minutes later: until then it showed live
+   standings for a beta that was over, and paid points the tick was about to wipe — on the test server, in the middle of
+   whichever suite was running (tests/checkinmute.mjs waits for that tick and found its balances already at zero). */
+try { settleBeta(); } catch {}
+assignSendNos();    // Send IDs for members from before the column, in the order they joined (a no-op after the first boot)
 sweepWalletHist();   // saved wallet histories: rows for wallets no longer tracked or linked go, and the total stays under its cap
 const uploadSweepTimer = setInterval(sweepOrphanUploads, 15 * 60 * 1000);
 uploadSweepTimer.unref();
