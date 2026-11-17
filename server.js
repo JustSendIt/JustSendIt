@@ -11959,44 +11959,102 @@ function scrubMediaFile(file, mime) {
   }
   return { ok: false, bytes: st.size };
 }
-/* Drop ID3v2 from the front and ID3v1 from the end. What remains must open on an MPEG frame, or the file
-   was a tag with no song in it. Returns the kept length, or -1 when the bytes are not an MP3. */
+/* A wall song that says it is an MP3. The tags come off both ends: ID3v2 at the front (stacked ones too), and at the back
+   whatever a tagger appended, in any order — ID3v1 (with its TAG+ extension), an APE tag, a Lyrics3 block, an ID3v2 with a
+   footer. A tag at the back that cannot be measured refuses the file: "tags are stripped" is not a promise to keep half the
+   time. What remains must open on MPEG audio a browser plays as an .mp3: Layer III, three frames in a row whose headers are
+   valid, agree on version and sample rate, and whose lengths lead each to the next. One sync word and then anything is not
+   that, and neither is Layer I/II audio. Returns the kept length, or -1. */
+const MP3_KBPS = [[0, 32, 40, 48, 56, 64, 80, 96, 112, 128, 160, 192, 224, 256, 320], [0, 8, 16, 24, 32, 40, 48, 56, 64, 80, 96, 112, 128, 144, 160]];   // Layer III: MPEG-1, then MPEG-2 and 2.5
+const MP3_HZ = { 3: [44100, 48000, 32000], 2: [22050, 24000, 16000], 0: [11025, 12000, 8000] };   // by the version bits: 11 MPEG-1, 10 MPEG-2, 00 MPEG-2.5
+function mp3Frame(buf, o) {
+  if (o + 4 > buf.length || buf[o] !== 0xff || (buf[o + 1] & 0xe0) !== 0xe0) return null;
+  const ver = (buf[o + 1] >> 3) & 3, layer = (buf[o + 1] >> 1) & 3;
+  if (ver === 1 || layer !== 1) return null;   // version 01 is reserved; layer bits 01 are Layer III
+  const bi = buf[o + 2] >> 4, si = (buf[o + 2] >> 2) & 3;
+  if (bi === 0 || bi === 15 || si === 3) return null;   // free-format, bad, reserved
+  const hz = MP3_HZ[ver][si];
+  return { ver, hz, len: Math.floor((ver === 3 ? 144000 : 72000) * MP3_KBPS[ver === 3 ? 0 : 1][bi] / hz) + ((buf[o + 2] >> 1) & 1) };
+}
+// where the audio ends once the last appended tag is taken off: the new end, `end` when there is none, or -1 when one is there but cannot be measured
+function mp3TailTag(buf, end) {
+  const at = (o, s) => o >= 0 && buf.slice(o, o + s.length).toString('latin1') === s;
+  if (end >= 128 && at(end - 128, 'TAG')) return end - 128 >= 227 && at(end - 128 - 227, 'TAG+') ? end - 128 - 227 : end - 128;
+  if (end >= 32 && at(end - 32, 'APETAGEX')) {
+    const size = buf.readUInt32LE(end - 20), head = (buf.readUInt32LE(end - 12) & 0x80000000) ? 32 : 0;
+    return size >= 32 && size + head <= end ? end - size - head : -1;
+  }
+  if (end >= 15 && at(end - 9, 'LYRICS200')) {
+    const digits = buf.slice(end - 15, end - 9).toString('latin1'), size = /^\d{6}$/.test(digits) ? Number(digits) : -1;
+    return size >= 11 && at(end - 15 - size, 'LYRICSBEGIN') ? end - 15 - size : -1;
+  }
+  if (end >= 9 && at(end - 9, 'LYRICSEND')) {   // Lyrics3 v1: no size, at most 5100 bytes of lyrics
+    const from = buf.lastIndexOf('LYRICSBEGIN', end - 9, 'latin1');
+    return from >= 0 && end - from <= 5100 + 20 ? from : -1;
+  }
+  if (end >= 10 && at(end - 10, '3DI')) {
+    if ((buf[end - 4] | buf[end - 3] | buf[end - 2] | buf[end - 1]) & 0x80) return -1;
+    const size = ((buf[end - 4] & 0x7f) << 21) | ((buf[end - 3] & 0x7f) << 14) | ((buf[end - 2] & 0x7f) << 7) | (buf[end - 1] & 0x7f);
+    return end - 20 - size >= 0 && at(end - 20 - size, 'ID3') ? end - 20 - size : -1;
+  }
+  return end;
+}
 function scrubMp3File(file) {
   let buf = fs.readFileSync(file);
-  if (buf.length >= 10 && buf.slice(0, 3).toString('latin1') === 'ID3') {
+  for (let i = 0; i < 4 && buf.length >= 10 && buf.slice(0, 3).toString('latin1') === 'ID3'; i++) {
+    if ((buf[6] | buf[7] | buf[8] | buf[9]) & 0x80) return -1;
     const size = ((buf[6] & 0x7f) << 21) | ((buf[7] & 0x7f) << 14) | ((buf[8] & 0x7f) << 7) | (buf[9] & 0x7f);
     const start = 10 + size + ((buf[5] & 0x10) ? 10 : 0);
-    if (start < 10 || start > buf.length) return -1;
+    if (start > buf.length) return -1;
     buf = buf.subarray(start);
   }
-  if (buf.length >= 128 && buf.slice(buf.length - 128, buf.length - 125).toString('latin1') === 'TAG') buf = buf.subarray(0, buf.length - 128);
-  if (buf.length < 4 || buf[0] !== 0xff || (buf[1] & 0xe0) !== 0xe0) return -1;
+  let end = buf.length;
+  for (let i = 0; i < 8; i++) { const e = mp3TailTag(buf, end); if (e < 0) return -1; if (e === end) break; end = e; }
+  buf = buf.subarray(0, end);
+  let o = 0, first = null;
+  for (let n = 0; n < 3; n++) {
+    const f = mp3Frame(buf, o);
+    if (!f || (first && (f.ver !== first.ver || f.hz !== first.hz))) return -1;
+    first = first || f;
+    o += f.len;
+  }
+  if (o > buf.length) return -1;
   fs.writeFileSync(file, buf);
   return buf.length;
 }
-/* Rebuild a WAVE file from its fmt and data (and fact, which some players need) and nothing else.
-   A .wav and a .wave are this same container. Returns the kept length, or -1. */
+/* Rebuild a WAVE file from its fmt, fact and data chunks and nothing else (LIST/INFO and the rest carry names, places and
+   software), format first: a browser reads the format before the sound. A .wav and a .wave are this same container. The
+   sound must be one a browser plays from a WAV — PCM (8, 16, 24 or 32 bits) or 32-bit float, also inside the extensible
+   header, 1–8 channels at 8–192 kHz — not MP3-in-WAV, ADPCM or the other codecs a WAV can hold, which upload fine and then
+   never play. Returns the kept length, or -1. */
+const WAV_SUBFORMAT_TAIL = Buffer.from([0, 0, 0, 0, 0x10, 0, 0x80, 0, 0, 0xaa, 0, 0x38, 0x9b, 0x71]);   // KSDATAFORMAT_SUBTYPE_*, after its 2-byte format code
+function wavPlayable(fmt, data) {
+  const n = fmt.readUInt32LE(4);
+  if (n < 16) return false;
+  let tag = fmt.readUInt16LE(8);
+  const ch = fmt.readUInt16LE(10), hz = fmt.readUInt32LE(12), align = fmt.readUInt16LE(20), bits = fmt.readUInt16LE(22);
+  if (tag === 0xfffe) {
+    if (n < 40 || !fmt.subarray(34, 48).equals(WAV_SUBFORMAT_TAIL)) return false;
+    tag = fmt.readUInt16LE(32);
+  }
+  const bitsOk = tag === 1 ? [8, 16, 24, 32].includes(bits) : tag === 3 ? bits === 32 : false;
+  return bitsOk && ch >= 1 && ch <= 8 && hz >= 8000 && hz <= 192000 && align === ch * bits / 8 && data.readUInt32LE(4) >= align;
+}
 function scrubWavFile(file) {
   const buf = fs.readFileSync(file);
   if (buf.length < 12 || buf.slice(0, 4).toString('latin1') !== 'RIFF' || buf.slice(8, 12).toString('latin1') !== 'WAVE') return -1;
-  const keep = [];
-  let o = 12, sawFmt = false, sawData = false;
+  const got = {};
+  let o = 12;
   while (o + 8 <= buf.length) {
     const id = buf.slice(o, o + 4).toString('latin1');
     const size = buf.readUInt32LE(o + 4);
     const dataStart = o + 8;
-    if (size < 0 || dataStart + size > buf.length) return -1;
-    if (id === 'fmt ' || id === 'data' || id === 'fact') {
-      let chunk = buf.subarray(o, dataStart + size);
-      if (chunk.length % 2) chunk = Buffer.concat([chunk, Buffer.from([0])]);
-      keep.push(Buffer.from(chunk));
-      if (id === 'fmt ') sawFmt = true;
-      if (id === 'data' && size > 0) sawData = true;
-    }
+    if (dataStart + size > buf.length) return -1;
+    if ((id === 'fmt ' || id === 'data' || id === 'fact') && !got[id]) got[id] = buf.subarray(o, dataStart + size);   // the first of each, as a player reads it
     o = dataStart + size + (size & 1);
   }
-  if (!sawFmt || !sawData) return -1;
-  const body = Buffer.concat(keep);
+  if (!got['fmt '] || !got.data || !wavPlayable(got['fmt '], got.data)) return -1;
+  const body = Buffer.concat([got['fmt '], got.fact, got.data].filter(Boolean).map((c) => c.length % 2 ? Buffer.concat([c, Buffer.from([0])]) : Buffer.from(c)));
   const out = Buffer.alloc(12 + body.length);
   out.write('RIFF', 0, 4, 'latin1');
   out.writeUInt32LE(4 + body.length, 4);
@@ -12514,10 +12572,13 @@ function rewriteHtml(buf) {
 /* X04: these two files are kept out of git (rights) and may be absent on a deploy. Checked once at boot;
    /api/config tells the pages, which hide the player and the video section rather than show a dead one. */
 /* The voice memo is OFF unless VOICE_MEMOS=1. Hidden means hidden at both ends: the recorder is not
-   wired into any composer, and the upload route refuses audio outright — a feature you cannot see but
-   can still reach with a crafted request is not hidden, it is undocumented. Memos ALREADY posted keep
-   playing: /uploads still serves them and posts still render them, because taking those away would be
-   deleting something people made rather than hiding a button. */
+   wired into any composer, and the upload route refuses voice-memo audio (kind 'audio': WebM, MP4/M4A,
+   Ogg) outright — a feature you cannot see but can still reach with a crafted request is not hidden, it
+   is undocumented. Memos ALREADY posted keep playing: /uploads still serves them and posts still render
+   them, because taking those away would be deleting something people made rather than hiding a button.
+   A wall song (MP3 or WAV, kind 'song') is not a voice memo and has no switch of its own: the upload route
+   takes it whatever VOICE_MEMOS says, and it can only be claimed onto its uploader's own wall
+   (/api/profile/audio), never attached to a post. */
 const VOICE_MEMOS = process.env.VOICE_MEMOS === '1';
 const OPTIONAL_MEDIA = {
   video: fs.existsSync(path.join(PUBLIC_DIR, 'assets', 'justsendit-full.mp4')),
@@ -16758,8 +16819,16 @@ const server = http.createServer(async (req, res) => {
         if (!rateLimit('report:' + me.id, 10, 6e5)) return bad(res, 'slow down', 429);
         const b = await readBody(req);
         const kind = ['post', 'comment', 'hopcomment', 'user'].includes(b.kind) ? b.kind : null;
-        const target = Number(b.id);
+        let target = Number(b.id);
+        /* A wall is reported by its @name: that is what the page has (/api/users/<name> gives no account number). The name is
+           looked up here, live members only. */
+        if (kind === 'user' && !(target >= 1) && typeof b.username === 'string' && b.username) {
+          const tu = db.prepare('SELECT id FROM users WHERE username = ? AND system = 0 AND deleted_at IS NULL').get(b.username.slice(0, 64));
+          if (!tu) return bad(res, 'not found', 404);
+          target = tu.id;
+        }
         if (!kind || !Number.isInteger(target) || target < 1) return bad(res, 'what are you reporting?');
+        if (kind === 'user' && target === me.id) return bad(res, 'that is your own wall');
         // a post the reporter cannot read does not exist for them (404, as on every other verb) — otherwise this was an existence oracle for holders-only and squad posts
         const exists = kind === 'post' ? (() => { const pr = db.prepare('SELECT id, user_id, community_id, private, squad_id FROM posts WHERE id = ?').get(target); return pr && postVisible(pr, me) ? pr : null; })()
           : kind === 'comment' ? (() => { const cr = db.prepare('SELECT c.id, p.user_id, p.community_id, p.private, p.squad_id FROM comments c JOIN posts p ON p.id = c.post_id WHERE c.id = ?').get(target); return cr && postVisible(cr, me) ? cr : null; })()
@@ -16886,7 +16955,8 @@ const server = http.createServer(async (req, res) => {
           if (r.kind === 'post') { const p2 = db.prepare('SELECT p.id, p.text, p.image, p.call_id, p.user_id, u.username FROM posts p JOIN users u ON u.id = p.user_id WHERE p.id = ?').get(r.target_id); r.target = p2 ? { id: p2.id, text: String(p2.text || '').slice(0, 280), image: p2.image ? '/uploads/' + p2.image : null, call: !!p2.call_id, userId: p2.user_id, username: p2.username } : null; }
           else if (r.kind === 'comment') { const c2 = db.prepare('SELECT c.id, c.text, c.user_id, c.post_id, u.username FROM comments c JOIN users u ON u.id = c.user_id WHERE c.id = ?').get(r.target_id); r.target = c2 ? { id: c2.id, text: String(c2.text || '').slice(0, 280), userId: c2.user_id, username: c2.username, postId: c2.post_id } : null; }
           else if (r.kind === 'hopcomment') { const h2 = db.prepare('SELECT h.id, h.text, h.user_id, h.call_id, u.username, s.username sender FROM hop_comments h JOIN users u ON u.id = h.user_id JOIN users s ON s.id = h.hopper_id WHERE h.id = ?').get(r.target_id); r.target = h2 ? { id: h2.id, text: String(h2.text || '').slice(0, 280), userId: h2.user_id, username: h2.username, callId: h2.call_id, sender: h2.sender } : null; }
-          else { const u2 = db.prepare('SELECT id, username, restricted_until, restrict_level, deleted_at FROM users WHERE id = ?').get(r.target_id); r.target = u2 ? { id: u2.id, username: u2.username, userId: u2.id, restrictedUntil: u2.restricted_until || 0, restrictLevel: u2.restrict_level || 0, deleted: !!u2.deleted_at } : null; }
+          // a reported wall: its song too (the address it plays from, which names the upload a takedown removes)
+          else { const u2 = db.prepare('SELECT id, username, restricted_until, restrict_level, deleted_at, wall_audio FROM users WHERE id = ?').get(r.target_id); r.target = u2 ? { id: u2.id, username: u2.username, userId: u2.id, restrictedUntil: u2.restricted_until || 0, restrictLevel: u2.restrict_level || 0, deleted: !!u2.deleted_at, wallAudio: u2.wall_audio ? '/uploads/' + u2.wall_audio : null } : null; }
         }
         return send(res, 200, { reports: rows, open: db.prepare('SELECT COUNT(*) n FROM reports WHERE resolved_at IS NULL').get().n });
       }
@@ -16895,6 +16965,7 @@ const server = http.createServer(async (req, res) => {
         const b = await readBody(req);
         const id = Number(b.id), note = String(b.note || '').trim().slice(0, 140);
         const histAt = histMark();   // whatever this takedown removes is not kept for restoring (see "Data history")
+        let answered = null;   // the reports this takedown closes: the item itself, or for an upload every post and wall that used it
         if (b.kind === 'post') {
           const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(id);
           if (!row) return bad(res, 'post not found', 404);
@@ -16926,15 +16997,25 @@ const server = http.createServer(async (req, res) => {
           const name = String(b.name || '');
           const row = db.prepare('SELECT name, user_id FROM uploads WHERE name = ?').get(name);
           if (!row) return bad(res, 'upload not found', 404);
+          /* Read before anything is cleared: the posts that showed this file and the walls that used it (their open reports are
+             what this takedown answers), and whether it was a wall song — what its owner is told. */
+          const postIds = db.prepare('SELECT id FROM posts WHERE image = ?').all(name).map((x) => x.id);
+          const walls = db.prepare('SELECT id, wall_audio FROM users WHERE avatar_img = ? OR header_img = ? OR bg_img = ? OR wall_audio = ?').all(name, name, name, name);
+          const wasSong = walls.some((w) => w.wall_audio === name);
+          answered = [...postIds.map((x) => ['post', x]), ...walls.map((w) => ['user', w.id])];
           db.prepare('UPDATE posts SET image = NULL WHERE image = ?').run(name);
           /* the profile and squad pictures store the bare file name: clear every column that held this one, or the wall keeps
              pointing at a deleted file (a broken picture where the emoji should stand in). The column names are fixed here. */
           for (const c of ['avatar_img', 'header_img', 'bg_img', 'wall_audio']) db.prepare('UPDATE users SET ' + c + ' = NULL WHERE ' + c + ' = ?').run(name);
           for (const c of ['avatar_img', 'banner_img']) db.prepare('UPDATE squads SET ' + c + ' = NULL WHERE ' + c + ' = ?').run(name);
           deleteUpload(name, row.user_id);
+          notify(row.user_id, '🧹', (wasSong ? 'Your wall song was removed by a moderator' : walls.length ? 'A picture on your wall was removed by a moderator'
+            : postIds.length ? 'A picture or video in a post of yours was removed by a moderator' : 'A file you uploaded was removed by a moderator')
+            + (note ? ': ' + note : '.') + ' Questions: SendRH@Atomicmail.io', 'alert');
         } else return bad(res, 'kind must be post, comment, hopcomment or upload');
         histForgetSince(histAt);
-        db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = 'takedown' WHERE resolved_at IS NULL AND kind = ? AND target_id = ?").run(now(), me.id, b.kind === 'upload' ? 'post' : b.kind, id);
+        const answer = db.prepare("UPDATE reports SET resolved_at = ?, resolved_by = ?, action = 'takedown' WHERE resolved_at IS NULL AND kind = ? AND target_id = ?");
+        for (const [k, t] of answered || [[b.kind, id]]) answer.run(now(), me.id, k, t);
         return send(res, 200, { ok: true });
       }
       // a name on today's Rocket Riders board taken down: a guest's stays down for the day; a member's @name comes off the board
@@ -17979,7 +18060,7 @@ const server = http.createServer(async (req, res) => {
             if (spec.kind === 'image' || spec.kind === 'gif') { const d = rasterDims(readHead(tmp, 131072), mime); if (!d || !(d.w > 0) || !(d.h > 0) || d.w > UPLOAD_MAX_PX || d.h > UPLOAD_MAX_PX || (d.w * d.h) / 1e6 > UPLOAD_MAX_MEGAPIXELS) return fail(400, 'image dimensions too large (max ' + UPLOAD_MAX_PX + 'px per side)'); }
             // strip where-and-on-what metadata before the file can ever be served (a file that cannot be parsed is refused, not published as-is)
             let scrubbed = null; try { scrubbed = scrubMediaFile(tmp, mime); } catch {}
-            if (!scrubbed || !scrubbed.ok) return fail(400, 'could not read that file — try re-exporting it');
+            if (!scrubbed || !scrubbed.ok) return fail(400, spec.kind === 'song' ? 'that is not an MP3 or a WAV a browser can play — export it again as an MP3, or as a PCM WAV' : 'could not read that file — try re-exporting it');
             size = scrubbed.bytes;
             const q1 = db.prepare('SELECT upload_bytes u FROM users WHERE id=?').get(me.id);
             if (q1 && q1.u + size > UPLOAD_USER_QUOTA) return fail(413, 'you’ve hit your media storage limit — delete some old posts first');
