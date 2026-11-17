@@ -269,10 +269,48 @@ try {
     check('the last step of create-account is a read-only wallet sign-in, and an email is optional',
       /id="inv-join"[^>]*>Sign in with wallet — read-only/.test(INV) && /An email is optional/.test(INV)
       && /id="inv-join-emailbtn"/.test(INV) && /Use email instead/.test(INV));
-    check('that step starts the signature before it closes, so the homepage is not what they land on',
-      /AUTH\.openSignup\(\{[\s\S]*?connect: true[\s\S]*?\}\);[\s\S]{0,220}?close\(\);/.test(INV_C));
+    /* SU-1 (review of #7, 2026-11-16). The order above used to be the other way round, and this suite asserted it: the
+       dialog opened over the ticket remembered the ticket's scroll lock as the page's own and put it back when it closed —
+       every new member's page was left unable to scroll. tests/ticketjoin.mjs walks all four hand-offs in a browser. */
+    check('that step closes itself, THEN opens the sign-up dialog already asking the wallet to sign (nothing awaits between)',
+      /close\(\);\s*if \(window\.AUTH && AUTH\.openSignup\) \{\s*AUTH\.openSignup\(\{[^}]*?connect: true/.test(INV_C));
+    check('  ..."Use email instead" too, and Burn Verification\'s Continue',
+      /close\(\);\s*if \(window\.AUTH && AUTH\.openSignup\) AUTH\.openSignup\(\{ tab: 'email', fromTicket: true/.test(INV_C)
+      && /close\(\);\s*try \{ fn\(\); \} catch \{\}/.test(INV_C));
+    check('  ...no hand-off closes the ticket after the dialog is up, and close() has no "dialog already up" exception left',
+      !/AUTH\.open\(\);\s*close\(\);/.test(INV_C) && !/fn\(\); \} catch \{\}\s*close\(\);/.test(INV_C) && !/authUp/.test(INV_C)
+      && /stopScreen\(\);\s*if \(releaseTrap\) \{ releaseTrap\(\); releaseTrap = null; \}\s*if \(lastFocus && lastFocus\.focus\) \{ try \{ lastFocus\.focus\(\); \} catch \{\} \}/.test(INV_C));
     check('a sign-up already in progress (burn) still continues, instead of being sent through the wallet form',
       /if \(typeof afterJoin === 'function'\)/.test(INV_C) && /fn\(\);/.test(INV_C));
+
+    /* SU-2: the press on the ticket IS the sign-in panel's button, pressed at once — so the panel's terms line and its
+       "two-factor right after" box (read the instant the button is pressed) have to be on the ticket's step. */
+    check('the last step says what making an account means (18 or over, the Terms and the Privacy policy), as the sign-in panel does',
+      /<p class="inv-note" id="inv-join-terms">Creating an account means you are 18 or over and accept the <a href="\/terms"[^>]*data-tip="[^"]{8,}">Terms<\/a> and the <a href="\/privacy"[^>]*data-tip="[^"]{8,}">Privacy policy<\/a>\.<\/p>/.test(INV));
+    check('  ...and has the "Set up two-factor right after (optional)" box, carried into the dialog by both hand-offs',
+      /<label class="w-opt" id="inv-join-2fa-opt"><input type="checkbox" id="inv-join-2fa"> Set up two-factor right after <span class="f-hint">\(optional\)<\/span><\/label>/.test(INV)
+      && /setup2fa: !!\(\$\('inv-join-2fa'\) && \$\('inv-join-2fa'\)\.checked\)/.test(INV_C) && (INV_C.match(/setup2fa: f\.setup2fa/g) || []).length === 2);
+    check('  ...which the dialog sets on its own boxes BEFORE its button is pressed (that press reads #w-2fa in the same instant)',
+      /if \(opts\.setup2fa !== undefined\) \{\s*for \(const id of \['w-2fa', 'f-2fa'\]\) \{ const b = modal\.querySelector\('#' \+ id\); if \(b\) b\.checked = !!opts\.setup2fa; \}\s*\}[\s\S]*?if \(opts\.connect\) \{\s*const go = modal\.querySelector\('#btn-wallet-signin'\);\s*if \(go\) go\.click\(\);/.test(AUTH_C)
+      && /const setup2fa = wRegMode && modal\.querySelector\('#w-2fa'\)\.checked;/.test(AUTH_C));
+
+    /* SU-4: a hidden panel's fields are ALL disabled, or show() focuses one of them and the focus lands nowhere */
+    check('the burn continuation disables every field of the hidden panel, so focus starts on Continue',
+      /if \(panel\) panel\.querySelectorAll\('input'\)\.forEach\(\(i\) => \{ i\.disabled = cont; \}\);/.test(INV_C) && !/if \(user\) user\.disabled = cont;/.test(INV_C));
+    /* SU-5 */
+    const INV_CSS = readFileSync(path.join(PUB, 'invite.css'), 'utf8');
+    check('the "Add an email & password" toggle and the two-factor box are 44px touch targets (the toggle keeps its triangle)',
+      /#inv-join-extra summary \{[^}]*min-height: 44px;[^}]*padding-block: 0\.55rem;/.test(INV_CSS) && !/#inv-join-extra summary \{[^}]*display:/.test(INV_CSS)
+      && /#inv-join-panel \.w-opt \{[^}]*min-height: 44px;/.test(INV_CSS));
+    /* SU-6 */
+    check('closing the ticket empties its password fields and its "Opening your wallet…" line',
+      /function close\(\) \{[\s\S]*?for \(const id of \['inv-join-pw', 'inv-join-pw2'\]\) \{ const i = \$\(id\); if \(i\) i\.value = ''; \}\s*const je = \$\('inv-join-err'\); if \(je\) je\.textContent = '';[\s\S]*?jsi:modalclose/.test(INV_C));
+    /* SU-7 */
+    check('"Use email instead" says what it does (it opens the form; Create Account there makes the account)',
+      /id="inv-join-emailbtn" type="button" data-tip="Opens the email sign-up form with what you typed here — you press Create Account there">Use email instead</.test(INV)
+      && !/Makes the account with an email and a password instead/.test(INV));
+    check('  ...and the dialog moves focus to the tab it switched to (openModal focused the one selected before)',
+      /const picked = \['wallet', 'burn', 'email'\]\.includes\(opts\.tab\) && modal\.querySelector\('#tab-' \+ opts\.tab\);\s*if \(picked && picked\.classList\.contains\('active'\)\) picked\.focus\(\);/.test(AUTH_C));
   }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join('\n'));

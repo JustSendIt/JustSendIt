@@ -103,9 +103,11 @@
           '</div>' +
         '</div>' +
 
-        /* step 4 — make the account. The wallet signature happens HERE: closing this first and opening
-           the sign-up dialog used to bounce straight back (a stale "no ticket"), which put the homepage
-           on screen again and never asked the wallet to sign. Email is a second way in, not a requirement. */
+        /* step 4 — make the account. The name, the optional email and password, and the optional two-factor
+           box are asked for HERE, and one press starts the wallet's read-only signature (the sign-up dialog
+           opens already running it, trusted not to bounce back on a stale "no ticket"). Email is a second
+           way in, not a requirement. The terms line and the two-factor box are the ones the sign-in panel
+           shows above its own button: this press is that button, so they have to be on this step. */
         '<div class="inv-step" id="step-join">' +
           '<h2 class="inv-title">🎟️ Your ticket is valid</h2>' +
           '<p class="inv-sub" id="inv-join-sub">Last step: sign in with your wallet. You sign one free message — <b>no transaction, no gas</b>, and it never lets this site move funds. Your place in line — your <b>Send ID</b> — is set the moment the account is made, and it never changes. <b>An email is optional.</b></p>' +
@@ -123,10 +125,12 @@
               '<label class="inv-note" for="inv-join-pw2" style="display:block;">Confirm password</label>' +
               '<input class="addr-input" id="inv-join-pw2" type="password" autocomplete="new-password" placeholder="••••••••">' +
             '</details>' +
+            '<label class="w-opt" id="inv-join-2fa-opt"><input type="checkbox" id="inv-join-2fa"> Set up two-factor right after <span class="f-hint">(optional)</span></label>' +
+            '<p class="inv-note" id="inv-join-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>' +
           '</div>' +
           '<div class="inv-actions">' +
             '<button class="g-btn g-btn-primary" id="inv-join" type="button" data-tip="Asks your wallet to sign a free message and makes your account — nothing moves">Sign in with wallet — read-only 🦊</button>' +
-            '<button class="g-btn g-btn-ghost" id="inv-join-emailbtn" type="button" data-tip="Makes the account with an email and a password instead">Use email instead</button>' +
+            '<button class="g-btn g-btn-ghost" id="inv-join-emailbtn" type="button" data-tip="Opens the email sign-up form with what you typed here — you press Create Account there">Use email instead</button>' +
           '</div>' +
           '<button class="inv-browse" id="inv-browse3" type="button" data-tip="Closes this without making an account — your code is already used">Later — keep browsing →</button>' +
         '</div>' +
@@ -418,9 +422,11 @@
      in the way, and the button says Continue. */
   function paintJoin() {
     const cont = typeof afterJoin === 'function';
-    const b = $('inv-join'), alt = $('inv-join-emailbtn'), panel = $('inv-join-panel'), sub = $('inv-join-sub'), user = $('inv-join-user');
+    const b = $('inv-join'), alt = $('inv-join-emailbtn'), panel = $('inv-join-panel'), sub = $('inv-join-sub');
     if (panel) panel.hidden = cont;
-    if (user) user.disabled = cont;   // a hidden field must not take the focus show() is about to place
+    /* every field in the hidden panel, not just the name: show() focuses the first ENABLED input, and the email
+       field left enabled took that focus while hidden — which lands nowhere, so the burn continuation began on <body> */
+    if (panel) panel.querySelectorAll('input').forEach((i) => { i.disabled = cont; });
     if (alt) alt.hidden = cont;
     if (sub) sub.hidden = cont;
     if (b) {
@@ -461,13 +467,18 @@
   function close() {
     if (!root || !root.hasAttribute('data-open')) return;
     root.removeAttribute('data-open');
+    // a password typed on the last step must not wait in a hidden field (the sign-in panel's rule too), and a
+    // reopened ticket must not still say "Opening your wallet…" about a picker that was closed long ago.
+    // Every hand-off reads these fields before it closes this, so nothing it needs is lost.
+    for (const id of ['inv-join-pw', 'inv-join-pw2']) { const i = $(id); if (i) i.value = ''; }
+    const je = $('inv-join-err'); if (je) je.textContent = '';
     document.body.style.overflow = prevOverflow;
     stopScreen();
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
-    // The sign-up dialog may already be up over this (the wallet signature). Putting focus back on the
-    // page underneath would yank it off that dialog and onto the homepage.
-    const authUp = document.getElementById('auth-modal') && !document.getElementById('auth-modal').hasAttribute('hidden');
-    if (!authUp && lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch {} }
+    /* Every hand-off to the sign-up dialog closes this FIRST, so focus goes back to the page and the dialog then
+       remembers that as its own way back. Opened the other way round, the dialog remembered this ticket's scroll
+       lock and focus: it put 'hidden' back on the page when it closed, and nothing was open to take it off again. */
+    if (lastFocus && lastFocus.focus) { try { lastFocus.focus(); } catch {} }
     document.dispatchEvent(new CustomEvent('jsi:modalclose'));
   }
 
@@ -853,6 +864,7 @@
         email: ($('inv-join-email') && $('inv-join-email').value.trim()) || '',
         password: ($('inv-join-pw') && $('inv-join-pw').value) || '',
         password2: ($('inv-join-pw2') && $('inv-join-pw2').value) || '',
+        setup2fa: !!($('inv-join-2fa') && $('inv-join-2fa').checked),
       };
     }
     function joinFail(msg, field) {
@@ -876,9 +888,10 @@
       const f = joinFields();
       if (f.username && !/^[a-zA-Z0-9_.-]{3,24}$/.test(f.username)) { joinFail('Pick a @username: 3–24 letters, numbers, _ . - — or leave it blank and choose it on the next screen.', 'inv-join-user'); return; }
       if (window.AUTH && AUTH.gate) { try { await AUTH.gate(true); } catch {} }
-      if (window.AUTH && AUTH.openSignup) AUTH.openSignup({ tab: 'email', fromTicket: true, username: f.username, email: f.email, password: f.password });
-      else if (window.AUTH && AUTH.open) AUTH.open();
+      // this closes FIRST (see close()): nothing awaits between the two, so no frame shows the page alone
       close();
+      if (window.AUTH && AUTH.openSignup) AUTH.openSignup({ tab: 'email', fromTicket: true, username: f.username, email: f.email, password: f.password, setup2fa: f.setup2fa });
+      else if (window.AUTH && AUTH.open) AUTH.open();
     });
     on('inv-join', async () => {
       const go = $('inv-join');
@@ -889,8 +902,9 @@
         if (typeof afterJoin === 'function') {
           const fn = afterJoin; afterJoin = null;
           if (window.AUTH && AUTH.gate) { try { await AUTH.gate(true); } catch {} }
-          try { fn(); } catch {}
+          // this closes before the hand-off opens its dialog, never after (see close())
           close();
+          try { fn(); } catch {}
           return;
         }
         const f = joinFields();
@@ -900,16 +914,18 @@
         // Refresh the cached "do they hold a ticket?" BEFORE the sign-up dialog reads it. A stale no
         // used to close that dialog and reopen this step, which is the homepage-and-back loop.
         if (window.AUTH && AUTH.gate) { try { await AUTH.gate(true); } catch {} }
-        // Open the wallet sign-in — and start the read-only signature — BEFORE this closes, so the
-        // page underneath is covered the whole time. Email is only sent when they typed one.
+        /* Close this, then open the wallet sign-in already running the read-only signature. Nothing awaits
+           between the two, so no frame paints the page alone; and the order is what leaves the page able to
+           scroll once the account is made (see close()). Email is only sent when they typed one. */
+        close();
         if (window.AUTH && AUTH.openSignup) {
           AUTH.openSignup({
             tab: 'wallet', fromTicket: true, connect: true,
             username: f.username,
             email: f.email, password: f.password, password2: f.password2,
+            setup2fa: f.setup2fa,
           });
         } else if (window.AUTH && AUTH.open) AUTH.open();
-        close();
       } finally { if (go) go.disabled = false; }
     });
     on('inv-tos-go', async () => {

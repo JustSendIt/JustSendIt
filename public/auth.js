@@ -338,6 +338,15 @@
     if (wseg) wseg.click();
     if (opts && opts.tab === 'wallet') { const t = modal.querySelector('#tab-wallet'); if (t) t.click(); }
     if (opts && opts.tab === 'email') { const t = modal.querySelector('#tab-email'); if (t) t.click(); }
+    /* openModal focused the tab that was selected as it opened. A click does not move focus, so after switching to
+       Email the focus sat on the unselected Wallet tab, and Enter or Space took a keyboard user back to the wallet. */
+    const picked = ['wallet', 'burn', 'email'].includes(opts.tab) && modal.querySelector('#tab-' + opts.tab);
+    if (picked && picked.classList.contains('active')) picked.focus();
+    /* The ticket asks "Set up two-factor right after?" on its own last step, because with connect the press below
+       is made at once: the box in this panel is read in that same instant and could never be ticked. */
+    if (opts.setup2fa !== undefined) {
+      for (const id of ['w-2fa', 'f-2fa']) { const b = modal.querySelector('#' + id); if (b) b.checked = !!opts.setup2fa; }
+    }
     const user = modal.querySelector('#w-username');
     if (user && opts.username) user.value = opts.username;
     const emailUser = modal.querySelector('#f-username');
