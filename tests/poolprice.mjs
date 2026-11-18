@@ -44,10 +44,12 @@ try {
     /if \(!st \|\| !\(st\.spot > 0\) \|\| !\(st\.median > 0\) \|\| st\.covered < POOL_WINDOW_MS\) return null;/.test(SRC)
     && /if \(st\.spot > st\.median \* PRICE_MAX_SPIKE\) return null;/.test(SRC) && /return Math\.min\(st\.spot, st\.median\) \* qv\.usd;/.test(SRC));
   check('  ...its dollar rate is the ten-minute-fresh one (quoteValue), never a stale ETH price', /const qv = await quoteValue\(st\.pair, st\.token\);\s+\/\/ quoteValue's ETH rate is null once it is ten minutes old/.test(SRC));
-  check('the $100 check, the OG badge, the hold streak and swap rewards all use it',
+  /* since "$100 bought" (2026-11-17) no floor is a price: the $100 check, the OG badge and the hold streak's qualification read the
+     bought verdicts (tests/bought.mjs). The guarded price still values what a bag is worth NOW on the dashboard, and swap rewards. */
+  check('what a bag is worth now (the hold streak\'s dashboard figure) and swap rewards use it; no $100 check is priced any more',
     /async function sendPriceUsd\(\) \{ return guardedPriceUsd\(TOK\.SEND\); \}/.test(SRC)
-    && /gwcPx = await guardedPriceUsd\(TOK\.GWC\)/.test(SRC) && /guardedPriceUsd\(TOK\.SEND\), guardedPriceUsd\(TOK\.GWC\)\]/.test(SRC)
-    && /const px = await guardedPriceUsd\(movedTok\);/.test(SRC));
+    && /guardedPriceUsd\(TOK\.SEND\), guardedPriceUsd\(TOK\.GWC\)\]/.test(SRC) && /const px = await guardedPriceUsd\(movedTok\);/.test(SRC)
+    && !/function ogFloorOk\(/.test(SRC) && /function holderProofVerdict\(st, nowMs\) \{/.test(SRC));
   check('a failed read is never cached', /\.then\(\(v\) => \{ poolStateCache\.set\(k, v\); return v; \}\)\s+\.catch\(/.test(SRC));
 
   if (!LIVE_CHAIN) check(liveSkipped('/api/chain/pairs against an independent read of the pools'), true, 'skipped');

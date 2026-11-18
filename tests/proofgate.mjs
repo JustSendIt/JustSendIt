@@ -40,69 +40,52 @@ function mkUser(name, verified) {
 }
 
 try {
-  /* ═══ the verdict, against cases a real chain will not produce on demand ═══ */
+  /* ═══ the verdict, against cases a real chain will not produce on demand ═══
+     Since "$100 bought" (owner, 2026-11-17) the door reads the member's $SEND verdict (lib/bought.js): $100 spent on counted buys —
+     a buy counts once its coins were held 24 hours — with at least $10 of that cost still held. The verdicts themselves are made
+     by the engine (tests/acquire.mjs, tests/bought.mjs); here the door's reading of one is put to every case. */
   {
     const grab = (re, label) => { const m = SRC.match(re); if (!m) { check('EXTRACT ' + label, false); return ''; } return m[0]; };
-    const fn = new Function('TOK', 'OG_PAIR', 'OG_LAUNCH', 'DAY_MS', 'OG_DUST_WEI', 'MIN_HOLD_USD', 'now',
+    const fn = new Function('TOK', 'OG_PAIR', 'OG_LAUNCH', 'DAY_MS', 'OG_DUST_WEI', 'MIN_HOLD_USD', 'BOUGHT_LIB', 'now',
       grab(/const PROOF_SELL_WINDOW_MS = [^\n]*\n/, 'PROOF_SELL_WINDOW_MS') +
       grab(/const PROOF_COINS = \[[\s\S]*?\n\];/, 'PROOF_COINS') +
-      grab(/function holderProofVerdict\(scans, nowMs, prices\) \{[\s\S]*?\n\}/, 'holderProofVerdict') +
-      '\nreturn holderProofVerdict;')({ SEND: '0xa', GWC: '0xb' }, { SEND: '0xp', GWC: '0xq' }, { SEND: 1, GWC: 1 }, 86400000, 1000000000n, 100, () => 0);
+      grab(/function holderProofVerdict\(st, nowMs\) \{[\s\S]*?\n\}/, 'holderProofVerdict') +
+      '\nreturn holderProofVerdict;')({ SEND: '0xa', GWC: '0xb' }, { SEND: '0xp', GWC: '0xq' }, { SEND: 1, GWC: 1 }, 86400000, 1000000000n, 100, { LIMITS: { HELD_MIN_USD: 10 } }, () => 0);
 
-    const DAY = 86400000, T = 1789000000000;
-    /* daysAgo is the FIRST buy, lastDaysAgo the most recent one. They differ because the gate uses the
-       first only for the record and the last as the sell window's anchor. */
-    const w = (bal, bought, sold, daysAgo, lastDaysAgo) => ({
-      balWei: String(bal), boughtWei: String(bought), soldWei: String(sold),
-      firstBuyMs: daysAgo == null ? null : T - daysAgo * DAY,
-      lastBuyMs: daysAgo == null ? null : T - (lastDaysAgo == null ? daysAgo : lastDaysAgo) * DAY,
-    });
-    const one = (s) => ({ SEND: [s] });
-    // $1 per token keeps the arithmetic readable: 1e18 wei = 1 token = $1, so 100e18 wei = $100 exactly
-    const PX = { SEND: 1 };
-    const V = (sc, px) => fn(sc, T, px || PX);
-    const HUNDRED = 100e18;
+    const DAY = 86400000, T = 1789000000000, E18 = 10n ** 18n;
+    // a fresh $SEND verdict, as lib/bought.js stateOf hands it over
+    const st = (o) => ({ fresh: true, floor: true, complete: true, why: null, reason: 'ok', spentUsd: 150, heldCostUsd: 150, pendingUsd: 0, maturesAtMs: null,
+      heldWei: (1000n * E18).toString(), acquired: (1000n * E18).toString(), sold: '0', firstBuyMs: T - 30 * DAY, lastArrivedMs: T - 30 * DAY, unknown: { n: 0, reasons: [] }, ...o });
+    const V = (x) => fn(x, T);
+    const BUYISH = /\b(buy (more|now|back|in)|go buy|you should buy|buy at least)\b/i;
 
-    check('holds $100 of $SEND, bought a month ago, never sold → passes', V(one(w(HUNDRED, HUNDRED, 0, 30))).ok);
-    // the point of the change: the waiting period is gone
-    check('bought THIS MORNING → passes (there is no waiting period any more)', V(one(w(HUNDRED, HUNDRED, 0, 0))).ok);
-    check('bought three days ago → passes', V(one(w(HUNDRED, HUNDRED, 0, 3))).ok);
-    check('  ...and no refusal anywhere still talks about coming back in N days',
-      !/come back in/i.test(JSON.stringify([V(one(w(HUNDRED, HUNDRED, 0, 0))), V(one(w(1e18, 1e18, 0, 0))), V(one(w(0, 0, 0, null)))])));
-
+    check('$150 bought a month ago, all still held → passes', V(st()).ok);
+    check('  ...whatever the bag is worth today: the door reads no price at all', !/\bpx\b|priceUsd|PriceUsd|prices/.test(grab(/function holderProofVerdict\(st, nowMs\) \{[\s\S]*?\n\}/, 'holderProofVerdict'))
+      && !/await sendPriceUsd\(\)/.test(grab(/async function runProofQueue\(\) \{[\s\S]*?\n\}/, 'runProofQueue')));
     check('$GWC is no longer part of the gate', !/GWC/.test(grab(/const PROOF_COINS = \[[\s\S]*?\n\];/, 'PROOF_COINS')));
-    check('  ...and a wallet holding only $SEND is enough', V(one(w(HUNDRED, HUNDRED, 0, 30))).ok);
     check('  ...no waiting-period constant survives in the source', !/PROOF_MIN_HOLD_MS/.test(SRC));
-
-    check('a dust balance is not holding', !V(one(w(999, 999, 0, 30))).ok);
-    const short = V(one(w(HUNDRED * 0.99, HUNDRED, 0, 30)));
-    check('$99 is not $100 — refused, with the real figure', !short.ok && /You hold about \$99\.00 of \$SEND/.test(short.reason), short.reason);
-    check('  ...and exactly $100 passes', V(one(w(HUNDRED, HUNDRED, 0, 30))).ok);
-    check('  ...a whole token is still short if it is not worth $100', !V(one(w(1e18, 1e18, 0, 30)), { SEND: 0.00001165 }).ok);
-    check('the gate floor is the same constant Diamond uses', /const usd = Number\(bal\) \/ 1e18 \* px;/.test(SRC) && /usd < MIN_HOLD_USD/.test(SRC));
-
-    check('sold back more than bought → refused as a net seller',
-      !V(one(w(HUNDRED, HUNDRED, 2 * HUNDRED, 30))).ok && /sold back more/.test(V(one(w(HUNDRED, HUNDRED, 2 * HUNDRED, 30))).reason));
-    /* A gifted bag used to be refused for a reason that no longer exists ("we cannot tell how long you
-       have held it"). It is still refused, for the reason that does: the sell window has to run from a
-       buy, and a bag that never passed through the market gives it no anchor. */
-    check('holds, but with no market buy behind it → refused',
-      !V(one({ balWei: String(HUNDRED), boughtWei: '0', soldWei: '0', firstBuyMs: null, lastBuyMs: null })).ok);
-    check('  ...and the reason is the bag, not the clock',
-      /bag has to be one you bought/i.test(V(one({ balWei: String(HUNDRED), boughtWei: '0', soldWei: '0', firstBuyMs: null, lastBuyMs: null })).reason || ''));
-
-    const unk = V({ SEND: [] });
-    check('an unreadable chain is NOT recorded as a failure', unk.unknown === true && /Nothing has been decided/.test(unk.reason));
-    const noPx = V(one(w(HUNDRED, HUNDRED, 0, 30)), { SEND: null });
-    check('an unreadable PRICE is unknown, never a refusal', noPx.unknown === true && /Nothing has been decided/.test(noPx.reason), noPx.reason);
-
-    check('wallets are summed, so a position split across two still qualifies',
-      V({ SEND: [w(HUNDRED / 2, HUNDRED / 2, 0, 2), w(HUNDRED / 2, HUNDRED / 2, 0, 20)] }).ok);
-    // the anchor the window runs from is the LATEST buy across every linked wallet, not the earliest
-    const split = V({ SEND: [w(HUNDRED / 2, HUNDRED / 2, 0, 30, 30), w(HUNDRED / 2, HUNDRED / 2, 0, 20, 1)] });
-    check('the sell window anchors on the LATEST buy across wallets',
-      split.ok && split.detail.SEND.lastBuyMs === T - 1 * DAY && split.detail.SEND.firstBuyMs === T - 30 * DAY,
-      'last=' + (split.detail.SEND.lastBuyMs - T) / DAY + 'd first=' + (split.detail.SEND.firstBuyMs - T) / DAY + 'd');
+    // the owner's "Count a buy after 24 h held": a buy made this morning counts tomorrow
+    const fresh = V(st({ floor: false, reason: 'short-spent-pending', spentUsd: 0, heldCostUsd: 150, pendingUsd: 150, maturesAtMs: T + DAY / 2 }));
+    check('bought THIS MORNING → not yet: a buy counts once its coins were held 24 hours — refused for now, saying so (and with no "come back in N days")',
+      !fresh.ok && fresh.short && /\$150\.00 more that counts once it has been held 24 hours/.test(fresh.reason) && !/come back in/i.test(fresh.reason), fresh.reason);
+    const dust = V(st({ floor: false, reason: 'none-held', heldWei: '999', spentUsd: 0, heldCostUsd: 0 }));
+    check('a dust balance is not holding', !dust.ok && /No \$SEND found in your linked wallets/.test(dust.reason), dust.reason);
+    const short = V(st({ floor: false, reason: 'short-spent', spentUsd: 99, heldCostUsd: 99 }));
+    check('$99 bought is not $100 — refused, with the real figure', !short.ok && short.short && /Your wallets show \$99\.00 of \$SEND bought that counts/.test(short.reason), short.reason);
+    const heldShort = V(st({ floor: false, reason: 'short-held', spentUsd: 400, heldCostUsd: 4 }));
+    check('$400 bought, $4 of it still held at cost → refused: at least $10 of it must still be held (owner: "At least $10 of it, at cost")', !heldShort.ok && /only \$4\.00 of it is still held, at what you paid/.test(heldShort.reason), heldShort.reason);
+    check('the floor in the refusal is the same constant Diamond uses, stated as bought', /It takes \$' \+ MIN_HOLD_USD \+ ' of ' \+ c\.label \+ ' bought from the market/.test(SRC));
+    const seller = V(st({ floor: false, reason: 'short-spent', spentUsd: 50, sold: (2000n * E18).toString() }));
+    check('sold back more than bought → refused as a net seller', !seller.ok && /sold back more/.test(seller.reason), seller.reason);
+    const unk = V(null);
+    check('no verdict yet (the trades still being read) is NOT recorded as a failure', unk.unknown === true && /Nothing has been decided/.test(unk.reason));
+    const open = V(st({ floor: null, complete: false, why: 'transient', reason: 'unknown', unknown: { n: 2, reasons: ['no ETH/USD for this block yet'] } }));
+    check('a buy whose dollars could not be read yet is unknown, never a refusal', open.unknown === true && /Nothing has been decided/.test(open.reason) && /no ETH\/USD for this block yet/.test(open.reason), open.reason);
+    const undated = V(st({ lastArrivedMs: null }));
+    check('a pass whose latest arrival is not dated yet waits (the first-day watch needs it), never skips the watch', undated.unknown === true && !undated.ok, undated.reason);
+    const pass = V(st({ lastArrivedMs: T - DAY / 4 }));
+    check('the sell window anchors on the LATEST counted arrival (a bag traced in today is watched like a buy made today)', pass.ok && pass.detail.SEND.lastArrivedMs === T - DAY / 4 && pass.detail.SEND.basis === 'bought');
+    check('no refusal tells anyone to buy', ![fresh, dust, short, heldShort, seller, unk, open, undated].some((v) => BUYISH.test(v.reason || '')), [fresh, dust, short, heldShort, seller].map((v) => v.reason).join(' | '));
   }
 
   /* ═══ the first-day sell window ═══ */

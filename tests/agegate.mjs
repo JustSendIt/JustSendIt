@@ -83,8 +83,9 @@ try {
   check('  ...the hold floor is MIN_HOLD_USD', r && r.holdMinUsd === minUsd, r && r.holdMinUsd + ' vs ' + minUsd);
   check('  ...the coin is $SEND', r && Array.isArray(r.coins) && r.coins.includes('$SEND'), r && r.coins);
   check('  ...and the sell window is the one the check uses', r && r.sellWindowHours === 24 && /const PROOF_SELL_WINDOW_MS = DAY_MS;/.test(SRC), r && r.sellWindowHours);
-  const medianHours = Number((/const PRICE_MEDIAN_HOURS = (\d+)/.exec(SRC) || [])[1]);
-  check('  ...and the price median window the valuation uses', r && r.priceMedianHours === medianHours && medianHours > 0, r && r.priceMedianHours);
+  // since 2026-11-17 ("$100 bought") the floor is dollars BOUGHT — no price window values it any more
+  check('  ...and its basis: dollars bought, with $10 of it still held at cost, a buy counting once held 24 hours, valued from the chain\'s own WETH/USDG pool', r && r.basis === 'bought' && r.heldMinUsd === 10 && r.buyCountsAfterHours === 24
+    && /WETH\/USDG/.test(r.ethUsdSource || '') && r.priceMedianHours === undefined, JSON.stringify(r));
   check('the ticket says reading is free for adults, matching the age gate', /Reading the site is free for everyone 18 and over/.test(INVITE) && !/free and open to everyone/.test(INVITE));
   check('the gate state no longer hands out a coin\'s banner art', st0.j && st0.j.brand === undefined && !/coinBrandUrls/.test(SRC));
   const rules = (/function rulesHtml\(\) \{[\s\S]*?\n  \}/.exec(INVITE) || [''])[0];

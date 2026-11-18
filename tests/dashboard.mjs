@@ -165,11 +165,14 @@ try {
      at OG_DUST_WEI — so with an unreadable community price, a slot the whole site calls "$100 of the
      token" was satisfied by 1e-9 of it, and with it the go-live count and the flat 10x. */
   {
-    check('holdsToken refuses to decide without a price', /if \(minUsd > 0\) \{\s*\n\s*if \(!\(priceUsd > 0\)\) return null;/.test(SRC));
-    check('the revocation sweep treats undecided as "leave them alone"', /if \(holds === null\) continue;/.test(SRC));
-    check('the join path says which one it is', /if \(holds === null\) return bad\(res,[\s\S]{0,160}?Nothing has been decided/.test(SRC));
-    check('the posting path does too', /if \(holdsP === null\) return bad\(res,[\s\S]{0,160}?Nothing has been decided/.test(SRC));
-    check('starting a community does too', /if \(holdsC === null\) return bad\(res,[\s\S]{0,200}?Nothing has been decided/.test(SRC));
+    /* Since "$100 bought" (2026-11-17) every dollar floor is the BOUGHT verdict (boughtVerdict: true / false / null, read from the
+       verdicts the background worker keeps) — no price decides it, and holdsToken is only the sell-out test (more than dust) */
+    check('the dollar floor is the bought verdict: no answer yet is null, never "dust will do"', /function boughtVerdict\(uid, tokenAddr, prio\) \{\n  try \{ return BOUGHT \? BOUGHT\.verdictOf\(/.test(SRC)
+      && /async function holdsToken\(uid, tokenAddr\) \{/.test(SRC) && !/holdsToken\([^)]*MIN_(COMMUNITY_)?HOLD_USD/.test(SRC));
+    check('the revocation sweep treats undecided as "leave them alone"', /if \(holds === null\) \{ db\.prepare\('UPDATE community_members SET qual_check_at=\? WHERE community_id=\? AND user_id=\?'\)\.run\(t, r\.community_id, r\.user_id\); continue; \}/.test(SRC));
+    check('the join path says which one it is', /if \(holds === null\) return send\(res, 503, \{ error: boughtCheckingText\(/.test(SRC) && /Nothing has been decided; try again shortly/.test(SRC));
+    check('the posting path reads the verified slot alone (the sweep keeps it to the verdict): no chain read on a post', !/let holdsP;/.test(SRC) && /the verified slot above IS the holding gate \(H10\)/.test(SRC));
+    check('starting a community does too', /if \(holdsC === null && !devWalletC\) return send\(res, 503, \{ error: boughtCheckingText\(/.test(SRC));
   }
 
   /* ═══════════ 10. losses are in the ledger the user can read ═══════════ */
