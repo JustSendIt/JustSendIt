@@ -6,7 +6,6 @@ import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { DB_PATH, ROOT, SERVER_JS } from './_paths.mjs';
-import { makeFakeBought } from './_ogfake.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
@@ -37,11 +36,8 @@ try {
   check('  ...its window is the first month (30 days) of $GWC', /const OG_DIAMOND_START = OG_LAUNCH\.GWC;/.test(SRC) && /const OG_DIAMOND_END = OG_LAUNCH\.GWC \+ OG_MONTH_MS;/.test(SRC) && /const OG_WINDOW_MS = 30 \* 24 \* 3600 \* 1000;/.test(SRC));
   check('  ...the scan counts market buys and sells inside that month, per wallet', /if \(buyAmt > 0n && inMonth\(ts\)\) monthBoughtWei \+= buyAmt;/.test(SRC) && /if \(sellAmt > 0n && inMonth\(ts\)\) monthSoldWei \+= sellAmt;/.test(SRC)
     && /const buyAmt = to === w \? \(isAcquisition\(from\) \? v : routed\.take\(r, 'out', v\)\) : 0n;/.test(SRC));   // a routed buy counts too, capped at what the pool sent
-  /* since "$100 bought" (2026-11-17) the month is the member's verdict for the whole wallet set (lib/acquire.js: counted buys in, own
-     sales out, a traced piece only from an origin that was itself a net buyer that month); a wallet whose badge is spent on another
-     account adds no buys (the verdicts' claims) — section 5 */
-  check('  ...decided across EVERY linked wallet by the verdicts: the month\'s flows read only where the verdict answered yes', /f\.month\[c\.key\] = s\.diamondMonth === true \? \{ in: BigInt\(s\.monthIn \|\| '0'\), out: BigInt\(s\.monthOut \|\| '0'\) \} : \{ in: 0n, out: 0n \};/.test(SRC)
-    && /const diamondOk = ogDiamondOk\(!scanFailed, best, holdsAny, facts\.month\);/.test(SRC));
+  // ...but since Diamond-on-link (2026-11-17) the buys of a wallet whose badge is spent on another account are not counted (section 5)
+  check('  ...summed across EVERY linked wallet, disqualified or not — but a wallet claimed by another account adds no buys', /const monthIn = claimedElsewhere\.has\(a\) \? 0n : BigInt\(s\.monthBoughtWei \|\| '0'\);\n\s+month\[c\.key\]\.in \+= monthIn; month\[c\.key\]\.out \+= BigInt\(s\.monthSoldWei \|\| '0'\);\n\s+if \(monthIn > 0n\) monthFrom\.add\(a\);\n\s+if \(s\.tier === OG_TIER\.NONE\) continue;/.test(SRC));
   check('Diamond keeps every Gold perk (a free data key)', /const DATA_TIER_DISCOUNT = \{ 4: 1, 3: 1,/.test(SRC) && /row\.og_tier >= OG_TIER\.GOLD/.test(SRC));
   // the sweep also asks a Silver left open to be lifted since 2026-11-17 (og_lift; tests/ogsilver.mjs) — the Gold clause is unchanged.
   // "Once" is once per WALLET SET since Diamond-on-link (owner, 2026-11-17): linking a wallet re-opens the question at once (ogOnLink,
@@ -52,9 +48,9 @@ try {
     && /db\.prepare\('UPDATE users SET og_diamond_at = NULL WHERE id = \? AND og = 1 AND og_tier = \? AND og_revoked = 0 AND og_requal = 0'\)\.run\(userId, OG_TIER\.GOLD\);/.test(SRC)
     && /checkOg\(me\.id, \{ link: true \}\)\.catch/.test(SRC));
   // the floor is each coin SUMMED over every linked wallet (2026-11-17) — it used to value only the one wallet that earned the tier
-  check('  ...an upgrade needs the same $100 of each BOUGHT a grant does, across the wallets, and a verdict not complete is never an answer', /if \(scanFailed \|\| facts\.diamondUndecided\) return OG_TIER\.GOLD;/.test(SRC)
-    && /return await grantDiamondUpgrade\(userId, best, held, \{ same, monthFrom, floor \}\);/.test(SRC)
-    && /if \(!\(floor\.SEND === true && floor\.GWC === true\)\) \{/.test(SRC) && !/best\.(SEND|GWC)\.balWei/.test(SRC));
+  check('  ...an upgrade needs the same $100 of each a grant does, summed over the wallets, and a failed read is never an answer', /if \(scanFailed\) return OG_TIER\.GOLD;/.test(SRC)
+    && /return await grantDiamondUpgrade\(userId, best, held, \{ same, monthFrom \}\);/.test(SRC)
+    && /if \(!\(ogFloorOk\(held && held\.SEND, sendPx\) && ogFloorOk\(held && held\.GWC, gwcPx\)\)\) \{/.test(SRC) && !/best\.(SEND|GWC)\.balWei/.test(SRC));
   /* revocation is by tier since 2026-11-17, and since the owner's "Drop to Silver" the same day a sell-out of $SEND ends Diamond
      (and Gold) for good while a sell-out of $GWC alone drops them to what $SEND alone earns (tests/ogsilver.mjs runs both) */
   check('Diamond (and Gold) need both coins; selling out of $SEND loses them for good, selling out of $GWC alone drops them (ogLoss)', /const OG_TIER_NEEDS = \{ 4: \['SEND', 'GWC'\], 3: \['SEND', 'GWC'\],/.test(SRC)
@@ -113,14 +109,11 @@ try {
 
   /* ═══ 5. Diamond supersedes Gold on a link (owner, 2026-11-17: "If a person connects a wallet that qualifies for diamond OG
      have that super-seed their Gold OG badge status") ═══
-     The real linkWalletTo, checkOg, grantDiamondUpgrade and the bought verdicts' adapter (ogBoughtFacts), lifted out of server.js
-     and run against an in-memory database. Since "$100 bought" checkOg reads no chain: it decides on each member's per-coin
-     verdicts, which here are built from per-wallet facts (tests/_ogfake.mjs; the engine runs on real chain data in
-     tests/acquire.mjs and end to end in tests/bought.mjs). A Gold is asked the Diamond question once per wallet set: a link
-     re-opens it at once (ogOnLink); verdicts made for the older wallets are no answer (nothing is written until they are made
-     again, and the link's right to ask travels with the request for them); every wallet a Diamond rests on is claimed for the
-     account (ogClaimWallets); and a wallet whose badge is spent on another account adds no buys here. Wallets and accounts are
-     made up. */
+     The real linkWalletTo, checkOg and grantDiamondUpgrade, lifted out of server.js and run against an in-memory database and a
+     stub explorer (ogScan) that answers per (wallet, coin) — the chain is the only thing missing. A Gold is asked the Diamond
+     question once per wallet set: a link re-opens it at once (ogOnLink), a scan already running on the older wallets writes
+     nothing and runs again (checkOg's `same`), every wallet the Diamond rests on is claimed for the account (ogClaimWallets),
+     and a wallet whose badge is spent on another account adds no buys here. Wallets and accounts are made up. */
   {
     const DAY = 864e5;
     const val = (expr, env = {}) => new Function(...Object.keys(env), 'return (' + expr + ');')(...Object.values(env));
@@ -137,21 +130,22 @@ try {
     const ENV0 = { OG_TIER, OG_LAUNCH, OG_TIER_CLOSE: { 3: C.closes && C.closes.gold, 2: C.closes && C.closes.silver, 1: C.closes && C.closes.bronze },
       OG_TIER_NAME: val(constSrc('OG_TIER_NAME')), OG_TIER_MULT: val(constSrc('OG_TIER_MULT'), { OG_DIAMOND_MULT, OG_BONUS: val(constSrc('OG_BONUS')) }),
       OG_TIER_NEEDS: val(constSrc('OG_TIER_NEEDS')), OG_MIN_HOLD_USD: val(constSrc('MIN_HOLD_USD')) };
-    const PURE = ['ogTierForBuy', 'ogBetterScan', 'ogAccountTier', 'ogDiamondOk', 'ogLiftable', 'ogLiftWhat', 'ogReadDecides', 'ogClaimWallets', 'ogCapped',
+    const PURE = ['ogTierForBuy', 'ogBetterScan', 'ogFloorOk', 'ogAccountTier', 'ogDiamondOk', 'ogLiftable', 'ogLiftWhat', 'ogReadDecides', 'ogClaimWallets', 'ogCapped',
       'ogGrantText', 'ogRevokedText', 'ogDropText', 'ogRestoreText', 'ogHeldThrough',
       // what checkOg and the lift reach since the 2026-11-18 OG review: the drop proven by the badge's own grant, the pause's continuity, their notes
       'ogDropPick', 'ogDropOffText', 'ogGoldHeldBack', 'ogPauseHeld', 'ogResumeText', 'ogPauseSilverText', 'ogPauseRevokedText', 'ogDiamondText'];
-    const SYNC = ['ogRequalify', 'ogAgain', 'ogOnLink', 'ogRevokedWallets', 'ogRevokedWalletRows', 'ogBoughtFacts', 'ogRaiseOnLink'];
+    const SYNC = ['ogRequalify', 'ogAgain', 'ogOnLink', 'ogRevokedWallets', 'ogRevokedWalletRows'];
     const ASYNC = ['checkOg', 'liftOgSilver', 'grantDiamondUpgrade', 'restoreOg', 'linkWalletTo'];
     const missing = [...PURE, ...SYNC].filter((n) => !fnSrc(n)).concat(ASYNC.filter((n) => !asyncSrc(n)));
     check('linkWalletTo, checkOg, grantDiamondUpgrade and the Diamond-on-link steps can be lifted out of server.js', !missing.length, missing.join(', '));
     const L = new Function(...Object.keys(ENV0), PURE.map(fnSrc).join('\n') + '\nreturn { ' + PURE.join(', ') + ' };')(...Object.values(ENV0));
 
-    const TOKS = { SEND: '0xsend', GWC: '0xgwc' };
-    const SCANS = new Map();     // wallet + ':' + coin -> what that wallet bought and holds (the verdicts are built from these)
-    const PX = { SEND: 0.001, GWC: 0.001 };   // the stand-in's $ per token: 1,000,000 tokens = $1,000 bought
+    const TOKS = { SEND: '0xsend', GWC: '0xgwc' }, coinOf = (t) => (t === TOKS.SEND ? 'SEND' : 'GWC');
+    const SCANS = new Map();     // wallet + ':' + coin -> what the stub explorer answers
+    const asked = [];            // every (wallet:coin) the stub explorer was asked for
+    let delayMs = 0, priceDelayMs = 0;
     const EMPTY = { tier: 0, firstBuyMs: null, holds: false, balWei: '0', dumped: false, notAccumulator: false, monthBoughtWei: '0', monthSoldWei: '0' };
-    // one coin in one wallet: bought at `ts`, holding `tokens`; month flows only when given
+    // a scan of one coin in one wallet: bought at `ts`, holding `tokens` (1,000,000 = $1,000 at the stub price); month flows only when given
     const sc = (coin, ts, month, tokens = 1_000_000) => ({ ...EMPTY, tier: L.ogTierForBuy(ts, OG_LAUNCH[coin]), firstBuyMs: ts, holds: tokens > 0,
       balWei: (BigInt(tokens) * 10n ** 18n).toString(), ...(month ? { monthBoughtWei: month[0], monthSoldWei: month[1] } : {}) });
     const M = ['5', '1'];                                                                   // bought 5, sold 1 inside $GWC's first month: a net buyer
@@ -171,16 +165,16 @@ try {
         CREATE TABLE identities (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT, addr TEXT, identifier_enc TEXT, linked_at INTEGER);
         CREATE TABLE og_claims (addr_idx TEXT PRIMARY KEY, user_id INTEGER NOT NULL, tier INTEGER NOT NULL, claimed_at INTEGER NOT NULL);`);
       const notes = [];
-      const walletAddresses = (uid) => mem.prepare("SELECT addr FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY rowid").all(uid).map((r) => r.addr);
-      const FAKE = makeFakeBought({ mem, walletsOf: walletAddresses, SCANS, PX, TOKS });
-      const reads = { n: 0 };   // every time checkOg read a verdict
-      const BOUGHT = { stateOf: (uid, t) => { reads.n++; return FAKE.BOUGHT.stateOf(uid, t); }, want: (uid, t, o) => FAKE.BOUGHT.want(uid, t, o) };
       const E = {
         db: mem, now: () => Date.now(), bidx: (a) => 'idx:' + String(a).toLowerCase(), notify: (uid, emo, text) => notes.push({ uid, text }),
-        walletAddresses, insertIdentity: (uid, type, addr) => mem.prepare('INSERT INTO identities (user_id, type, addr, identifier_enc, linked_at) VALUES (?,?,?,?,?)').run(uid, type, addr, addr, Date.now()),
+        walletAddresses: (uid) => mem.prepare("SELECT addr FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY rowid").all(uid).map((r) => r.addr),
+        insertIdentity: (uid, type, addr) => mem.prepare('INSERT INTO identities (user_id, type, addr, identifier_enc, linked_at) VALUES (?,?,?,?,?)').run(uid, type, addr, addr, Date.now()),
         decField: (x) => x,   // the restore reads the wallets linked when a badge was removed (ogRevokedWallets): stored plain here
         OG_MAX_WALLETS: 5, TOK: TOKS, OG_PAIR: { SEND: '0xp1', GWC: '0xp2' }, ...ENV0, OG_DIAMOND_MULT, OG_GRANT_UNTIL_MS: grantUntil,
-        OG_MONTH_MS: 30 * DAY, OG_DUST: val(constSrc('OG_DUST')), OG_DUST_WEI: 1000000000n, BOUGHT,
+        OG_MONTH_MS: 30 * DAY, OG_DUST: val(constSrc('OG_DUST')),
+        ogDisqualified: (f) => !!(f.dumped && f.notAccumulator),
+        guardedPriceUsd: async () => { if (priceDelayMs) await new Promise((ok) => setTimeout(ok, priceDelayMs)); return 0.001; },
+        ogScan: async (a, token) => { asked.push(a + ':' + coinOf(token)); if (delayMs) await new Promise((ok) => setTimeout(ok, delayMs)); return SCANS.get(a + ':' + coinOf(token)) || EMPTY; },
         _ogScanning: new Set(), _ogRescan: new Set(), _ogRescanLink: new Set(),
         // what else linkWalletTo touches — stubbed: the link's alert, sessions, points, holdings caches, the participation check
         sudoOthersOff: () => {}, forgetHoldings: () => {}, refreshSupplyForUser: () => {}, erc20Balance: async () => 0n, awardPoints: () => {}, PTS: { connect_wallet: 0 },
@@ -190,7 +184,7 @@ try {
       let uid = 0;
       const link = (id, w) => mem.prepare("INSERT INTO identities (user_id, type, addr, identifier_enc) VALUES (?, 'wallet', ?, ?)").run(id, w, w);   // no link time: a legacy row
       return {
-        K, notes, link, FAKE, reads,
+        K, notes, link,
         user: (wallets) => { uid++; mem.prepare('INSERT INTO users (id) VALUES (?)').run(uid); for (const w of wallets) link(uid, w); return uid; },
         gold: (id, askedAt) => mem.prepare('UPDATE users SET og = 1, og_tier = 3, og_diamond_at = ? WHERE id = ?').run(askedAt, id),   // a Gold, asked the question (askedAt) or not (null)
         claim: (w, id, tier) => mem.prepare('INSERT INTO og_claims (addr_idx, user_id, tier, claimed_at) VALUES (?,?,?,?)').run('idx:' + w, id, tier, Date.now()),
@@ -198,7 +192,7 @@ try {
         set: (id, cols) => mem.prepare('UPDATE users SET ' + Object.keys(cols).map((k) => k + ' = ?').join(', ') + ' WHERE id = ?').run(...Object.values(cols), id),
         row: (id) => mem.prepare('SELECT * FROM users WHERE id = ?').get(id),
         claims: (id) => mem.prepare('SELECT addr_idx, tier FROM og_claims WHERE user_id = ? ORDER BY addr_idx').all(id).map((r) => r.addr_idx.replace('idx:', '') + '=' + r.tier).join(','),
-        // the link's own checkOg runs behind the link's balance read: let it finish
+        // every scan and every re-run it queued has ended (a re-run starts within one setImmediate, well inside one poll)
         idle: async () => { for (let i = 0, calm = 0; i < 200 && calm < 2; i++) { await new Promise((ok) => setTimeout(ok, 15)); calm = E._ogScanning.size || E._ogRescan.size ? 0 : calm + 1; } },
         lastNote: (id) => (notes.filter((n) => n.uid === id).pop() || {}).text || '',
       };
@@ -217,11 +211,11 @@ try {
       const tY = await H.K.checkOg(Y);
       const askedBefore = H.row(Y).og_diamond_at;
       check('  ...Y bought both later in the Gold window: Gold, asked the Diamond question once (no)', tY === 3 && askedBefore > 0 && H.claims(Y) === '0xdb1=3', JSON.stringify({ tY, r: H.row(Y) }));
-      const n0 = H.reads.n;
+      const n0 = asked.length;
       await H.K.linkWalletTo(me(Y), '0xda1', 'signature'); await H.idle();
       check('X unlinked A, Gold Y links A: the question is asked again with A — and Y stays Gold (A\'s month backs X, not Y)',
-        H.reads.n > n0 && H.row(Y).og_tier === 3 && H.row(Y).og_diamond_at >= askedBefore && H.claims(Y) === '0xdb1=3' && H.claims(X) === '0xda1=4',
-        JSON.stringify({ r: H.row(Y), cY: H.claims(Y), cX: H.claims(X), reads: H.reads.n - n0 }));
+        asked.slice(n0).includes('0xda1:SEND') && H.row(Y).og_tier === 3 && H.row(Y).og_diamond_at > 0 && H.claims(Y) === '0xdb1=3' && H.claims(X) === '0xda1=4',
+        JSON.stringify({ r: H.row(Y), cY: H.claims(Y), cX: H.claims(X), asked: asked.slice(n0) }));
     }
     /* (b) a wallet claimed elsewhere adds no buys — but does not stop the account's OWN Diamond wallet */
     {
@@ -242,36 +236,43 @@ try {
       check('  ...that wallet, unlinked and linked to another Gold account, makes no second Diamond: it was claimed with the upgrade',
         H.row(Z).og_tier === 3 && H.row(Z).og_diamond_at > 0 && H.claims(Z) === '0xdd3=3', JSON.stringify({ r: H.row(Z), c: H.claims(Z) }));
     }
-    /* (d) a claim written by another account after the verdicts were made: no Diamond, nothing taken, the question left open */
+    /* (d) a claim written by another account while the read ran: no Diamond, nothing taken, the question left open */
     {
       both('0xdc4', LATE); both('0xdb4', MONTH, M);
       const Y4 = H.user(['0xdc4']);
       await H.K.checkOg(Y4);
-      H.link(Y4, '0xdb4'); H.set(Y4, { og_diamond_at: null });
-      H.FAKE.freeze(Y4);                                                                    // the verdicts for both wallets, made before the claim
+      delayMs = 15;
+      const p = H.K.linkWalletTo(me(Y4), '0xdb4', 'signature');
+      await new Promise((ok) => setTimeout(ok, 5));
       H.claim('0xdb4', 9002, 4);
-      await H.K.checkOg(Y4);
-      H.FAKE.thaw(Y4);
-      check('a wallet the Diamond rests on, claimed by another account after the verdicts were made: still Gold, the claim not taken, the question left open',
+      await p; await H.idle(); delayMs = 0;
+      check('a wallet the Diamond rests on, claimed by another account mid-read: still Gold, the claim not taken, the question left open',
         H.row(Y4).og_tier === 3 && H.row(Y4).og_diamond_at === null && H.claims(Y4) === '0xdc4=3' && H.claims(9002) === '0xdb4=4', JSON.stringify({ r: H.row(Y4), c: H.claims(Y4) }));
     }
-    /* (e) a link after the verdicts were made: they are for the older wallets — nothing is written on them, and the request for new
-       ones carries the link's right to ask; made again, the account is Diamond */
+    /* (e) a link while a scan of the older wallets is running: that scan writes nothing, and runs again with the new wallet */
     {
       both('0xdc5', LATE); both('0xdb5', MONTH, M);
-      const Y5 = H.user(['0xdc5']); H.gold(Y5, null); H.claim('0xdc5', Y5, 3);       // a Gold not yet asked
-      H.FAKE.freeze(Y5);                                                              // its verdicts, made for 0xdc5 alone
-      const w0 = H.FAKE.wants.length;
-      await H.K.linkWalletTo(me(Y5), '0xdb5', 'signature'); await H.idle();
-      const asked = H.FAKE.wants.slice(w0).filter((x) => x.uid === Y5);
-      check('a wallet linked after the verdicts were made: they are no answer — the older wallets\' "not Diamond" is never written, nothing is claimed',
-        H.row(Y5).og_tier === 3 && H.row(Y5).og_diamond_at === null && H.claims(Y5) === '0xdc5=3', JSON.stringify({ r: H.row(Y5), c: H.claims(Y5) }));
-      check('  ...the worker is asked for the verdicts of the wallets linked now, with the link\'s right to ask (opts.link)', asked.length >= 1 && asked.every((x) => x.opts.link === true && x.opts.prio === 2), JSON.stringify(asked));
-      H.FAKE.thaw(Y5);
-      await H.K.checkOg(Y5, { link: true });                                          // what boughtOnVerdict does when they are written
-      check('  ...made again for the wallets linked now: Diamond, the new wallet claimed', H.row(Y5).og_tier === 4 && H.claims(Y5) === '0xdb5=4,0xdc5=3', JSON.stringify({ r: H.row(Y5), c: H.claims(Y5) }));
-      check('  ...and the server hands the link\'s right on when a verdict is written (boughtOnVerdict → checkOg({ link }))', /checkOg\(uid, \{ link: !!\(opts && opts\.link\) \}\)/.test(SRC)
-        && /if \(deps\.onVerdict\) try \{ deps\.onVerdict\(uid, t, before, after, opts\); \}/.test(readFileSync(path.join(ROOT, 'lib', 'bought.js'), 'utf8')));
+      const Y5 = H.user(['0xdc5']); H.gold(Y5, null); H.claim('0xdc5', Y5, 3);       // a Gold not yet asked: the sweep would ask it
+      delayMs = 20;
+      const sweep = H.K.checkOg(Y5);
+      await new Promise((ok) => setTimeout(ok, 5));
+      await H.K.linkWalletTo(me(Y5), '0xdb5', 'signature');
+      await sweep; await H.idle(); delayMs = 0;
+      check('a wallet linked while the sweep reads the older wallets: their "not Diamond" is never written, the read runs again — Diamond',
+        H.row(Y5).og_tier === 4 && H.claims(Y5) === '0xdb5=4,0xdc5=3', JSON.stringify({ r: H.row(Y5), c: H.claims(Y5) }));
+    }
+    /* (e2) the same, when the scan ends before the link has asked anything (linkWalletTo reads balances before its checkOg):
+       the wallet-set check queues the re-run itself */
+    {
+      both('0xdc14', LATE); both('0xdb14', MONTH, M);
+      const Y14 = H.user(['0xdc14']); H.gold(Y14, null); H.claim('0xdc14', Y14, 3);
+      delayMs = 20;
+      const sweep = H.K.checkOg(Y14);
+      await new Promise((ok) => setTimeout(ok, 5));
+      H.link(Y14, '0xdb14');                                                            // linked; the link's own check has not run yet
+      await sweep; await H.idle(); delayMs = 0;
+      check('  ...and when the read ends before the link has asked, the read runs again on its own: Diamond', H.row(Y14).og_tier === 4 && H.claims(Y14) === '0xdb14=4,0xdc14=3',
+        JSON.stringify({ r: H.row(Y14), c: H.claims(Y14) }));
     }
     /* (f) a Gold already asked (og_diamond_at set) links a wallet that qualifies → Diamond; the question re-opens at once */
     {
@@ -284,32 +285,9 @@ try {
         reopened, JSON.stringify(H.row(Y6)));
       check('  ...and the account is Diamond, with the new wallet claimed and a note', H.row(Y6).og_tier === 4 && H.claims(Y6) === '0xdb6=4,0xdc6=3' && /^OG Diamond unlocked!/.test(H.lastNote(Y6)),
         JSON.stringify({ r: H.row(Y6), c: H.claims(Y6), note: H.lastNote(Y6) }));
-      const n0 = H.reads.n;
+      const n0 = asked.length;
       await H.K.linkWalletTo(me(Y6), '0xdz6', 'signature'); await H.idle();
-      check('  ...a Diamond linking another wallet is not asked again (Diamond is final)', H.reads.n === n0 && H.row(Y6).og_tier === 4, H.reads.n - n0);
-    }
-    /* (g) after the grant window and its grace (OG_GRANT_UNTIL_MS): on a link only, never by the sweep (owner's Q7) */
-    {
-      const H2 = harness(Date.now() - DAY);
-      both('0xdc7', LATE); both('0xdb7', MONTH, M);
-      const Y7 = H2.user(['0xdc7']); H2.gold(Y7, null);
-      const n0 = H2.reads.n;
-      const t = await H2.K.checkOg(Y7);
-      check('past the grant window, the sweep\'s check of a Gold not yet asked reads nothing', t === 3 && H2.reads.n === n0 && H2.row(Y7).og_diamond_at === null, JSON.stringify({ t, n: H2.reads.n - n0 }));
-      await H2.K.linkWalletTo(me(Y7), '0xdb7', 'signature'); await H2.idle();
-      check('  ...but a link still asks: Diamond', H2.row(Y7).og_tier === 4 && H2.claims(Y7) === '0xdb7=4', JSON.stringify({ r: H2.row(Y7), c: H2.claims(Y7) }));
-      /* two links before the verdicts are made again: both requests carry the link's right, and the verdicts then decide */
-      both('0xdc8', LATE); both('0xdb8', MONTH, M);
-      const Y8 = H2.user(['0xdc8']); H2.gold(Y8, Date.now() - 30 * DAY);
-      H2.FAKE.freeze(Y8);
-      const w0 = H2.FAKE.wants.length;
-      await H2.K.linkWalletTo(me(Y8), '0xde8', 'signature');                          // a wallet with nothing in it
-      await H2.K.linkWalletTo(me(Y8), '0xdb8', 'signature'); await H2.idle();         // the Diamond wallet
-      const asked = H2.FAKE.wants.slice(w0).filter((x) => x.uid === Y8);
-      check('  ...past the grant window, links before the verdicts are made again ask for them with the link\'s right', H2.row(Y8).og_tier === 3 && asked.length >= 2 && asked.every((x) => x.opts.link === true), JSON.stringify(asked));
-      H2.FAKE.thaw(Y8);
-      await H2.K.checkOg(Y8, { link: true });
-      check('  ...and once made, the link\'s right decides it past the window: Diamond', H2.row(Y8).og_tier === 4 && H2.claims(Y8) === '0xdb8=4', JSON.stringify({ r: H2.row(Y8), c: H2.claims(Y8) }));
+      check('  ...a Diamond linking another wallet is not read again (Diamond is final)', asked.length === n0 && H.row(Y6).og_tier === 4, asked.length - n0);
     }
     /* (h) a wallet whose month buys were counted is claimed too, not only the wallets that earned each coin's Gold */
     {
@@ -328,45 +306,61 @@ try {
       await H.K.linkWalletTo(me(Z9), '0xdq9', 'signature'); await H.idle();
       check('  ...so that wallet, linked to another Gold account, makes no second Diamond', H.row(Z9).og_tier === 3 && H.claims(Z9) === '0xdr9=3', JSON.stringify({ r: H.row(Z9), c: H.claims(Z9) }));
     }
-    /* (i) an unlink after the verdicts were made: nothing is decided on wallets the account no longer has */
+    /* (i)–(l) a wallet UNLINKED while the prices are read: no path writes an answer that rests on it, nor claims it */
+    const unlinkMidPrice = async (id, w, opts) => {
+      priceDelayMs = 20;
+      const p = H.K.checkOg(id, opts);
+      await new Promise((ok) => setTimeout(ok, 5));                                    // the stub explorer answered at once; the prices are being read
+      H.unlink(id, w); H.K.checkOg(id);                                                 // what /api/wallet/unlink does: the row goes, then checkOg
+      await p; await H.idle(); priceDelayMs = 0;
+    };
     {
       both('0xdc13', LATE); both('0xdq13', MONTH, M);
       const U = H.user(['0xdc13', '0xdq13']); H.gold(U, null); H.claim('0xdc13', U, 3);
-      H.FAKE.freeze(U);                                                                 // made while 0xdq13 was linked: Diamond-able
-      H.unlink(U, '0xdq13');
-      await H.K.checkOg(U);
-      check('a wallet unlinked after the verdicts were made: no Diamond on it, nothing claimed on it, the question left open',
-        H.row(U).og_tier === 3 && H.row(U).og_diamond_at === null && H.claims(U) === '0xdc13=3', JSON.stringify({ r: H.row(U), c: H.claims(U) }));
-      H.FAKE.thaw(U);
-      await H.K.checkOg(U);
-      check('  ...made again without it: asked, and not Diamond', H.row(U).og_tier === 3 && H.row(U).og_diamond_at > 0 && H.claims(U) === '0xdc13=3', JSON.stringify({ r: H.row(U), c: H.claims(U) }));
+      await unlinkMidPrice(U, '0xdq13');
+      check('(upgrade) the Diamond wallet unlinked while the prices were read: no Diamond, nothing claimed on it — asked again without it (no)',
+        H.row(U).og_tier === 3 && H.row(U).og_diamond_at > 0 && H.claims(U) === '0xdc13=3', JSON.stringify({ r: H.row(U), c: H.claims(U) }));
     }
-    /* (j) a link raises a lower badge too — raise-only, up to the account's cap (owner, 2026-11-17: the buy date correct for everyone) */
     {
-      const SILVER_TS = C.closes.gold + 5 * DAY, BRONZE_TS = C.closes.silver + 5 * DAY;
-      SCANS.set('0xbz1:SEND', sc('SEND', BRONZE_TS)); SCANS.set('0xbz2:SEND', sc('SEND', SILVER_TS));
-      const B1 = H.user(['0xbz1']); H.set(B1, { og: 1, og_tier: 1, og_buy_ms: BRONZE_TS }); H.claim('0xbz1', B1, 1);
-      await H.K.linkWalletTo(me(B1), '0xbz2', 'signature'); await H.idle();
-      check('a Bronze links a wallet whose $SEND was bought in Silver\'s window: raised to Silver, dated by that buy, the wallet claimed',
-        H.row(B1).og_tier === 2 && H.row(B1).og_buy_ms === SILVER_TS && H.claims(B1) === '0xbz1=1,0xbz2=2' && /^Your Bronze is now OG Silver!/.test(H.lastNote(B1)), JSON.stringify({ r: H.row(B1), c: H.claims(B1), n: H.lastNote(B1) }));
-      both('0xsg1', LATE);
-      SCANS.set('0xsv1:SEND', sc('SEND', SILVER_TS));
-      const S1 = H.user(['0xsv1']); H.set(S1, { og: 1, og_tier: 2, og_buy_ms: SILVER_TS }); H.claim('0xsv1', S1, 2);
-      await H.K.linkWalletTo(me(S1), '0xsg1', 'signature'); await H.idle();
-      check('  ...an uncapped Silver links a wallet that bought both coins in the Gold window: raised to Gold', H.row(S1).og_tier === 3 && H.claims(S1) === '0xsg1=3,0xsv1=2', JSON.stringify({ r: H.row(S1), c: H.claims(S1) }));
-      both('0xsg2', LATE);
-      SCANS.set('0xsv2:SEND', sc('SEND', SILVER_TS));
-      const S2 = H.user(['0xsv2']); H.set(S2, { og: 1, og_tier: 2, og_buy_ms: SILVER_TS, og_cap: 2 }); H.claim('0xsv2', S2, 2);
-      await H.K.linkWalletTo(me(S2), '0xsg2', 'signature'); await H.idle();
-      check('  ...a Silver held to Silver (og_cap: it sold out of $GWC once) is never raised past it — only dated by its earlier $SEND buy', H.row(S2).og_tier === 2 && H.row(S2).og_buy_ms === LATE && H.claims(S2) === '0xsg2=2,0xsv2=2', JSON.stringify({ r: H.row(S2), c: H.claims(S2) }));
-      SCANS.set('0xbz3:SEND', sc('SEND', BRONZE_TS + DAY));
-      const B2 = H.user(['0xbz2b']); SCANS.set('0xbz2b:SEND', sc('SEND', BRONZE_TS)); H.set(B2, { og: 1, og_tier: 1, og_buy_ms: BRONZE_TS }); H.claim('0xbz2b', B2, 1);
-      await H.K.linkWalletTo(me(B2), '0xbz3', 'signature'); await H.idle();
-      check('  ...a link that shows nothing earlier or higher changes nothing (never lowered, nothing claimed)', H.row(B2).og_tier === 1 && H.row(B2).og_buy_ms === BRONZE_TS && H.claims(B2) === '0xbz2b=1', JSON.stringify({ r: H.row(B2), c: H.claims(B2) }));
-      H.claim('0xbz9', 9003, 2); SCANS.set('0xbz9:SEND', sc('SEND', SILVER_TS));
-      const B3 = H.user(['0xbz8']); SCANS.set('0xbz8:SEND', sc('SEND', BRONZE_TS)); H.set(B3, { og: 1, og_tier: 1, og_buy_ms: BRONZE_TS }); H.claim('0xbz8', B3, 1);
-      await H.K.linkWalletTo(me(B3), '0xbz9', 'signature'); await H.idle();
-      check('  ...and a wallet whose badge backs another account raises nothing here', H.row(B3).og_tier === 1 && H.claims(B3) === '0xbz8=1', JSON.stringify({ r: H.row(B3), c: H.claims(B3) }));
+      both('0xdq12', LATE);
+      const G = H.user(['0xde12', '0xdq12']);
+      await unlinkMidPrice(G, '0xdq12');
+      check('(grant) the wallet that earned Gold unlinked while the prices were read: no badge, no claim', H.row(G).og_tier === 0 && H.claims(G) === '', JSON.stringify({ r: H.row(G), c: H.claims(G) }));
+    }
+    {
+      SCANS.set('0xds11:SEND', sc('SEND', MONTH.SEND)); SCANS.set('0xdg11:GWC', sc('GWC', LATE));
+      const S = H.user(['0xds11', '0xdg11']); H.set(S, { og: 1, og_tier: 2, og_lift: 1, og_buy_ms: MONTH.SEND }); H.claim('0xds11', S, 2);
+      await unlinkMidPrice(S, '0xdg11');
+      check('(lift) the $GWC wallet that would lift a Silver unlinked while the prices were read: still Silver, still open, nothing claimed on it',
+        H.row(S).og_tier === 2 && H.row(S).og_lift === 1 && H.claims(S) === '0xds11=2', JSON.stringify({ r: H.row(S), c: H.claims(S) }));
+    }
+    {
+      SCANS.set('0xdr10:SEND', { ...sc('SEND', MONTH.SEND), heldSpans: [[MONTH.SEND, null]] });
+      const R = H.user(['0xde10', '0xdr10']); H.set(R, { og_revoked: 1, og_recheck: 1, og_checked_at: LATE + 10 * DAY, og_buy_ms: LATE });
+      await unlinkMidPrice(R, '0xdr10', { restore: true });
+      check('(restore) the $SEND wallet that would restore a badge unlinked while the price was read: not restored, nothing claimed — the pass asks again',
+        H.row(R).og_revoked === 1 && H.row(R).og_recheck === 1 && H.claims(R) === '', JSON.stringify({ r: H.row(R), c: H.claims(R) }));
+    }
+    /* (g) after the grant window and its grace (OG_GRANT_UNTIL_MS): on a link only, never by the sweep (owner's Q7) */
+    {
+      const H2 = harness(Date.now() - DAY);
+      both('0xdc7', LATE); both('0xdb7', MONTH, M);
+      const Y7 = H2.user(['0xdc7']); H2.gold(Y7, null);
+      const n0 = asked.length;
+      const t = await H2.K.checkOg(Y7);
+      check('past the grant window, the sweep\'s check of a Gold not yet asked reads nothing', t === 3 && asked.length === n0 && H2.row(Y7).og_diamond_at === null, JSON.stringify({ t, n: asked.length - n0 }));
+      await H2.K.linkWalletTo(me(Y7), '0xdb7', 'signature'); await H2.idle();
+      check('  ...but a link still asks: Diamond', H2.row(Y7).og_tier === 4 && H2.claims(Y7) === '0xdb7=4', JSON.stringify({ r: H2.row(Y7), c: H2.claims(Y7) }));
+      /* and a link that lands while a link's read is running keeps that right in the re-run */
+      both('0xdc8', LATE); both('0xdb8', MONTH, M);
+      const Y8 = H2.user(['0xdc8']); H2.gold(Y8, Date.now() - 30 * DAY);
+      delayMs = 20;
+      const p1 = H2.K.linkWalletTo(me(Y8), '0xde8', 'signature');                    // a wallet with nothing in it: its read starts
+      await new Promise((ok) => setTimeout(ok, 5));
+      await H2.K.linkWalletTo(me(Y8), '0xdb8', 'signature');                          // the Diamond wallet, mid-read
+      await p1; await H2.idle(); delayMs = 0;
+      check('  ...a second link mid-read, past the grant window: the re-run keeps the link\'s right to ask — Diamond', H2.row(Y8).og_tier === 4 && H2.claims(Y8) === '0xdb8=4',
+        JSON.stringify({ r: H2.row(Y8), c: H2.claims(Y8) }));
     }
   }
 } catch (e) {

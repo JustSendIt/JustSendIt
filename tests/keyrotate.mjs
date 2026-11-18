@@ -14,7 +14,6 @@ import net from 'node:net';
 import { createRequire } from 'node:module';
 import { createHash, createHmac, randomBytes } from 'node:crypto';
 import { DatabaseSync } from 'node:sqlite';
-import vm from 'node:vm';
 import { ROOT, SERVER_JS, ETHERS } from './_paths.mjs';
 
 const require = createRequire(import.meta.url);
@@ -25,78 +24,6 @@ const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
 const T = fs.mkdtempSync(path.join(os.tmpdir(), 'jsi-keyrot-'));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-/* "$100 bought" (owner, 2026-11-17) adds three tables whose values a key protects: buy_claims (which outside buyer's wallet
-   backs which account, and the wallet it came through: blind indexes), acq_state (what a member's wallets bought of a coin:
-   four encField JSON columns) and lib/tape.js's tape_receipts (members' own receipts in coins with no tape: the hash as a blind
-   index, the body encrypted). The server's schema step makes them; until it does, this suite makes them itself with the
-   columns that step was given, so the registry is tested either way (CREATE ... IF NOT EXISTS: the server's own table wins). */
-const HOLD_DDL = {
-  buy_claims: 'CREATE TABLE IF NOT EXISTS buy_claims (token TEXT NOT NULL, origin_idx TEXT NOT NULL, user_id INTEGER NOT NULL, via_idx TEXT, at INTEGER NOT NULL)',
-  acq_state: 'CREATE TABLE IF NOT EXISTS acq_state (user_id INTEGER NOT NULL, token TEXT NOT NULL, feature TEXT NOT NULL, verdict INTEGER, spent_bucket INTEGER, why TEXT, wallets_sig TEXT, lots_enc TEXT, cursors_enc TEXT, dates_enc TEXT, wei_enc TEXT, at INTEGER NOT NULL)',
-  tape_receipts: 'CREATE TABLE IF NOT EXISTS tape_receipts (tx_idx TEXT PRIMARY KEY, body_enc TEXT NOT NULL, at INTEGER NOT NULL)',
-};
-const HOLD_ENC = ['lots_enc', 'cursors_enc', 'dates_enc', 'wei_enc'];
-/* The CREATE TABLE and ADD COLUMN statements in server.js and lib/*.js: cols as {t, c, type}, and made as {t, withoutRowid}
-   for each CREATE TABLE. Both kinds of SQL comment are skipped (they hold commas, brackets and apostrophes: a /* *\/ one in
-   the alerts table once split into columns named "never", "and" and "so", and an apostrophe in one would swallow every
-   column up to the next quote), and so are quoted defaults. A comment is replaced by a space, so the words either side of it
-   stay apart. Comments are skipped inside a statement only: the JS around it is never stripped, since a JS string can hold
-   a slash-star that is no comment at all. */
-function ddlScan(src) {
-  const cols = [], made = [];
-  for (const m of src.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?"?([A-Za-z_][A-Za-z_0-9]*)"?\s*\(/g)) {
-    const parts = []; let depth = 1, cur = '', i = m.index + m[0].length;
-    for (; i < src.length && depth; i++) {
-      const ch = src[i];
-      if (ch === '-' && src[i + 1] === '-') { while (i < src.length && src[i] !== '\n') i++; cur += '\n'; continue; }
-      if (ch === '/' && src[i + 1] === '*') { const e = src.indexOf('*/', i + 2); if (e < 0) break; cur += ' '; i = e + 1; continue; }
-      if (ch === "'") { const e = src.indexOf("'", i + 1); if (e < 0) break; cur += src.slice(i, e + 1); i = e; continue; }
-      if (ch === '(') depth++;
-      else if (ch === ')') { if (!--depth) break; }
-      else if (ch === ',' && depth === 1) { parts.push(cur); cur = ''; continue; }
-      cur += ch;
-    }
-    parts.push(cur);
-    for (const p of parts) { const cm = /^\s*"?([A-Za-z_][A-Za-z_0-9]*)"?(?:\s+([A-Za-z]+))?/.exec(p); if (cm && !/^(PRIMARY|UNIQUE|CHECK|FOREIGN|CONSTRAINT)$/i.test(cm[1])) cols.push({ t: m[1], c: cm[1], type: (cm[2] || '').toUpperCase() }); }
-    // the table options after the closing bracket ("WITHOUT ROWID", "STRICT", in either order): only a closed statement has them
-    made.push({ t: m[1], withoutRowid: !depth && /^\s*(?:STRICT\s*,\s*)?WITHOUT\s+ROWID\b/i.test(src.slice(i + 1, i + 200)) });
-  }
-  for (const m of src.matchAll(/ALTER TABLE "?([A-Za-z_][A-Za-z_0-9]*)"? ADD COLUMN "?([A-Za-z_][A-Za-z_0-9]*)"?(?:\s+([A-Za-z]+))?/g)) cols.push({ t: m[1], c: m[2], type: (m[3] || '').toUpperCase() });
-  return { cols, made };
-}
-/* The registry against a schema (the texts of server.js and lib/*.js, or a made-up one for the controls in section 1):
-   unregistered = *_enc (TEXT or BLOB) and *_idx (TEXT) columns no list names; misnamed = registered columns missing from a
-   table the schema makes; noRowid = registered tables the schema makes WITHOUT ROWID (the sweep and the index flip address
-   rows by rowid: the first rotation would throw at "SELECT rowid" and stop key maintenance). */
-const NOT_KEYED = new Set([]);   // a column named like a key-protected one that is not (none today)
-function schemaProblems(texts) {
-  const scans = texts.map(ddlScan), cols = scans.flatMap((s) => s.cols), made = scans.flatMap((s) => s.made);
-  const tables = new Set(cols.map((x) => x.t)), have = new Set(cols.map((x) => x.t + '.' + x.c));
-  const reg = new Set([...K.ENC_FIELDS, ...K.ENC_BLOBS].map(([t, c]) => t + '.' + c).concat(K.IDX_COLUMNS.map((x) => x.t + '.' + x.c)));
-  const regTables = new Set([...reg].map((tc) => tc.split('.')[0]));
-  const unregistered = [...new Set(cols.filter((x) => ((/_enc$/.test(x.c) && /^(TEXT|BLOB)$/.test(x.type)) || (/_idx$/.test(x.c) && x.type === 'TEXT')) && !reg.has(x.t + '.' + x.c) && !NOT_KEYED.has(x.t + '.' + x.c)).map((x) => x.t + '.' + x.c))];
-  const misnamed = [...reg].filter((tc) => tables.has(tc.split('.')[0]) && !have.has(tc));
-  const noRowid = [...new Set(made.filter((x) => x.withoutRowid && regTables.has(x.t)).map((x) => x.t))];
-  return { tables, cols, unregistered, misnamed, noRowid };
-}
-/* server.js's BACKUP_SCRUB, the statements scrubBackup runs on every daily and pre-flip copy, as server.js has it: read from
-   its own text (an array of string literals and comments, evaluated alone in an empty context), never retyped here, so a
-   line added there is a line this suite judges copies by. null when it cannot be read (section 1 then fails). */
-const SCRUB_LIST = (() => {
-  const m = /\nconst BACKUP_SCRUB = (\[[\s\S]*?\n\]);/.exec(SRC);
-  if (!m) return null;
-  try { const v = vm.runInNewContext(m[1], Object.create(null), { timeout: 1000 }); return Array.isArray(v) && v.length && v.every((x) => typeof x === 'string') ? v : null; } catch { return null; }
-})();
-/* What a scrub list does to table t: 'kept' (no statement changes it), 'emptied' (every statement that does is an
-   unconditional DELETE FROM t), or 'other' (a DELETE with a WHERE, an UPDATE, a DROP or ALTER: what a copy keeps then depends
-   on the rows). Each entry may hold several statements; a table whose name only starts with t is another table. */
-function scrubRule(t, list) {
-  const stmts = list.flatMap((q) => q.split(';')).map((q) => q.trim()).filter(Boolean);
-  const name = '"?' + t + '"?(?![A-Za-z_0-9])';
-  const touches = stmts.filter((q) => new RegExp('^(?:DELETE\\s+FROM|UPDATE(?:\\s+OR\\s+[A-Z]+)?|DROP\\s+TABLE(?:\\s+IF\\s+EXISTS)?|ALTER\\s+TABLE)\\s+' + name, 'i').test(q));
-  if (!touches.length) return 'kept';
-  return touches.every((q) => new RegExp('^DELETE\\s+FROM\\s+' + name + '$', 'i').test(q)) ? 'emptied' : 'other';
-}
 
 /* ═══ 1. the module on its own ═══ */
 {
@@ -161,97 +88,6 @@ function scrubRule(t, list) {
     return need.every((c) => cols.has(c));
   })());
   check('  ...and no migration in server.js still tests for the v1: prefix alone (it would re-encrypt a rotated value)', !/NOT LIKE 'v1:%'/.test(SRC) && !/startsWith\('v1:'\)/.test(SRC));
-  /* The registry and the schema, both ways. A key-protected column the registry misses keeps the old key alive (or, for an
-     index, stops matching after a flip) — and a registered column the schema names differently is skipped in silence, since
-     every pass skips what a table lacks. Key-protected columns are named *_enc (TEXT or BLOB) and *_idx (TEXT); the older
-     ones with other names are pinned by the check above. A registered table the schema does not make yet is allowed (the
-     "$100 bought" tables, until the server's schema step lands). */
-  {
-    const srcs = [SERVER_JS, ...fs.readdirSync(path.join(ROOT, 'lib')).filter((n) => n.endsWith('.js')).map((n) => path.join(ROOT, 'lib', n))];
-    const { tables, cols, unregistered, misnamed, noRowid } = schemaProblems(srcs.map((f) => fs.readFileSync(f, 'utf8')));
-    check('the registry and the schema agree: every *_enc / *_idx column server.js and lib/ make is registered, and every registered column is in its table once the table is made',
-      tables.size >= 80 && !unregistered.length && !misnamed.length, JSON.stringify({ tables: tables.size, unregistered, misnamed }));
-    /* The same rule as the rowid check on a running server's tables in 2a, read from the source: that check only sees the
-       tables this suite's servers make, and until the schema step lands the "$100 bought" ones are made from HOLD_DDL (always
-       rowid), so a WITHOUT ROWID in lib/tape.js's own tape_receipts would pass there and fail the first real rotation. */
-    check('  ...and no registered table is made WITHOUT ROWID anywhere in server.js or lib/ (the sweep and the index flip address rows by rowid)', !noRowid.length, noRowid.join(', '));
-    // the parse itself, on a table whose /* */ comments hold commas: exactly its four columns, ip among them by its own definition
-    { const al = [...new Set(cols.filter((x) => x.t === 'alerts').map((x) => x.c))].sort().join(', ');
-      check('  ...the schema is read past SQL block comments (the alerts table is exactly its own columns)', al === 'created_at, ip, target_id, user_id', al); }
-    const notYet = Object.keys(HOLD_DDL).filter((t) => !tables.has(t));
-    if (notYet.length) console.log('note: the schema does not make ' + notYet.join(' or ') + ' yet — this suite makes ' + (notYet.length === 1 ? 'it' : 'them') + ' with the columns the server\'s schema step was given');
-  }
-  /* Negative controls for the check above, on made-up schemas: it must flag what it exists to flag. An unregistered column
-     after a block comment that holds a comma, and after one that holds an apostrophe (both once hid the column from the
-     parse); a registered column renamed; a registered table made WITHOUT ROWID. And a clean copy of a registered table
-     passes, so the controls fail for the reason they name. */
-  {
-    const clean = 'CREATE TABLE IF NOT EXISTS tape_receipts (\n  tx_idx TEXT PRIMARY KEY,\n  body_enc TEXT NOT NULL,\n  at INTEGER NOT NULL\n)';
-    const ok = schemaProblems([clean + ';']);
-    check('  control: a clean copy of a registered table passes (nothing unregistered, misnamed or WITHOUT ROWID)', !ok.unregistered.length && !ok.misnamed.length && !ok.noRowid.length, JSON.stringify(ok));
-    const hid = schemaProblems(['db.exec(`CREATE TABLE IF NOT EXISTS acq_state (\n  user_id INTEGER NOT NULL,\n  /* the lots, in the order bought */ buys_enc TEXT,\n'
-      + '  /* the member\'s wallets: a list */\n  seen_idx TEXT,\n  ' + HOLD_ENC.map((c) => c + ' TEXT').join(',\n  ') + ',\n  at INTEGER NOT NULL\n);`);']);
-    check('  control: an unregistered *_enc after a block comment holding a comma, and an unregistered *_idx after one holding an apostrophe, are both flagged',
-      JSON.stringify(hid.unregistered.sort()) === '["acq_state.buys_enc","acq_state.seen_idx"]' && !hid.misnamed.length, JSON.stringify(hid.unregistered));
-    const ren = schemaProblems([clean.replace('tx_idx TEXT', 'tx_hash_idx TEXT') + ';']);
-    check('  control: a registered column renamed is flagged both ways (the new name unregistered, the registered one missing)', JSON.stringify(ren.unregistered) === '["tape_receipts.tx_hash_idx"]' && JSON.stringify(ren.misnamed) === '["tape_receipts.tx_idx"]', JSON.stringify(ren));
-    const wr = schemaProblems([clean + ' WITHOUT ROWID;', 'CREATE TABLE IF NOT EXISTS acq_state (user_id INTEGER, ' + HOLD_ENC.map((c) => c + ' TEXT').join(', ') + ', at INTEGER) STRICT, WITHOUT ROWID;', 'CREATE TABLE IF NOT EXISTS kr_unregistered (k TEXT PRIMARY KEY) WITHOUT ROWID;']);
-    check('  control: a registered table made WITHOUT ROWID is flagged (STRICT before it too); an unregistered one is not this check\'s business', JSON.stringify(wr.noRowid.sort()) === '["acq_state","tape_receipts"]', JSON.stringify(wr.noRowid));
-  }
-  // the backup scrub list, which the "$100 bought" checks on a scrubbed copy follow (holdProblems, section 2)
-  check('the backup scrub list is read from server.js\'s own BACKUP_SCRUB', Array.isArray(SCRUB_LIST) && SCRUB_LIST.includes('DELETE FROM sessions') && SCRUB_LIST.includes('DELETE FROM wallet_challenges'), SCRUB_LIST ? SCRUB_LIST.length + ' statements' : 'not found');
-  check('  ...and what it does to a table is told apart: emptied, kept (another table, one only named alike) or changed some other way',
-    scrubRule('tape_receipts', ['DELETE FROM tape_receipts']) === 'emptied' && scrubRule('tape_receipts', ['DELETE FROM sessions; DELETE FROM "tape_receipts";']) === 'emptied'
-    && scrubRule('tape_receipts', ['DELETE FROM tape_receipts_old', 'DELETE FROM x WHERE id IN (SELECT rowid FROM tape_receipts)']) === 'kept'
-    && scrubRule('tape_receipts', ['DELETE FROM tape_receipts', 'DELETE FROM tape_receipts WHERE at < 5']) === 'other' && scrubRule('acq_state', ['UPDATE acq_state SET lots_enc = NULL']) === 'other'
-    && scrubRule('acq_state', ['DROP TABLE IF EXISTS acq_state']) === 'other');
-  check('the "$100 bought" values are registered: acq_state\'s four encrypted fields, both buy_claims wallet indexes, and a kept receipt\'s hash index and body (plain 64-hex indexes, re-wrapped as they are)',
-    HOLD_ENC.every((c) => K.ENC_FIELDS.some(([t, x]) => t === 'acq_state' && x === c)) && K.ENC_FIELDS.some(([t, x]) => t === 'tape_receipts' && x === 'body_enc')
-    && [['buy_claims', 'origin_idx'], ['buy_claims', 'via_idx'], ['tape_receipts', 'tx_idx']].every(([t, c]) => K.IDX_COLUMNS.some((s) => s.t === t && s.c === c && !s.where && !s.pattern && !s.json)));
-  { const all = [...K.ENC_FIELDS, ...K.ENC_BLOBS].map(([t, c]) => t + '.' + c).concat(K.IDX_COLUMNS.map((x) => x.t + '.' + x.c)), twice = all.filter((x, i) => all.indexOf(x) !== i);
-    check('  ...and nothing is registered twice (the census would count its values twice, and the start-up check compares those counts)', !twice.length, twice.join(', ')); }
-  // a database without those tables (a backup from before them, a server that has not made them): every pass skips them
-  {
-    const d = new DatabaseSync(':memory:');
-    d.exec('CREATE TABLE og_claims (addr_idx TEXT PRIMARY KEY, user_id INTEGER NOT NULL, tier INTEGER, claimed_at INTEGER)');
-    d.prepare('INSERT INTO og_claims VALUES (?,?,?,?)').run(R.bidxAt('0x' + 'e5'.repeat(20), 0), 1, 1, 1);
-    let err = null;
-    try {
-      K.prefixCensus(d); K.trialCensus(d, R); K.plainDigest(d, R, 0);
-      d.exec('BEGIN IMMEDIATE'); K.flipIndex(d, R, 0, 1); d.exec('COMMIT');
-      K.sweepSync(d, R); K.plainDigest(d, R, 1);
-    } catch (x) { err = x.message; }
-    const moved = !err && d.prepare('SELECT addr_idx v FROM og_claims').get().v === R.bidxAt('0x' + 'e5'.repeat(20), 1);
-    d.close();
-    check('  ...a database without those tables yet (an older backup, a schema that has not made them) rotates as before: they are skipped, never an error', !err && moved, err || 'og_claims not moved');
-  }
-  // the same passes the server and the backup rewrite run, on the two tables: everything moves, and means what it meant
-  {
-    const d = new DatabaseSync(':memory:');
-    for (const ddl of Object.values(HOLD_DDL)) d.exec(ddl);
-    const O = '0x' + 'a1'.repeat(20), V = '0x' + 'b2'.repeat(20), OWN = '0x' + 'c3'.repeat(20), TOK = '0x' + 'd4'.repeat(20);
-    const plain = { lots_enc: JSON.stringify([{ origin: O, via: V, wei: '250000000000000000000000', usd: 112.4 }]), cursors_enc: JSON.stringify({ [OWN]: 41234567 }), dates_enc: JSON.stringify({ firstBuyMs: 1755648000000 }), wei_enc: JSON.stringify({ heldWei: '250000000000000000000000' }) };
-    const insClaim = d.prepare('INSERT INTO buy_claims (token, origin_idx, user_id, via_idx, at) VALUES (?,?,?,?,?)');
-    insClaim.run(TOK, R.bidxAt(O, 0), 7, R.bidxAt(V, 0), 1); insClaim.run(TOK, R.bidxAt(OWN, 0), 7, null, 1);
-    const TX = '0x' + 'f6'.repeat(32), RECEIPT = JSON.stringify({ v: 1, b: 41234567, f: OWN });
-    d.prepare('INSERT INTO tape_receipts (tx_idx, body_enc, at) VALUES (?,?,?)').run(R.bidxAt(TX, 0), R.encField(RECEIPT, 1), 1);
-    d.prepare('INSERT INTO acq_state (user_id, token, feature, verdict, spent_bucket, why, wallets_sig, ' + HOLD_ENC.join(', ') + ', at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)')
-      .run(7, TOK, 'holder', 1, 100, 'transient', '3,9', ...HOLD_ENC.map((c) => R.encField(plain[c], 1)), 1);
-    const census0 = K.prefixCensus(d).columns;
-    const before = K.plainDigest(d, R, 0);
-    d.exec('BEGIN IMMEDIATE'); const fl = K.flipIndex(d, R, 0, 1); d.exec('COMMIT');
-    const sw = K.sweepSync(d, R);
-    const after = K.plainDigest(d, R, 1), cen = K.trialCensus(d, R);
-    const claims = d.prepare('SELECT origin_idx o, via_idx v FROM buy_claims ORDER BY rowid').all(), row = d.prepare('SELECT * FROM acq_state').get(), rc = d.prepare('SELECT tx_idx i, body_enc b FROM tape_receipts').get();
-    d.close();
-    check('  ...the startup census sees the acq_state values under their key',
-      HOLD_ENC.every((c) => JSON.stringify(census0['acq_state.' + c]) === '{"1":1}') && JSON.stringify(census0['tape_receipts.body_enc']) === '{"1":1}', JSON.stringify(census0));
-    check('  ...an index flip re-wraps both buy_claims indexes without knowing the wallets (an empty via stays empty), and a kept receipt\'s hash index (its primary key)',
-      fl.rewrapped === 4 && rc.i === R.bidxAt(TX, 1) && claims[0].o === R.bidxAt(O, 1) && claims[0].v === R.bidxAt(V, 1) && claims[1].o === R.bidxAt(OWN, 1) && claims[1].v === null, JSON.stringify({ fl, claims, rc: rc.i === R.bidxAt(TX, 1) }));
-    check('  ...a data-key sweep re-encrypts every acq_state field and the receipt body under the new key, saying what they said; the plain columns are untouched',
-      sw.rewritten === 5 && /^v2:2:/.test(rc.b) && R.decField(rc.b) === RECEIPT && HOLD_ENC.every((c) => /^v2:2:/.test(row[c]) && R.decField(row[c]) === plain[c]) && row.verdict === 1 && row.spent_bucket === 100 && row.why === 'transient' && row.wallets_sig === '3,9'
-      && after.sha === before.sha && JSON.stringify(Object.keys(cen.refs)) === '["2"]', JSON.stringify({ sw, refs: cen.refs, same: after.sha === before.sha }));
-  }
 }
 
 /* ═══ 2. real servers ═══ */
@@ -323,19 +159,13 @@ async function maintenanceAfter(t0) { return waitFor(() => { const m = JSON.pars
 const A = { name: '__kr_a_' + randomBytes(3).toString('hex'), email: 'kr' + randomBytes(3).toString('hex') + '@example.com', pw: 'key-rotation-' + randomBytes(4).toString('hex') };
 const W1 = Wallet.createRandom(), W1a = W1.address.toLowerCase();
 const OG = '0x' + randomBytes(20).toString('hex'), GATEW = '0x' + randomBytes(20).toString('hex'), TRACKED = '0x' + randomBytes(20).toString('hex');
-/* "$100 bought": an outside buyer's wallet (never linked to anybody here) whose coins reached the member through another
-   wallet, under a made-up coin no engine reads — so the server never rewrites these rows, and only a rotation moves them.
-   The acq_state values are stand-ins: their shape is the engine's business; here each must open to exactly this. */
-const ORIGIN = '0x' + randomBytes(20).toString('hex'), VIA = '0x' + randomBytes(20).toString('hex'), KR_TOKEN = '0x' + randomBytes(20).toString('hex');
-const KR_TX = '0x' + randomBytes(32).toString('hex'), KR_RECEIPT = JSON.stringify({ v: 1, kr: 'receipt', f: W1a });
-const HOLD_PLAIN = { lots_enc: JSON.stringify({ kr: 'lots', origin: ORIGIN, via: VIA }), cursors_enc: JSON.stringify({ kr: 'cursors', [W1a]: 41234567 }), dates_enc: JSON.stringify({ kr: 'dates', firstBuyMs: 1755648000000 }), wei_enc: JSON.stringify({ kr: 'wei', heldWei: '250000000000000000000000' }) };
 const IPS = { signup: '10.11.12.13', join: '10.20.30.40', alert: '10.9.8.7', miss: '10.5.5.5', call: '10.6.6.6' };
 // a day ago: inside the 30-day window sweepIpIndexes keeps (it runs 5 s after every boot — a 1970 stamp was gone whenever a server lived that long)
 const MISS_AT = Date.now() - 864e5;
 let ESCROW_PRIV = null;
-// what every seeded index must equal, at a given epoch, under the keys of the moment (in the live database, or a copy)
-function expectIndexes(keys, epoch, uid, file) {
-  const d = openDb(file); const bad = [];
+// what every seeded index must equal, at a given epoch, under the keys of the moment
+function expectIndexes(keys, epoch, uid) {
+  const d = openDb(); const bad = [];
   try {
     const want = [
       ['identities wallet', "SELECT identifier v FROM identities WHERE type = 'wallet' AND user_id = ?", [uid], keys.bidxAt(W1a, epoch)],
@@ -354,10 +184,6 @@ function expectIndexes(keys, epoch, uid, file) {
       ['calls.ip', 'SELECT ip v FROM calls WHERE user_id = ?', [uid], keys.bidxAt('ip:' + IPS.call, epoch)],
       ['wallet_hist.addr_idx', 'SELECT addr_idx v FROM wallet_hist WHERE user_id = ?', [uid], keys.bidxAt(W1a, epoch)],
       ['tracker_cache.addr_idx', 'SELECT addr_idx v FROM tracker_cache WHERE user_id = ?', [uid], keys.bidxAt(TRACKED, epoch)],
-      ['buy_claims (an outside buyer\'s wallet and the wallet it came through, neither linked: unrecoverable without the re-wrap)', 'SELECT COUNT(*) v FROM buy_claims WHERE user_id = ? AND token = ? AND origin_idx = ? AND via_idx = ?', [uid, KR_TOKEN, keys.bidxAt(ORIGIN, epoch), keys.bidxAt(VIA, epoch)], 1],
-      ['buy_claims (the member\'s own wallet)', 'SELECT COUNT(*) v FROM buy_claims WHERE user_id = ? AND token = ? AND origin_idx = ?', [uid, KR_TOKEN, keys.bidxAt(W1a, epoch)], 1],
-      // a kept receipt's hash (its primary key): left at an old epoch, every kept receipt is orphaned and receiptsForget finds none
-      ['tape_receipts.tx_idx', 'SELECT COUNT(*) v FROM tape_receipts WHERE tx_idx = ?', [keys.bidxAt(KR_TX, epoch)], 1],
     ];
     for (const [n, sql, args, exp] of want) { const r = d.prepare(sql).get(...args); if (!r || r.v !== exp) bad.push(n); }
   } finally { d.close(); }
@@ -370,52 +196,12 @@ function plainOf(keys) {
     /* the site's own system account is made by a boot timer 2.5 s after a server listens (seedOfficialCommunities), so it
        appears whenever a test server lives that long: it is not this test's data, and a snapshot that included it only
        sometimes failed on a slower machine (CI). */
-    /* acq_state likewise: once the server's "$100 bought" engine is in, a boot may build rows for the member's real coins
-       (the member has a linked wallet). Those are the engine's, not this test's: only the made-up coin's row is compared. */
-    for (const [t, c] of K.ENC_FIELDS) { if (K.FLIP_DELETE.includes(t) || !K.hasCol(d, t, c)) continue; for (const r of d.prepare(`SELECT rowid r, ${c} v FROM ${t} WHERE ${c} IS NOT NULL${t === 'users' ? ' AND system = 0' : t === 'acq_state' ? " AND token = '" + KR_TOKEN + "'" : ''} ORDER BY rowid`).all()) out[t + '.' + c + '#' + r.r] = keys.openField(r.v).plain; }
+    for (const [t, c] of K.ENC_FIELDS) { if (K.FLIP_DELETE.includes(t) || !K.hasCol(d, t, c)) continue; for (const r of d.prepare(`SELECT rowid r, ${c} v FROM ${t} WHERE ${c} IS NOT NULL${t === 'users' ? ' AND system = 0' : ''} ORDER BY rowid`).all()) out[t + '.' + c + '#' + r.r] = keys.openField(r.v).plain; }
     for (const [t, c] of K.ENC_BLOBS) for (const r of d.prepare(`SELECT rowid r, ${c} v FROM ${t} ORDER BY rowid`).all()) { const o = keys.openBlob(r.v); out[t + '#' + r.r] = o.plain ? o.plain.toString('base64') : null; }
   } finally { d.close(); }
   return out;
 }
 const kidsInDb = (f) => { const d = openDb(f); try { return K.prefixCensus(d).kids; } finally { d.close(); } };
-/* The "$100 bought" rows seeded below, read back from a database file (the live one, or a backup) under the keys of the
-   moment: what is wrong, [] when both claims and the kept receipt's hash match at that epoch and every acq_state field and
-   the receipt body open, under the current key, to what was written.
-   A scrubbed copy (a daily or a pre-flip copy: scrubBackups marks each with a _jsi_scrubbed table) holds what BACKUP_SCRUB
-   leaves, and the list may come to empty acq_state or tape_receipts — both are rebuilt from the chain, and receiptsPrune and
-   the row cap erase receipts on the live site on a schedule, which is the list's own rule for what a copy must not keep. So
-   in a scrubbed copy each of those two is judged by the list: kept → the rows as above; emptied (an unconditional DELETE)
-   → no rows at all; changed any other way → named as a problem, since what survives then depends on the rows and this
-   suite does not model it. The claims have no such way out: a copy must keep them, as it keeps og_claims, or a restore
-   would let an outside wallet back a second account. `scrub` is the list to judge by (server.js's own, read below; the
-   controls in 2c pass others). The reads are one transaction, so a scrub committing mid-way is seen whole or not at all. */
-function holdProblems(keys, epoch, file = path.join(DATA, 'app.db'), scrub = SCRUB_LIST) {
-  const d = new DatabaseSync(file, { readOnly: true }), bad = [];
-  try {
-    d.exec('PRAGMA busy_timeout = 5000'); d.exec('BEGIN');
-    const n = (sql, ...a) => d.prepare(sql).get(...a).n;
-    const scrubbed = !!d.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = '_jsi_scrubbed'").get();
-    const rule = (t) => (!scrubbed ? 'kept' : !scrub ? 'unread' : scrubRule(t, scrub));
-    if (rule('buy_claims') !== 'kept') bad.push('buy_claims: ' + (rule('buy_claims') === 'unread' ? 'BACKUP_SCRUB could not be read from server.js' : 'BACKUP_SCRUB changes it, but every copy must keep the claims (a restore without them would let a wallet back a second account)'));
-    if (n('SELECT COUNT(*) n FROM buy_claims WHERE user_id = ? AND token = ? AND origin_idx = ? AND via_idx = ?', uid, KR_TOKEN, keys.bidxAt(ORIGIN, epoch), keys.bidxAt(VIA, epoch)) !== 1) bad.push('buy_claims outside wallet');
-    if (n('SELECT COUNT(*) n FROM buy_claims WHERE user_id = ? AND token = ? AND origin_idx = ?', uid, KR_TOKEN, keys.bidxAt(W1a, epoch)) !== 1) bad.push('buy_claims own wallet');
-    const byList = (t, kept) => {
-      const r = rule(t);
-      if (r === 'kept') return kept();
-      if (r === 'emptied') { const k = n('SELECT COUNT(*) n FROM ' + t); if (k) bad.push(t + ': BACKUP_SCRUB empties it, yet this scrubbed copy holds ' + k + ' row(s)'); return; }
-      bad.push(t + ': ' + (r === 'unread' ? 'BACKUP_SCRUB could not be read from server.js' : 'BACKUP_SCRUB changes it in a way this suite does not model (only an unconditional DELETE is): teach holdProblems what a scrubbed copy keeps'));
-    };
-    byList('acq_state', () => {
-      const row = d.prepare('SELECT ' + HOLD_ENC.join(', ') + ' FROM acq_state WHERE user_id = ? AND token = ?').get(uid, KR_TOKEN);
-      for (const c of HOLD_ENC) { const v = row ? row[c] : null, o = keys.openField(v); if (!v || o.kid !== keys.current || o.plain !== HOLD_PLAIN[c]) bad.push('acq_state.' + c + (v ? ' (' + String(v).slice(0, 5) + '…)' : ' missing')); }
-    });
-    byList('tape_receipts', () => {
-      const rc = d.prepare('SELECT body_enc v FROM tape_receipts WHERE tx_idx = ?').get(keys.bidxAt(KR_TX, epoch)), ro = keys.openField(rc && rc.v);
-      if (!rc) bad.push('tape_receipts: no receipt under the hash index at epoch ' + epoch); else if (ro.kid !== keys.current || ro.plain !== KR_RECEIPT) bad.push('tape_receipts.body_enc (' + String(rc.v).slice(0, 5) + '…)');
-    });
-  } finally { try { d.exec('COMMIT'); } catch {} d.close(); }
-  return bad;
-}
 
 let uid = null;
 try {
@@ -448,23 +234,8 @@ try {
     fill(d, 'wallet_hist', { user_id: uid, addr_idx: L.bidx(W1a), read_to: 1, updated_at: t, partial: 0, hist: L.encBlob(randomBytes(70000)) });
     // Sign in with Send's signing keys (lib/oidc.js): a key waiting a year to sign, so no server here ever signs with this stand-in
     fill(d, 'oauth_keys', { kid: 'kr-oidc-key', public_jwk: '{}', private_enc: L.encField('{"kr":"oidc"}'), created_at: t, active_from: t + 365 * 864e5 });
-    /* "$100 bought": a claim on an outside buyer's wallet that reached the member through another wallet, the member's own
-       wallet's claim (no via: left out, so a NOT NULL column gets fill's default), and what the member's wallets bought of the
-       made-up coin, with wallets_sig = the member's wallet identities' ids in order (plain, not key-derived) */
-    for (const [tb, ddl] of Object.entries(HOLD_DDL)) if (!K.columns(d, tb).size) d.exec(ddl);
-    fill(d, 'buy_claims', { token: KR_TOKEN, origin_idx: L.bidx(ORIGIN), user_id: uid, via_idx: L.bidx(VIA), at: t });
-    fill(d, 'buy_claims', { token: KR_TOKEN, origin_idx: L.bidx(W1a), user_id: uid, at: t });
-    const sig = d.prepare("SELECT group_concat(id) s FROM (SELECT id FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY id)").get(uid).s;
-    const acq = { user_id: uid, token: KR_TOKEN, feature: 'holder', wallets_sig: sig, ...Object.fromEntries(HOLD_ENC.map((c) => [c, L.encField(HOLD_PLAIN[c])])), at: t };
-    for (const c of ['feature', 'wallets_sig']) if (!K.hasCol(d, 'acq_state', c)) delete acq[c];   // plain columns: not this suite's business if the schema step named them otherwise
-    fill(d, 'acq_state', acq);
-    fill(d, 'tape_receipts', { tx_idx: L.bidx(KR_TX), body_enc: L.encField(KR_RECEIPT), at: t });
     d.close();
   }
-  { const d = openDb(); const tables = [...new Set(K.ENC_FIELDS.map(([t]) => t).concat(K.ENC_BLOBS.map(([t]) => t), K.IDX_COLUMNS.map((x) => x.t)))];
-    const noRowid = tables.filter((t) => { const r = d.prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?").get(t); return r && /WITHOUT\s+ROWID/i.test(r.sql); }); d.close();
-    check('every registered table is a rowid table (the sweep and the index flip address rows by rowid; a WITHOUT ROWID table would fail every rotation)', !noRowid.length, noRowid.join(', ')); }
-  check('the "$100 bought" rows read back under the single key: both claims and the receipt\'s hash match at epoch 0, every acq_state field and the receipt body open', holdProblems(K.Keys.legacy(K1), 0).length === 0, holdProblems(K.Keys.legacy(K1), 0).join(', '));
   check('every seeded index holds under the single key (epoch 0)', expectIndexes(K.Keys.legacy(K1), 0, uid).length === 0, expectIndexes(K.Keys.legacy(K1), 0, uid).join(', '));
   const PLAIN0 = plainOf(K.Keys.legacy(K1));
   const plainVals = Object.values(PLAIN0);
@@ -512,7 +283,6 @@ try {
   check('every seeded index now matches under epoch 1 — including the IP indexes and the award marker for a wallet no longer linked', expectIndexes(k2, 1, uid).length === 0, expectIndexes(k2, 1, uid).join(', '));
   const PLAIN1 = plainOf(k2);
   check('every encrypted value still says exactly what it said', JSON.stringify(PLAIN1) === JSON.stringify(PLAIN0), Object.keys(PLAIN0).filter((x) => PLAIN0[x] !== PLAIN1[x]).slice(0, 5).join(','));
-  check('  ...the "$100 bought" rows moved with them: both buy_claims indexes re-wrapped to epoch 1 (an outside wallet nobody linked included), every acq_state field and the kept receipt under key 2 saying what they said', holdProblems(k2, 1).length === 0, holdProblems(k2, 1).join(', '));
   // (at least every value seeded here — the system account a boot timer makes may have added its own)
   check('  ...and all of them are under key 2 (none left under the stolen key)', (() => { const k = kidsInDb(); return JSON.stringify(Object.keys(k)) === '["2"]' && k[2] >= Object.keys(PLAIN0).length; })(), JSON.stringify(kidsInDb()));
   { const L = K.Keys.legacy(K1), d = openDb(); let opens = 0; for (const [t, c] of K.ENC_FIELDS) { if (!K.hasCol(d, t, c)) continue; for (const r of d.prepare(`SELECT ${c} v FROM ${t} WHERE ${c} IS NOT NULL`).all()) if (L.openField(r.v).plain != null && K.isCipher(r.v)) opens++; }
@@ -523,8 +293,6 @@ try {
   for (const f of [path.join(BK, 'app-2026-01-01.db'), path.join(BK, 'pre-wipe-20260101-000000.db'), path.join(EXTRA, 'dev.db')]) {
     const d = new DatabaseSync(f, { readOnly: true }); const c = K.trialCensus(d, k2); d.close();
     check('backup ' + path.basename(f) + ': key 2 only, index epoch 1, nothing unreadable', JSON.stringify(Object.keys(c.refs)) === '["2"]' && !Object.keys(c.unreadable).length && c.epoch === 1, JSON.stringify(c));
-    { const hp = holdProblems(k2, 1, f);   // once: the first snapshot's scrub of the daily may land between two reads
-      check('  ...and its "$100 bought" rows were brought along (claims and receipt hash at epoch 1, acq_state and receipt body under key 2; in a scrubbed copy, what the scrub list leaves)', !hp.length, hp.join(', ')); }
   }
   check('  ...a rewritten backup keeps its date (the admin list and pruning go by it)', fs.statSync(path.join(BK, 'app-2026-01-01.db')).mtimeMs === OLD_MTIME.getTime());
   check('  ...and a copy of the database from before the flip sits beside the backups, brought along too', fs.readdirSync(BK).some((n) => /^pre-idx-e0-.*\.db$/.test(n)));
@@ -587,30 +355,6 @@ try {
   let k3 = keysNow(); k3.setEpoch(1);
   check('  ...every value reads the same under key 3', JSON.stringify(plainOf(k3)) === JSON.stringify(snap1) && JSON.stringify(Object.keys(kidsInDb())) === '["3"]');
   check('  ...and the backups followed', [path.join(BK, 'app-2026-01-01.db'), path.join(EXTRA, 'dev.db')].every((f) => JSON.stringify(Object.keys(kidsInDb(f))) === '["3"]'));
-  { const bad = [path.join(DATA, 'app.db'), path.join(BK, 'app-2026-01-01.db'), path.join(EXTRA, 'dev.db')].flatMap((f) => holdProblems(k3, 1, f).map((x) => path.basename(f) + ': ' + x));
-    check('  ...the "$100 bought" acq_state fields and receipt body among them, live and in the copies (the indexes stay at epoch 1; the daily, scrubbed by now, holds what the scrub list leaves)', !bad.length, bad.join(', ')); }
-  /* holdProblems on a scrubbed copy, against scrub lists other than server.js's: copies of the live database made and
-     scrubbed here. A list that empties tape_receipts and acq_state (the integration step may add those lines: both are
-     rebuilt from the chain, and the live site erases receipts on a schedule) once failed the check above on the daily. */
-  {
-    const wider = (SCRUB_LIST || []).concat(['DELETE FROM tape_receipts', 'DELETE FROM acq_state']);
-    const keeps = (SCRUB_LIST || []).filter((q) => scrubRule('tape_receipts', [q]) === 'kept' && scrubRule('acq_state', [q]) === 'kept');   // server.js's list without any line on the two, whatever it holds by then
-    const scrubbedCopy = (name, list) => {
-      const f = path.join(T, name);
-      { const d = openDb(); d.prepare('VACUUM INTO ?').run(f); d.close(); }
-      const b = new DatabaseSync(f);
-      try { for (const q of list) { try { b.exec(q); } catch {} } b.exec('CREATE TABLE _jsi_scrubbed (at INTEGER NOT NULL)'); } finally { b.close(); }   // as scrubBackup does it
-      return f;
-    };
-    const wide = scrubbedCopy('scrubctl-wide.db', wider), marked = scrubbedCopy('scrubctl-marked.db', []);
-    const a = holdProblems(k3, 1, wide, wider), b = holdProblems(k3, 1, wide, keeps), c = holdProblems(k3, 1, marked, wider);
-    const cond = holdProblems(k3, 1, marked, (SCRUB_LIST || []).concat(['DELETE FROM tape_receipts WHERE at < 1'])), claims = holdProblems(k3, 1, marked, (SCRUB_LIST || []).concat(['DELETE FROM buy_claims']));
-    check('a scrubbed copy is judged by the scrub list: one whose list empties tape_receipts and acq_state passes without them (its claims still checked at epoch 1)', !a.length, a.join(', '));
-    check('  ...one that lost them while the list keeps them fails, as before', b.some((x) => /^tape_receipts: no receipt/.test(x)) && b.some((x) => /^acq_state\./.test(x)), b.join(', '));
-    check('  ...one whose list empties them but that still holds them fails', c.some((x) => /^tape_receipts: BACKUP_SCRUB empties it/.test(x)) && c.some((x) => /^acq_state: BACKUP_SCRUB empties it/.test(x)), c.join(', '));
-    check('  ...a conditional scrub of one of them, which this suite does not model, is named rather than passed', cond.some((x) => /^tape_receipts: BACKUP_SCRUB changes it in a way/.test(x)), cond.join(', '));
-    check('  ...and a list that scrubs the claims fails: every copy keeps them', claims.some((x) => /^buy_claims: BACKUP_SCRUB changes it/.test(x)), claims.join(', '));
-  }
 
   /* ── 2d. the index key through a restart, as the weekly schedule does it ── */
   t0 = Date.now();
@@ -629,17 +373,6 @@ try {
   check('  ...and the member signs in as before', lg2.status === 200);
   const snap2 = plainOf(k4);
   check('  ...with every value unchanged', JSON.stringify(snap2) === JSON.stringify(snap1));
-  check('  ...the "$100 bought" claims and receipt hash among them at epoch 2, and acq_state and the receipt still opening', holdProblems(k4, 2).length === 0, holdProblems(k4, 2).join(', '));
-  /* control: a copy whose kept receipt's hash index a flip missed (left at epoch 1, as 2b's keys made it: epoch 1's key is
-     dropped from the ring by now) is caught by the index check every crash-recovery run in 2e relies on, by name and alone
-     (the body still opens: only the index is stale) */
-  {
-    const f = path.join(T, 'idxctl-stale-receipt.db');
-    { const d = openDb(); d.prepare('VACUUM INTO ?').run(f); d.close(); }
-    { const b = new DatabaseSync(f); try { b.prepare('UPDATE tape_receipts SET tx_idx = ? WHERE tx_idx = ?').run(k2.bidxAt(KR_TX, 1), k4.bidxAt(KR_TX, 2)); } finally { b.close(); } }
-    const st = expectIndexes(k4, 2, uid, f), hp = holdProblems(k4, 2, f);
-    check('  control: a kept receipt\'s hash index left at the old epoch is flagged by the index check (and by the "$100 bought" check)', JSON.stringify(st) === '["tape_receipts.tx_idx"]' && hp.some((x) => /^tape_receipts: no receipt under the hash index at epoch 2/.test(x)), JSON.stringify({ st, hp }));
-  }
   await stop();
 
   /* ── 2e. a crash at every step leaves a database that opens, and the next start finishes the job ── */
@@ -655,12 +388,10 @@ try {
     const kk = keysNow();
     const ep = Number(metaOf('idx_epoch'));
     kk.setEpoch(ep);
-    // the "$100 bought" rows too: the receipt's hash index (a primary key) and the claims at the epoch now, every acq_state field and the receipt body under the key now
-    const hold = holdProblems(kk, ep);
-    const ok = again.up && JSON.stringify(plainOf(kk)) === JSON.stringify(snap2) && expectIndexes(kk, ep, uid).length === 0 && !hold.length;
+    const ok = again.up && JSON.stringify(plainOf(kk)) === JSON.stringify(snap2) && expectIndexes(kk, ep, uid).length === 0;
     if (process.env.KR_DEBUG) console.log('after ' + at + ': ' + JSON.stringify({ waiting: back && back.waiting, dropped: back && back.dropped, files: back && back.files.map((f) => f.file + ':' + f.status), ring: ringNow().ring.dek.keys.map((k) => k.id + ':' + k.retiredAt), outers: ringNow().ring.idx.outer.map((o) => o.epoch), grace: metaOf('drop_grace_ms') }));
     const lgx = await api('/api/auth/login', { method: 'POST', pass: freshPass(), body: { identifier: A.email, password: A.pw } });
-    check('a crash ' + at.replace(/-/g, ' ') + ' (exit ' + c + '): the next start finishes the rotation — every value and index intact, sign-in works, old keys dropped', c === code && ok && lgx.status === 200 && !!back, JSON.stringify({ c, up: again.up, login: lgx.status, back: !!back, idx: expectIndexes(kk, ep, uid), hold, ring: ringNow().ring.dek.keys.map((k) => k.id), outers: ringNow().ring.idx.outer.map((o) => o.epoch), m: JSON.parse(metaOf('last_maintenance') || 'null') && JSON.parse(metaOf('last_maintenance')).waiting }));
+    check('a crash ' + at.replace(/-/g, ' ') + ' (exit ' + c + '): the next start finishes the rotation — every value and index intact, sign-in works, old keys dropped', c === code && ok && lgx.status === 200 && !!back, JSON.stringify({ c, up: again.up, login: lgx.status, back: !!back, idx: expectIndexes(kk, ep, uid), ring: ringNow().ring.dek.keys.map((k) => k.id), outers: ringNow().ring.idx.outer.map((o) => o.epoch), m: JSON.parse(metaOf('last_maintenance') || 'null') && JSON.parse(metaOf('last_maintenance')).waiting }));
     await stop();
   }
 

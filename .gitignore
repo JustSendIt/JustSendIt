@@ -56,8 +56,3 @@ public/assets/send-it-wisdomprime123.m4a
 # source hands an attacker a prioritised roadmap into a live site. It is also a
 # generated export, not source. Keep it locally; it does not belong in git.
 audit-2026-09-05.csv
-
-# One member's real wallet moves, kept for local acceptance tests only. A wallet, a transaction hash, a
-# block or an exact amount from them leads straight back to that member on a block explorer, and this repo is
-# public: they never enter git (tests/acquire.mjs runs the case only where the file is present).
-tests/fixtures/private/

@@ -178,7 +178,7 @@
     const note = document.getElementById('cw-note');
     if (note) note.innerHTML = wall === 'holders'
       ? '🔒 <b>Holders only.</b> Everything here is visible <b>only to verified holders of $' + sym + '</b> — it is never served to anyone else, never appears on the Send Wall or a profile, and is not in the public data feed.' + (qual ? ' You are in.' : '')
-      : '🌐 <b>Public.</b> Anyone can read this wall. To post you need a verified slot: $100 of $' + sym + ' bought (a buy counts once held 24 hours), with $10 of it still held at cost. Switch to <b>🔒 Holders only</b> for the wall only verified holders can see.';
+      : '🌐 <b>Public.</b> Anyone can read this wall. To post you must hold $' + sym + '. Switch to <b>🔒 Holders only</b> for the wall only verified holders can see.';
   }
   function setupComposer(joined) {
     const comp = document.getElementById('comm-composer'), lk = document.getElementById('comm-wall-locked');

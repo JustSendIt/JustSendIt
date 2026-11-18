@@ -14,9 +14,8 @@
  *   · Skip at any point (the button, or Esc); Back / Next, or ← / →. Sendy's menu ("Show me around") replays it.
  *   · It waits for whatever the member is in the middle of: the 18+ question, the sign-in window, a burn proof, choosing a
  *     handle, setting up two-factor, the homepage tour. It never starts over a modal.
- *   · Honest: it shows what an account can do and what the one rule for doing things is (linked wallets that show the
- *     participation floor of $SEND bought — dollars spent, never today's price — since 2026-11-17); it never tells anyone to
- *     buy, and says reading needs nothing.
+ *   · Honest: it shows what an account can do and what the one rule for doing things is (a linked wallet that holds the
+ *     participation floor of $SEND); it never tells anyone to buy, and says reading needs nothing.
  * CSP-safe: addEventListener only; the styles are in styles.css (the ".ob-" block). */
 (function () {
   'use strict';
@@ -31,8 +30,6 @@
   const handle = () => (me() ? '@' + me().username : 'friend');
   const verified = () => !!(me() && me().holderVerified);
   const floorUsd = () => { const h = me() && me().holderProof; return h && h.minUsd ? h.minUsd : 100; };
-  // "$100 bought" (since 2026-11-17): the purchase cost that has to be still held, from the same answer as the floor
-  const heldUsd = () => { const h = me() && me().holderProof; return h && h.heldMinUsd ? h.heldMinUsd : 10; };
   // a top-level page may be asked for as /name.html; a member's wall (/u/<handle>) is compared as it is — a handle can end in ".html"
   const here = () => (location.pathname.replace(/^(\/[^/]+)\.html$/, '$1').replace(/\/+$/, '') || '/');
   const ownWall = () => (me() ? '/u/' + encodeURIComponent(me().username) : '/profile');
@@ -56,7 +53,7 @@
       title: () => (verified() ? 'You’re verified ✅' : 'One step opens everything 🔓'),
       body: () => (verified()
         ? 'Posting, following, Send Calls, reactions, votes, communities, squads, wallet tracking and Rocket Run are all open to you. Keep the bag: selling it within a day of a buy makes the account read-only for a while.'
-        : 'Reading is open to everyone. Posting, following, Send Calls, reactions, votes, communities, squads, wallet tracking and Rocket Run open once your wallets show $' + floorUsd() + ' of $SEND bought (a buy counts after 24 hours), $' + heldUsd() + ' still held. Selling within a day of a buy makes the account read-only for a while.') },
+        : 'Reading is open to everyone. Posting, following, Send Calls, reactions, votes, communities, squads, wallet tracking and Rocket Run open the moment a wallet you link holds $' + floorUsd() + ' of $SEND bought on the market. No wait — but selling it within a day of buying makes the account read-only for a while.') },
     { id: 'fab', page: '/', chapter: 'Your account', sel: ['#compose-fab'], act: 'point', title: 'Post from anywhere ✏️',
       body: 'This button follows you around the whole site. Tap it to post on the Wall in seconds.' },
     { id: 'wall', page: '/wall', chapter: 'The Send Wall', sel: ['#post-text', '#composer-card'], act: 'sendit', title: 'The Send Wall 🧱',

@@ -481,7 +481,7 @@
       case 'loading':
         show = false; hint = 'Checking today’s flight…'; break;
       case 'signedout':
-        label = 'Sign in to play 🚀'; hint = 'Joining takes an invite, and flying takes the same check as posting — at least $100 of $SEND bought across your linked wallets, $10 of it still held. Nothing is for sale here.'; break;
+        label = 'Sign in to play 🚀'; hint = 'Joining takes an invite, and flying takes the same check as posting — at least $100 of $SEND held in a linked wallet. Nothing is for sale here.'; break;
       case 'ready':
         label = S.guest ? '🚀 Fly free as a guest' : '🚀 Launch';
         hint = 'Tap the button — or Tab to it and press <kbd>Space</kbd> / <kbd>Enter</kbd> — to launch.' + (S.guest ? ' No account needed: one free flight a day, for a name on today’s board (no Send Power boost).' : ''); break;
@@ -496,7 +496,7 @@
         label = '↻ Try again'; hint = ''; break;
       case 'needsproof':
         // the same gate every write on the site sits behind — say so, rather than a generic error
-        label = '🪙 Verify a wallet to fly'; hint = 'Flying counts as doing, like posting: it needs at least $100 of $SEND bought across your linked wallets, $10 of it still held, read on-chain. Verify once and the launch button comes back.'; break;
+        label = '🪙 Verify a wallet to fly'; hint = 'Flying counts as doing, like posting: it needs at least $100 of $SEND held in a linked wallet, read on-chain. Verify once and the launch button comes back.'; break;
       case 'expired':
       case 'cashed':
       case 'busted':
@@ -566,7 +566,7 @@
     if (!stayed()) {
       return '<div class="arc-prompt" id="arc-prompt" tabindex="-1" role="group" aria-labelledby="arc-prompt-h">' +
         '<p class="arc-msg-h" id="arc-prompt-h">🏁 You’re on today’s board as ' + esc(r.name) + where + '</p>' +
-        '<p>As a guest your name stays grey and plain. Create an account or sign in on this browser in the next 30 minutes, and this flight goes up as your <b>@name</b>, in your colours. Signed in, the daily flight takes $100 of $SEND bought across your linked wallets ($10 of it still held), and it pays a Send Power boost. Joining takes an invite code from someone already inside.</p>' +
+        '<p>As a guest your name stays grey and plain. Create an account or sign in on this browser in the next 30 minutes, and this flight goes up as your <b>@name</b>, in your colours. Signed in, the daily flight takes $100 of $SEND held in a linked wallet, and it pays a Send Power boost. Joining takes an invite code from someone already inside.</p>' +
         joinBtns(true) + '</div>';
     }
     return '<p>You’re on today’s board as <span class="arc-guest-name">' + esc(r.name) + '</span> <span class="arc-rider-tag">guest</span>' + where + '.</p>' +
@@ -595,11 +595,11 @@
         '<p>' + (S.netFull
           ? 'One network (a home, an office) gets ' + S.perNetwork + ' free guest flights a day, so clearing cookies is not another go, and today’s have flown.'
           : 'The site takes a set number of guest flights a day, and today’s have flown.') +
-        ' The next ones unlock at 00:00 UTC. Signed in, a member’s daily flight takes $100 of $SEND bought across their linked wallets, $10 of it still held.</p>' +
+        ' The next ones unlock at 00:00 UTC. Signed in, a member’s daily flight takes $100 of $SEND held in a linked wallet.</p>' +
         nextFlightLine() + joinBtns(false) + '</div>';
     } else if (S.mode === 'signedout') {
       html = '<div class="arc-msg"><p class="arc-msg-h">🔒 Sign in to fly</p>' +
-        '<p>Rocket Run is a once-a-day flight for signed-in senders — the boost has to attach to an account. Joining takes an invite, and flying takes the same wallet check as posting: at least $100 of $SEND bought across your linked wallets, $10 of it still held, read on-chain. Nothing is for sale here, nothing is put in, and the only outcome is a temporary Send Power boost.</p>' +
+        '<p>Rocket Run is a once-a-day flight for signed-in senders — the boost has to attach to an account. Joining takes an invite, and flying takes the same wallet check as posting: at least $100 of $SEND held in a linked wallet, read on-chain. Nothing is for sale here, nothing is put in, and the only outcome is a temporary Send Power boost.</p>' +
         '<div class="arc-msg-actions"><button class="btn btn-sm btn-primary" type="button" data-tip="Opens the sign-in box so you can play" data-arc="signin">Sign In 🚀</button></div></div>';
     } else if (S.mode === 'ready' && S.guest) {
       html = '<div class="arc-msg"><p class="arc-msg-h">🎟️ One free flight — no account needed</p>' +
@@ -636,7 +636,7 @@
       html = '<div class="arc-msg arc-msg--bust" id="arc-outcome" tabindex="-1">' +
         '<p class="arc-msg-h">💥 It blew at ' + fx(S.outcome.crashX) + '×</p>' +
         (S.guest
-          ? '<p>A moment too late. A bust has no score, so there is no name to put on today’s board — and nothing lost, because nothing was ever at stake. Another free flight tomorrow. Members whose linked wallets show $100 of $SEND bought ($10 of it still held) fly for a Send Power boost.</p>' + nextFlightLine() + joinBtns(false)
+          ? '<p>A moment too late. A bust has no score, so there is no name to put on today’s board — and nothing lost, because nothing was ever at stake. Another free flight tomorrow. Members who hold $100 of $SEND in a linked wallet fly for a Send Power boost.</p>' + nextFlightLine() + joinBtns(false)
           : '<p>A moment too late. No boost today — and nothing lost, because nothing was ever at stake. That’s the whole game.</p>' + nextFlightLine()) + '</div>';
     } else if (S.mode === 'done' && S.guest) {
       const r = S.guestRound;

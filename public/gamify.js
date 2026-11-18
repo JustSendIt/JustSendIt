@@ -96,7 +96,7 @@
     post: 'Post on the Send Wall — memes, gains, pain.',
     track_wallet: 'Save a new wallet to your private tracker.',
     watch_token: 'Save a token to your watchlist from New Pairs (☆). Once per token.',
-    send_call: 'Call any token (📣) from New Pairs — it needs ≥$500 liquidity so nobody can farm a dust pool. It posts a permanent, live widget to your wall that tracks its Xs forever. +120 Send Power (📥 boosted by what your linked wallets spent buying that token before the call — every $100 bought = ×1, so $1,000 = ×10, capped at the pool’s liquidity; a buy counts once its coins were held 24 hours, and one still inside them is added when it counts), 5 calls/day to start (rolling 24h — it floats with your call quality, and Diamond holders get more). Calls are FINAL — they can never be deleted.',
+    send_call: 'Call any token (📣) from New Pairs — it needs ≥$500 liquidity so nobody can farm a dust pool. It posts a permanent, live widget to your wall that tracks its Xs forever. +120 Send Power (📥 boosted by the value of the tokens you bought & still hold — every $100 held = ×1, so $1,000 = ×10; best-effort, on-chain), 5 calls/day to start (rolling 24h — it floats with your call quality, and Diamond holders get more). Calls are FINAL — they can never be deleted.',
     /* The ladder used to be described here as 170 × the X — "2x → +340 … 50x → +8,500". It has not paid
        that since it was changed to a STRAIGHT LINE: rung m pays the first rung plus a fixed step each
        time, so a 50× rung is worth about 5.9 rungs, not 50. The promise on this card was eight and a half
@@ -137,24 +137,19 @@
   function fillLog(p) { p = Number(p) || 0; if (p <= 0) return 0; return Math.max(0, Math.min(100, (Math.log10(p) + 4) / 5 * 100)); }
   const GWC_W = 3; // $GWC weighted heavier than $SEND (mirror server GWC_SUPPLY_WEIGHT)
   // supply-boost term exactly as the server computes it: +10× per weighted 1% of supply ($GWC counts ×3)
-  /* ONLY COINS THAT CLEAR THE $100 FLOOR COUNT ($100 BOUGHT since 2026-11-17). The server's holderMultiplier runs on qualSendBp/qualGwcBp
+  /* ONLY COINS THAT CLEAR THE $100 FLOOR COUNT. The server's holderMultiplier runs on qualSendBp/qualGwcBp
      — a coin under the floor contributes zero — while this used the raw percentages. The equation strip
      therefore printed its own terms and its own total from two different rules: an account holding $45 of
      $SEND and $130 of $GWC was shown "1 + 3.9 × 10 = 28.00×", which is not an equation, it is two numbers
      next to each other. Anyone who did the arithmetic got 40 and was wrong, and had no way to find out why.
-     A coin the server has no "$100 bought" verdict for yet (`null`, not `false`) is left counting, because nothing has
-     been decided about it — that is the same rule refreshHolder uses. */
+     A coin the server has not priced yet (`null`, not `false`) is left counting, because nothing has been
+     decided about it — that is the same rule refreshHolder uses. */
   function qualPct(pct, qualifies) { return qualifies === false ? 0 : (pct || 0); }
-  // a streak paused because the linked wallets no longer clear the floor without a sale (coins moved out of the account, a wallet
-  // unlinked: since 2026-11-17 the floor is $100 bought, so a lower price never pauses anything) — the
+  // a streak paused because the linked wallets hold under the floor without a sale (coins moved out, a lower price) — the
   // combined one, or the $GWC one alone (still paused after a $SEND sale reset the combined clock): the days are kept
   const pausedHold = (h) => !!h && (h.scorePct || 0) <= 0 && !!((h.streakStart && h.streakPaused) || (!h.streakStart && h.gwcStreakStart && h.gwcStreakPaused));
   const pausedDays = (h) => Math.floor((h.streakStart ? h.holdDays : h.gwcDays) || 0);
   const pausedCoin = (h) => (h.streakStart ? '$SEND or $GWC' : '$GWC');
-  /* "$100 bought" (owner, 2026-11-17): a coin clears the floor when the linked wallets SPENT $100 on counted buys of it (a buy counts
-     once its coins were held 24 hours) and at least this much of that purchase cost is still held. A fresh holdings read carries the
-     server's own figure (holderLive → bought.<coin>.heldMinUsd); the literal is only what shows before one. */
-  const heldMin = (h) => { const b = h && h.bought && (h.bought.SEND || h.bought.GWC); return (b && b.heldMinUsd) || 10; };
   /* Calendar days to the next tier from the clocks that run: the tier counts max(combined days, 2 × $GWC days), so a
      $GWC day is worth two. anyClock: also count a paused clock (what it would take once it picks up again). */
   function daysToNext(h, d, anyClock) {
@@ -164,7 +159,7 @@
     const v = Math.min(comb, gwc);
     return Number.isFinite(v) ? v : Math.max(0, d.nextDays - Math.floor(d.days || 0));
   }
-  // the $GWC clock paused on its own while the combined one runs: its days wait until $GWC clears the floor again
+  // the $GWC clock paused on its own while the combined one runs: its days wait, and $100 of $GWC picks them up
   const gwcAlonePaused = (h) => !!h && !!h.streakStart && !h.streakPaused && !!h.gwcStreakStart && !!h.gwcStreakPaused;
   function supplyTermOf(h) { return 10 * (qualPct(h.pctSend, h.sendQualifies) + GWC_W * qualPct(h.pctGwc, h.gwcQualifies)); }
   // does this account hold anything the floor is currently excluding? the strip says so rather than just shrinking
@@ -329,10 +324,10 @@
     if (pausedHold(h)) {
       const floor = h.minHoldUsd || 100;
       return '<div class="gobj">' +
-        '<div class="gobj-primary">⏸ Your <b>' + pausedDays(h) + '-day</b> Diamond streak is paused — your linked wallets don’t show $' + floor + ' of ' + pausedCoin(h) + ' bought, with $' + heldMin(h) + ' of it still held at cost, right now. Only a sale resets it: it picks up where it left off once they do again.</div>' +
+        '<div class="gobj-primary">⏸ Your <b>' + pausedDays(h) + '-day</b> Diamond streak is paused — your linked wallets hold under $' + floor + ' of ' + pausedCoin(h) + ' right now. Only a sale resets it: it picks up where it left off once they hold <b>$' + floor + '</b> again.</div>' +
         '<div class="gobj-secondary">' + (hasWallet
-          ? '💰 <button class="gobj-link js-refresh" type="button" data-tip="Re-checks your linked wallets on-chain and updates this dashboard">Refresh to check again</button>'
-          : '🔗 <button class="gobj-link js-connect" type="button" data-tip="Opens the Security panel where you link a wallet">Link a wallet</button> — it picks up again once your linked wallets clear the $' + floor + '-bought floor in ' + pausedCoin(h)) + '</div>' +
+          ? '💰 <button class="gobj-link js-refresh" type="button" data-tip="Re-checks your linked wallets on-chain and updates this dashboard">Refresh once they hold it</button>'
+          : '🔗 <button class="gobj-link js-connect" type="button" data-tip="Opens the Security panel where you link a wallet">Link a wallet</button> holding $' + floor + ' of ' + pausedCoin(h) + ' to pick it up again') + '</div>' +
       '</div>';
     }
     const stale = h && h.streakStart && h.fresh === false;
@@ -358,14 +353,14 @@
     let secondary;
     if (d && h.streakStart) {
       secondary = gwcAlonePaused(h)
-        ? '⏸ Your <b>$GWC</b> clock is paused at <b>' + Math.floor(h.gwcDays || 0) + '</b> day' + (Math.floor(h.gwcDays || 0) === 1 ? '' : 's') + ' (its days count double) — $' + (h.minHoldUsd || 100) + ' of $GWC bought, $' + heldMin(h) + ' of it still held at cost, in your linked wallets picks it up again'
+        ? '⏸ Your <b>$GWC</b> clock is paused at <b>' + Math.floor(h.gwcDays || 0) + '</b> day' + (Math.floor(h.gwcDays || 0) === 1 ? '' : 's') + ' (its days count double) — $' + (h.minHoldUsd || 100) + ' of $GWC in your linked wallets picks it up again'
         : d.nextDays != null
         ? '💎 Don\'t break your <b>' + Math.floor(h.holdDays) + '-day</b> diamond streak — ' + diaLeft + ' day' + (diaLeft === 1 ? '' : 's') + ' to ' + esc(nextLbl)
         : '👑 <b>' + esc(d.name) + '</b> — the highest Diamond tier there is. Never sell. 💎';
     } else if (hasWallet) {
-      secondary = '💰 Your boost starts once your linked wallets show $' + ((g.rules && g.rules.holdFloorUsd) || 100) + ' of $SEND or $GWC bought, with $' + heldMin(h) + ' of it still held — <button class="gobj-link js-refresh" type="button" data-tip="Re-checks your linked wallets on-chain and updates this dashboard">Refresh holdings</button>';
+      secondary = '💰 <button class="gobj-link js-refresh" type="button" data-tip="Re-checks your linked wallets on-chain and updates this dashboard">Buy &amp; hold $SEND / $GWC, then Refresh</button> to unlock your boost';
     } else {
-      secondary = '🔗 <button class="gobj-link js-connect" type="button" data-tip="Opens the Security panel where you link a wallet">Connect a wallet</button> — the Holder Boost counts a coin once your linked wallets show $' + ((g.rules && g.rules.holdFloorUsd) || 100) + ' of it bought';
+      secondary = '🔗 <button class="gobj-link js-connect" type="button" data-tip="Opens the Security panel where you link a wallet">Connect a wallet</button> that holds $SEND / $GWC to unlock your Holder Boost';
     }
     return '<div class="gobj">' +
       '<div class="gobj-primary">' + primary + '</div>' +
@@ -451,7 +446,7 @@
       '</div>' +
       '<p class="eq-note">' + (stale ? '⏸ Paused until you Refresh — we re-verify your bags on-chain.' : '<b>$GWC counts ×3</b>, and holding $GWC longer levels your Diamond faster — bigger bags held longer scale this up with <b>no cap</b> · every point ×your Power · <b>resets when you sell</b> (moving coins to another wallet doesn’t).') + '</p>' +
       (dust.length ? '<p class="eq-dust">⚠️ Your ' + dust.join(' and ') + ' ' + (dust.length > 1 ? 'are' : 'is') + ' under the $' + ((g.rules && g.rules.holdFloorUsd) || 100) +
-        '-bought floor, so ' + (dust.length > 1 ? 'they count' : 'it counts') + ' for nothing in the supply term above. That is why the number is smaller than your holdings suggest — <a href="#rekt-revoke-h">the floor, and where you stand against it</a>.</p>' : '') +
+        ' floor, so ' + (dust.length > 1 ? 'they count' : 'it counts') + ' for nothing in the supply term above. That is why the number is smaller than your holdings suggest — <a href="#rekt-revoke-h">the floor, and where you stand against it</a>.</p>' : '') +
     '</div>';
   }
 
@@ -513,9 +508,9 @@
        $Send: which coin went was never recorded. */
     if (g.ogRevoked && g.ogRestorePending) return '<div class="og-block og-block-lost"><span class="og-block-badge">⏳</span><div class="og-block-body"><b>OG status removed — being re-checked once.</b> '
       + 'Your badge was removed while OG still needed both $Send and $GWC to keep. Since the beta ended, Silver and Bronze need only <b>$Send</b>, so it is being re-checked on-chain, on the wallets that were linked when it was removed (a wallet linked since doesn’t count): '
-      + 'if they still hold $Send, held without a break since the badge was last checked, and your $Send buy earns Silver or Bronze ($100 of $Send bought with $10 of it still held at cost, the same standard as any badge), it comes back — with a notification. Gold and Diamond don’t.</div></div>';
+      + 'if they still hold $Send, held without a break since the badge was last checked, and your $Send buy earns Silver or Bronze ($100 or more held today, the same standard as any badge), it comes back — with a notification. Gold and Diamond don’t.</div></div>';
     if (g.ogRevoked && g.ogRechecked) return '<div class="og-block og-block-lost"><span class="og-block-badge">🥀</span><div class="og-block-body"><b>OG status removed.</b> '
-      + 'It was removed under the old rule, when selling out of either coin ended a badge, and was re-checked once on <b>$Send</b> alone: the wallets linked when it was removed don’t show everything a restore needs — $Send held without a break since it was last checked, a $Send buy that earns Silver or Bronze, and $100 of it bought — and a wallet linked since doesn’t count. '
+      + 'It was removed under the old rule, when selling out of either coin ended a badge, and was re-checked once on <b>$Send</b> alone: the wallets linked when it was removed don’t show everything a restore needs — $Send held without a break since it was last checked, a $Send buy that earns Silver or Bronze, and $100 of it today — and a wallet linked since doesn’t count. '
       + 'It stays removed, with its Send Power bonus, and can’t be reclaimed.</div></div>';
     if (g.ogRevoked) return '<div class="og-block og-block-lost"><span class="og-block-badge">🥀</span><div class="og-block-body"><b>OG status removed.</b> '
       + (ogSendOnlyTiers(camp)
@@ -627,7 +622,7 @@
       '<div class="forge-body">' +
         '<div class="forge-days"><span class="cu" data-cu="' + days + '" data-cufmt="int" aria-hidden="true">0</span><span class="sr-only">' + days + '</span> <span class="forge-unit">day' + (days === 1 ? '' : 's') + ' held</span></div>' +
         '<div class="forge-sub">' + (h.streakPaused
-          ? '<span>⏸ Paused — your linked wallets don’t show $' + (h.minHoldUsd || 100) + ' bought with $' + heldMin(h) + ' of it still held at cost now (coins moved out of the account, or a wallet unlinked; a lower price never pauses it). Moving coins is not selling, and only a sale resets the streak: the days pick up where they left off once they clear it again.</span>'
+          ? '<span>⏸ Paused — your linked wallets hold under $' + (h.minHoldUsd || 100) + ' now (coins moved out, or a lower price). Moving coins is not selling, and only a sale resets the streak: the days pick up where they left off once they’re back over it.</span>'
           : stale
             ? '<span class="danger">⏸ Verify to keep your streak alive</span>'
             : (since ? 'Never sold since <b>' + since + '</b> · ' : '') + '<span class="danger">sell = reset to 📄 Paper Grip</span>') +
@@ -669,7 +664,7 @@
       '</div>' +
       '<div class="relic-name">' + d.emoji + ' ' + esc(d.name) + '</div>' +
       '<div class="relic-meta">Diamond Lv <b>' + d.level + '</b> / ' + d.maxLevel + ' · gives <b>×' + d.factor.toFixed(1) + '</b> hold boost</div>' +
-      (gwcAlonePaused(h) ? '<div class="relic-meta">⏸ $GWC clock paused at ' + Math.floor(h.gwcDays || 0) + ' days — once your linked wallets clear the $' + (h.minHoldUsd || 100) + '-bought floor in $GWC again, it counts double again</div>' : '') +
+      (gwcAlonePaused(h) ? '<div class="relic-meta">⏸ $GWC clock paused at ' + Math.floor(h.gwcDays || 0) + ' days — back to $' + (h.minHoldUsd || 100) + ' of $GWC and it counts double again</div>' : '') +
       '<div class="gd-bar relic-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="' + (maxed ? 100 : diaPct) + '" aria-valuetext="' + barText + '" aria-label="Progress to next Diamond tier">' +
         '<div class="gd-fill" data-fill="' + (maxed ? 100 : diaPct) + '" style="width:0"></div>' +
         '<span class="gd-text">' + barText + '</span>' +
@@ -681,7 +676,7 @@
     const h = g.holder;
     const hasWallet = AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length;
     if (pausedHold(h)) {
-      // paused, not lost: under the $100-bought floor without a sale (moving coins is not selling) — the boost waits, the days are kept
+      // paused, not lost: under the floor without a sale (moving coins is not selling) — the boost waits, the days are kept
       const floor = h.minHoldUsd || (g.rules && g.rules.holdFloorUsd) || 100;
       const hv = h.streakStart ? h : { ...h, streakStart: h.gwcStreakStart, holdDays: h.gwcDays, streakPaused: true };   // the $GWC clock alone
       return '<div class="engine engine-live engine-paused">' +
@@ -689,11 +684,11 @@
           '<h3 class="eng-h">🏦 The Vault</h3>' +
           '<p class="modal-note" style="margin:0.3rem 0 0.7rem;">' + (hasWallet
             ? (h.streakStart
-              ? 'Your linked wallets don’t clear <b>$' + floor + ' bought</b> (with $' + heldMin(h) + ' of it still held at cost) in $SEND or $GWC right now, so the Holder Boost pays nothing until they do again.'
-              : 'Your linked wallets don’t clear <b>$' + floor + ' bought</b> (with $' + heldMin(h) + ' of it still held at cost) in $GWC right now, so your $GWC streak waits. Clearing it in $GWC picks the streak up again; clearing it in $SEND starts a new streak and brings the Holder Boost back.')
+              ? 'Your linked wallets hold under <b>$' + floor + '</b> of $SEND or $GWC right now, so the Holder Boost pays nothing until they’re back over it.'
+              : 'Your linked wallets hold under <b>$' + floor + '</b> of $GWC right now, so your $GWC streak waits. $' + floor + ' of $GWC picks it up again; $' + floor + ' of $SEND starts a new streak and brings the Holder Boost back.')
             : h.streakStart
-              ? 'No wallet is linked right now, so the Holder Boost pays nothing until linked wallets clear <b>$' + floor + ' bought</b> of $SEND or $GWC again.'
-              : 'No wallet is linked right now. Your $GWC streak picks up again once linked wallets clear <b>$' + floor + ' bought</b> of $GWC; clearing it in $SEND starts a new streak and brings the Holder Boost back.') + '</p>' +
+              ? 'No wallet is linked right now, so the Holder Boost pays nothing until one holding <b>$' + floor + '</b> of $SEND or $GWC is.'
+              : 'No wallet is linked right now. Link one holding <b>$' + floor + '</b> of $GWC to pick your $GWC streak up again, or $' + floor + ' of $SEND to start a new streak and bring the Holder Boost back.') + '</p>' +
           '<div class="lock-btns">' +
             (hasWallet ? '' : '<button class="btn btn-primary btn-sm js-connect" type="button" data-tip="Jumps to the Security panel to link a wallet">Connect wallet 🔗</button>') +
             '<button class="btn btn-ghost btn-sm js-refresh" type="button" data-tip="Re-reads your linked wallets on-chain and redraws this dashboard">↻ Refresh holdings</button>' +
@@ -710,8 +705,8 @@
         '<h3 class="eng-h">Holder Boost locked</h3>' +
         '<p class="modal-note" style="margin:0.3rem 0 0.7rem;">' +
           (hasWallet
-            ? 'A coin joins a boost that multiplies <b>every point</b> you earn once your linked wallets show <b>$' + ((g.rules && g.rules.holdFloorUsd) || 100) + ' of it bought</b> ($SEND or $GWC; a buy counts after 24 hours held) with $' + heldMin(h) + ' of that cost still held — then it climbs the longer you go without selling. Refresh re-reads your wallets.'
-            : 'The boost multiplies <b>every point</b> you earn once linked wallets show <b>$' + ((g.rules && g.rules.holdFloorUsd) || 100) + ' of $SEND or $GWC bought</b>, with $' + heldMin(h) + ' of it still held — and grows the longer you diamond-hand.') +
+            ? 'Buy &amp; hold <b>$SEND / $GWC</b> to unlock a boost that multiplies <b>every point</b> you earn — then it climbs the longer you hold. Hit Refresh after you buy.'
+            : 'Connect a wallet holding <b>$SEND / $GWC</b> to unlock a boost that multiplies <b>every point</b> you earn — and grows the longer you diamond-hand.') +
         '</p>' +
         '<div class="lock-btns">' +
           (hasWallet ? '' : '<button class="btn btn-primary btn-sm js-connect" type="button" data-tip="Jumps to the Security panel to link a wallet">Connect wallet 🔗</button>') +
@@ -734,7 +729,7 @@
            scorePct is the raw combined %, unweighted and with no floor applied, so pairing it with the
            supply term read as an equation that does not hold: 0.150% × 10 is 1.5, not 3.9. */
         '<div class="vault-foot">Together <b>' + pctFmt(supplyTerm / 10) + '%</b> weighted ($GWC counts ×' + GWC_W +
-          (dustedCoins(h).length ? ', and your ' + dustedCoins(h).join(' and ') + ' sits under the $' + ((g.rules && g.rules.holdFloorUsd) || 100) + '-bought floor so it counts for nothing' : '') +
+          (dustedCoins(h).length ? ', and your ' + dustedCoins(h).join(' and ') + ' sits under the $' + ((g.rules && g.rules.holdFloorUsd) || 100) + ' floor so it counts for nothing' : '') +
           ') → feeds your <b>×' + supplyTerm.toFixed(1) + '</b> supply boost</div>'
       : '<div class="vtok"><span class="token-emblem send vtok-emblem" aria-hidden="true">$</span><div class="vtok-body"><div class="vtok-line"><span class="vtok-amt">' + compact(h.sendTok || 0) + '</span> <span class="vtok-sym">$SEND</span></div></div></div>' +
         '<div class="vtok"><span class="token-emblem gwc vtok-emblem" aria-hidden="true">$</span><div class="vtok-body"><div class="vtok-line"><span class="vtok-amt">' + compact(h.gwcTok || 0) + '</span> <span class="vtok-sym">$GWC</span></div></div></div>' +
@@ -1119,15 +1114,15 @@
       const until = r.permanent ? 'indefinitely' : 'until ' + new Date(r.until).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       live = '<div class="rekt-live" role="status">' +
         '<p><b>Your account is read-only ' + until + '.</b> ' + esc(r.reason) + '</p>' +
-        '<p>Two ways out, and they are different in kind. It lifts once your linked wallets show <b>$' + nf(Math.round(r.redeemUsd)) + '</b> of $SEND bought since it began (a buy counts once its coins were held 24 hours, at what it paid — never a balance at today’s price), and that $SEND is then kept for <b>' +
-        Math.max(1, Math.round(r.holdMs / 864e5)) + ' day' + (Math.round(r.holdMs / 864e5) === 1 ? '' : 's') + '</b> — sold before that hold is up, it returns, doubled. ' +
+        '<p>Two ways out, and they are different in kind. You can buy and hold <b>$' + nf(Math.round(r.redeemUsd)) + '</b> of $SEND for <b>' +
+        Math.max(1, Math.round(r.holdMs / 864e5)) + ' day' + (Math.round(r.holdMs / 864e5) === 1 ? '' : 's') + '</b> to lift it — sell before that hold is up and it returns, doubled. ' +
         'Or you can <a href="mailto:' + esc(r.appealEmail) + '">appeal to a person at ' + esc(r.appealEmail) + '</a>, which costs nothing, ever. ' +
         'We are not telling you to buy anything: the appeal is a real route and it is free.</p>' +
       '</div>';
     } else if (p) {
       live = '<div class="rekt-live" role="status"><p><b>You are on probation until ' +
         new Date(p.until).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + '.</b> ' +
-        'A restriction was lifted by $SEND bought since it began; keep that $SEND until then and it clears for good. Let the balance fall more than 2% below what it was when the restriction lifted and it returns, doubled.</p></div>';
+        'You bought your way out of a restriction; hold that $SEND until then and it clears for good. Sell more than 2% below the floor you set and the restriction returns, doubled.</p></div>';
     }
     const strikeLine = strikes > 0
       ? '<span class="rekt-state rekt-state-bad">' + strikes + ' strike' + (strikes === 1 ? '' : 's') + ' on record</span>'
@@ -1144,23 +1139,13 @@
     const rules = g.rules || {};
     const floor = rules.holdFloorUsd || 100;
     const h = g.holder;
-    /* Since 2026-11-17 the floor is "$100 bought": the verdict (sendQualifies / gwcQualifies) decides, and the member's own figures
-       come with a fresh holdings read (holderLive.bought — what was spent, what is still held at cost, what still waits out its 24
-       hours). What the bag is worth now is still shown, and says it decides nothing. An unknown figure is left out, never a 0. */
-    const bought = (g.holderLive && g.holderLive.bought) || (h && h.bought) || {};
-    const usd2 = (x) => '$' + Number(x).toFixed(2);
-    const figs = (b) => (b && b.fresh && b.spentUsd != null
-      ? ' Your linked wallets show ' + usd2(b.spentUsd) + ' bought' + (b.heldCostUsd != null ? ', ' + usd2(b.heldCostUsd) + ' of it still held at cost' : '') +
-        (b.pendingUsd > 0 ? ', and ' + usd2(b.pendingUsd) + ' more that counts once held 24 hours' : '') + '.'
-      : '');
-    const q = (label, usd, ok, b) => {
-      const worth = usd == null ? '' : ' Worth ' + usd2(usd) + ' now, which decides nothing.';
-      if (ok == null) return '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span><b>' + label + '</b> — no answer yet: its buys are still being read from the chain. Tap <b>Refresh holdings</b> later.' + figs(b) + worth + '</span></li>';
+    const q = (label, usd, ok) => {
+      if (ok == null) return '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span><b>' + label + '</b> — not checked yet. Tap <b>Refresh holdings</b>.</span></li>';
       return '<li class="rekt-row ' + (ok ? 'rekt-row-ok' : 'rekt-row-bad') + '"><span class="rekt-dot" aria-hidden="true">' + (ok ? '✓' : '▲') + '</span><span><b>' + label + '</b> — ' +
-        (ok ? 'clears the $' + floor + '-bought floor · counting.' : 'under the $' + floor + '-bought floor, so it counts for nothing.') + figs(b) + worth + '</span></li>';
+        (usd == null ? 'value unknown' : '$' + Number(usd).toFixed(2)) + (ok ? ' · counting' : ' · under the $' + floor + ' floor, so it counts for nothing') + '.</span></li>';
     };
     const floorRows = h
-      ? '<ul class="rekt-list">' + q('$SEND', h.sendUsd, h.sendQualifies, bought.SEND) + q('$GWC', h.gwcUsd, h.gwcQualifies, bought.GWC) + '</ul>'
+      ? '<ul class="rekt-list">' + q('$SEND', h.sendUsd, h.sendQualifies) + q('$GWC', h.gwcUsd, h.gwcQualifies) + '</ul>'
       : '<p class="rekt-p">No holdings read yet — link a wallet and tap <b>Refresh holdings</b> to see where you stand against the floor.</p>';
     return '<section class="rekt-card" aria-labelledby="rekt-revoke-h">' +
       '<div class="rekt-head"><h4 class="rekt-h" id="rekt-revoke-h">💔 Revoked, not drained</h4></div>' +
@@ -1172,11 +1157,11 @@
           ? '<b>Sell out entirely of $SEND and your OG badge is revoked for good.</b> Sell out of $GWC alone and a Gold or Diamond badge drops to Silver on $SEND alone — Gold and Diamond don’t come back; Silver and Bronze never needed $GWC.'
           : '<b>Sell out of either $SEND or $GWC entirely and the OG badge is revoked for good.</b>') +
           ' It cannot be re-earned. Unlinking a wallet is not a sale: it pauses what your other wallets can’t show, and relinking it brings that back (Gold or Diamond only with $GWC held without a break meanwhile).</span></li>' +
-        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Sell a community’s token (or move it out) until your linked wallets no longer clear the $' + floor + '-bought floor in it, and that community’s ' + (rules.communityMult || 10) + '× is revoked,</b> along with your standing in it. Membership is re-checked from the chain, not taken on trust.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Sell a community’s token and that community’s ' + (rules.communityMult || 10) + '× is revoked,</b> along with your standing in it. Membership is re-checked on-chain, not taken on trust.</span></li>' +
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Let a holdings check go stale and every holding-based boost pays 1× until it is re-read.</b> Not a punishment — the site will not quote a multiplier it has not verified.</span></li>' +
       '</ul>' +
-      '<h5 class="rekt-h5">The $' + floor + ' floor — $' + floor + ' bought, not $' + floor + ' priced</h5>' +
-      '<p class="rekt-p">One rule for every token on the site, since 18 November 2026: a coin counts once your linked wallets have <b>spent $' + floor + ' or more buying it</b> from the market — at what each buy paid, a buy counting once its coins were held 24 hours — with at least <b>$' + heldMin(h) + ' of that cost still held</b>. Coins sent to you count only as the buy they trace back to. Today’s price never decides it, up or down. Under it, a coin earns no Diamond level, no Diamond factor, no no-sell streak, no community verification and no conviction standing. It exists because every holder reward here is measured in <b>time</b>, and one cent held for a year would otherwise have out-earned a real bag held for a month.</p>' +
+      '<h5 class="rekt-h5">The $' + floor + ' floor — dust earns nothing</h5>' +
+      '<p class="rekt-p">One rule for every token on the site: a bag counts at <b>$' + floor + ' or more</b>, priced live. Below that you hold dust, and dust earns no Diamond level, no Diamond factor, no no-sell streak, no community verification and no conviction standing. It exists because every holder reward here is measured in <b>time</b>, and one cent held for a year would otherwise have out-earned a real bag held for a month.</p>' +
       floorRows +
     '</section>';
   }
@@ -1210,9 +1195,9 @@
         '<span class="rekt-state rekt-state-warn">Not a strike — until you sell</span></div>' +
       '<p class="rekt-lede">This is a different read-only from the one above and it is <b>not a penalty</b>. You can read everything; doing anything needs proof that you hold the coins.</p>' +
       '<ul class="rekt-list">' +
-        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Your linked wallets show at least <b>$' + floor + '</b> of <b>$SEND</b> bought from the market, at what each buy paid — a buy counts once its coins were held 24 hours — with at least $' + (p.heldMinUsd || heldMin(g.holder)) + ' of it still held. Today’s price never decides it.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Hold at least <b>$' + floor + '</b> of <b>$SEND</b>, priced live. No waiting period.</span></li>' +
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Be a <b>net accumulator</b> — you have bought more than you have sold.</span></li>' +
-        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Then keep it: once you are in, the <b>' + hrs + ' hours</b> after your latest $SEND arrival (a buy, or coins traced in) are watched, and the balance dropping more than about 2% inside them is a strike on the read-only ladder — a day, then a week, then for good. $25 of $SEND bought per day of the sanction lifts it early; it comes back doubled if that is sold too.</span></li>' +
+        '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">○</span><span>Then keep it: selling that $SEND within <b>' + hrs + ' hours</b> of buying it is a strike on the read-only ladder — a day, then a week, then for good; $25 of $SEND a day buys it out, doubled if you sell that too.</span></li>' +
       '</ul>' +
       '<p class="rekt-p">It is a read-only wallet check: a signature over a sentence, never a transaction — or, for a wallet that can’t sign, a burn of $SEND or ETH (any amount) you send from it yourself. ' + esc(p.reason || '') + '</p>' +
     '</section>';
@@ -1267,14 +1252,12 @@
 
     // the two things that decide whether a holding counts at all
     if (h) {
-      /* since 2026-11-17 the floor is $100 BOUGHT: the row says whether the coin clears it (the verdict), what was bought when a
-         fresh read carries the figure, and what the bag is worth now — shown, and said to decide nothing */
-      const bv = (g.holderLive && g.holderLive.bought) || h.bought || {};
-      const floorRow = (sym, ok, usd, b) => recDt(sym + ' · $' + floor + ' bought', ok == null ? '—' : ok ? 'Cleared' : 'Under it',
-        (b && b.fresh && b.spentUsd != null ? '$' + Number(b.spentUsd).toFixed(2) + ' bought · ' : '') + (usd == null ? 'worth now unknown' : 'worth $' + Number(usd).toFixed(2) + ' now, which decides nothing'),
-        ok === false ? 'bad' : ok ? 'ok' : '');
-      items.push(floorRow('$SEND', h.sendQualifies, h.sendUsd, bv.SEND));
-      items.push(floorRow('$GWC', h.gwcQualifies, h.gwcUsd, bv.GWC));
+      items.push(recDt('$SEND held', h.sendUsd == null ? '—' : '$' + Number(h.sendUsd).toFixed(2),
+        h.sendQualifies == null ? 'not checked' : h.sendQualifies ? 'clears the $' + floor + ' floor' : 'under the $' + floor + ' floor',
+        h.sendQualifies === false ? 'bad' : h.sendQualifies ? 'ok' : ''));
+      items.push(recDt('$GWC held', h.gwcUsd == null ? '—' : '$' + Number(h.gwcUsd).toFixed(2),
+        h.gwcQualifies == null ? 'not checked' : h.gwcQualifies ? 'clears the $' + floor + ' floor' : 'under the $' + floor + ' floor',
+        h.gwcQualifies === false ? 'bad' : h.gwcQualifies ? 'ok' : ''));
       items.push(recDt('No-sell streak', days(h.holdDays), 'the clock the Diamond tier reads'));
       items.push(recDt('$GWC streak', days(h.gwcDays), 'counts double toward the tier'));
       if (h.diamond) items.push(recDt('Diamond tier', (h.diamond.emoji || '💎') + ' Lv ' + h.diamond.level, esc(h.diamond.name || '')));
@@ -1439,7 +1422,6 @@
     const dm = c && c.diamond;
     const sendOnly = ogSendOnlyTiers(c);
     const what = (t) => ogNeeds(c, t).length > 1 ? 'both' : '<b>$Send</b> — $GWC not needed —';
-    const ogFloor = (g && g.rules && g.rules.holdFloorUsd) || 100;
     return '<p><b>🏅 OG — being early, four tiers.</b> ' + (sendOnly
         ? 'Buy from the market and keep holding, and you earn a permanent OG badge and a Send Power multiplier. <b>Gold and Diamond needed both $Send and $GWC</b>; since the beta ended, <b>Silver and Bronze need only $Send</b>. A both-coins tier is the <b>lower</b> of your two coins’ tiers; the $Send-only tier is read from your earliest $Send buy and never goes above Silver; you get the higher of the two.'
         : 'Hold <b>both $Send and $GWC</b>, bought from the market, and keep holding both: you earn a permanent OG badge and a Send Power multiplier. There is <b>one standard</b>; only when you got in changes the size, and your tier is the <b>lower</b> of your two coins, because the rule is that you held both.')
@@ -1453,8 +1435,6 @@
           : '<li><b>🥈 Silver — 5×.</b> Bought both in the 90 days after the beta ended' + closes('silver') + '.</li>' +
             '<li><b>🥉 Bronze — 3×.</b> Bought both before $GWC turns one year old' + closes('bronze') + '.</li>') +
         '<li><b>After that:</b> no badge, whatever you buy. All three deadlines are the same date for both coins.</li>' +
-        // "$100 bought" (owner, 2026-11-17): the floor a tier needs is dollars spent, and a coin's date is its earliest counted buy
-        '<li><b>💵 $' + ogFloor + ' bought, since 18 November 2026.</b> What the tier needs is $' + ogFloor + ' of each coin bought across your linked wallets (a buy counts once its coins were held 24 hours), with $' + heldMin(g && g.holder) + ' of that cost still held — ' + (sendOnly ? 'both coins for Diamond and Gold, $Send for Silver and Bronze' : 'both coins') + '. A coin’s date is its earliest counted buy; coins sent to you set an earlier one only when they carry $' + ogFloor + ' of the original buy’s cost. Linking a wallet asks again and only ever raises a tier. Today’s price never decides it, and no badge is lost by this rule — only by selling out.</li>' +
         '<li><b>Two things disqualify a wallet, the same way in every window:</b> if it dumped its whole holding to nothing inside its own first month <b>and</b> it holds less today than it did at the end of that month, it earns nothing. A wallet that sold out but bought back past where it stood keeps its place.</li>' +
         (sendOnly
           ? '<li><b>Sell out entirely of $Send, ever, and the badge is revoked for good.</b> Sell out of $GWC alone and a Gold or Diamond badge drops to Silver — what the $Send it was earned on, bought before the beta ended, earns on its own — and Gold and Diamond don’t come back. Badges removed before this rule are re-checked once, on the wallets linked when they were removed, and restored as Silver or Bronze where $Send alone earns it.'
@@ -1502,11 +1482,11 @@
           '<li><b>📊 Supply boost — +10× for each 1% of supply you hold, and $GWC counts ×3.</b> Your %SEND and %GWC add together, with <b>$GWC weighted 3×</b> (so 1% of $GWC ≈ +30×, 1% of $SEND ≈ +10×) — $GWC is the Generational Wealth Coin, so holding it moves your Power the most.</li>' +
           '<li><b>💎 Diamond boost — for holding without ever selling, and holding $GWC counts double.</b> The longer you hold, the higher your <b>Diamond Level</b> climbs through 11 tiers (Paper Grip → … → 👑 Immortal Diamond, 0 days up to ~2 years). <b>Every day you hold $GWC counts as two</b> toward your level, so diamond-handing $GWC levels you up twice as fast. Each tier multiplies your supply boost further — <b>up to ×100</b> at Immortal Diamond.</li>' +
           '<li>The two combine as <b>1 + (supply × diamond)</b>, with <b>no cap</b> — big bags held long enough scale your boost without limit.</li>' +
-          '<li>Your Diamond Level and boost <b>reset the moment you sell</b> — from one of your linked wallets, a wallet you unlinked, or a wallet you sent the coins to. That\'s what makes it a <i>diamond hands</i> reward. Moving coins to another wallet is not selling: it never resets the streak, which only pauses while your linked wallets don’t clear the $100-bought floor in that coin — $100 of it bought (a buy counts once held 24 hours), $10 of that cost still held, since 18 November 2026. A lower price never pauses it, and only a sale resets it. They also pause if we haven\'t re-checked your holdings in a day; open your profile or tap <b>Refresh holdings</b> to keep them live.</li>' +
+          '<li>Your Diamond Level and boost <b>reset the moment you sell</b> — from one of your linked wallets, a wallet you unlinked, or a wallet you sent the coins to. That\'s what makes it a <i>diamond hands</i> reward. Moving coins to another wallet is not selling: it never resets the streak, which only pauses while your linked wallets hold under $100 (so does a lower price — only a sale resets it). They also pause if we haven\'t re-checked your holdings in a day; open your profile or tap <b>Refresh holdings</b> to keep them live.</li>' +
         '</ul>' +
         '<p><b>🏘️ Communities &amp; the 10× multiplier.</b> Rally around any token by starting or joining its community (paste a contract to start one — it goes live at <b>10 verified holder slots</b>, each one a wallet that really holds the token). While you’re in <b>≥1 live community</b>, a flat <b>10×</b> community boost joins your stack — <b>+9×</b> on top of your base, on every post, reaction and comment inside the community too. Being in five communities is still one 10× (it doesn’t stack with itself). <b>Boosts add, they don’t multiply:</b> every boost contributes what it pays above 1×, so OG Gold 10× and a community 10× together are 19×, not 100×. Anyone can read a live community’s wall; to post you connect a wallet and confirm you hold its token, and participating raises your <b>member level</b> while levelling the community up.</p>' +
         '<ul>' +
-          '<li><b>🪙 Real buyers only:</b> to start or join a community, your linked wallets must show <b>$' + ((R && R.holdFloorUsd) || 100) + ' of that token bought</b> (a buy counts once held 24 hours), with $10 of that cost still held — read from the chain, never at today’s price; posting needs the verified slot that gives you. While a coin’s trades are first being read the answer is “checking”, so try again shortly. Sell or move it out until you no longer clear that floor and your 10× for that community is revoked.</li>' +
+          '<li><b>🪙 Real holders only:</b> to start, join, or post in a community you must <b>hold that token</b> (verified on-chain from a linked wallet). Sell or move it out and your 10× for that community is revoked.</li>' +
           '<li><b>🏆 Community level</b> climbs as its <b>distinct members</b> stay active — posting and reacting on the community wall. Same exponential curve as your own level, and <b>daily-capped</b> so one person cannot farm it: any single member can push at most <b>' + nCap(R.commXpPerUserDay, 250) + ' community XP a day</b> into one community, however much they post.</li>' +
           xpTable(R) +
           '<li><b>💎 Your member level</b> (your “conviction”) is <b>per community</b>, and it moves <b>only when you do something there</b> — joining, posting, commenting, reacting, making a Send Call for that token, voting on a proposal. It never rises for time alone: being a member for a year and saying nothing leaves it where it started. It shows as a badge next to that token in the <b>Conviction Plays</b> section of your public wall, and it needs a <b>verified holder slot</b> — sell the token and it stops accruing.</li>' +
@@ -1656,7 +1636,7 @@
         ? comms + (comms === 1 ? ' live community' : ' live communities') + ((g.communityMult || 1) > 1 ? ' · flat ' + g.communityMult + '× live' : ' · not paying yet — refresh your holdings')
         : (allComms ? allComms + ' joined · none live yet' : 'None joined yet'),
       boost: em.holder > 1 ? 'Your Holder Boost pays ' + em.holder.toFixed(2) + '× of a ⚡' + m.toFixed(2) + '× stack'
-        : pausedHold(h) ? 'Paused — your linked wallets don’t clear the $' + (h.minHoldUsd || 100) + '-bought floor now; only a sale resets it, so your days wait'
+        : pausedHold(h) ? 'Paused — under $' + (h.minHoldUsd || 100) + ' in your linked wallets; only a sale resets it, so your days wait'
         : (h && h.streakStart ? 'Paused — refresh to re-verify your bags' : 'Locked — no qualifying $SEND or $GWC yet'),
       eq: 'Every term in your ⚡ boost, and what each one adds',
       calls: a ? (a.readOnly ? 'Paused while your account is read-only' : a.remaining + ' of ' + a.limit + ' Send Calls left in the last 24h') : '',

@@ -110,12 +110,6 @@ const KEYLIB = require('./lib/keys.js');
 const ROUTES = require('./lib/routes.js');   // page routes: /about, not /about.html (lib/routes.js)
 const CF = require('./lib/contractfacts.js');   // a contract's powers, the dead addresses, and whether a renounce has neutralised a power
 const BUNDLES = require('./lib/bundles.js');   // who bought and moved tokens in the same block (lib/bundles.js)
-/* "$100 bought" (owner, 2026-11-17): the coin tape (lib/tape.js) and the verdicts made from it (lib/bought.js, which joins the
-   tape, the ETH/USD history and the acquisition engine to this server). Both are made once the readers they use exist
-   (beside the holder ledger, below); until then — and in the ledger's hook — they are null. */
-const TAPE_LIB = require('./lib/tape.js');
-const BOUGHT_LIB = require('./lib/bought.js');
-let TAPE = null, BOUGHT = null;
 const RWA = require('./lib/rwa.js');          // what counts as a real-world asset on evidence: no health score, no swap for one (lib/rwa.js counted)
 const GA4 = require('./lib/ga.js');           // Google Analytics: the admin page's reports (lib/ga.js)
 const PAGE_NAMES = ROUTES.pageNames(PUBLIC_DIR);   // read once at boot: a page added to public/ is served after a restart
@@ -1115,9 +1109,6 @@ for (const col of [
      wallet that still holds $GWC (a pause, og_paused_tier). Silver and Bronze on $SEND alone are granted, kept and asked
      again as for anyone (ogCapped: $GWC is then not even read). */
   "ALTER TABLE users ADD COLUMN og_cap INTEGER NOT NULL DEFAULT 0",
-  "ALTER TABLE users ADD COLUMN redeem_since INTEGER",           // "$100 bought" (owner's Q8): a read-only buy-out counts the $SEND bought since this (the restriction began, or came back)
-  "ALTER TABLE users ADD COLUMN og_rule_v2_at INTEGER",          // when this account's statuses were first decided under "$100 bought" (the switch's log: hold_migration_log)
-  "ALTER TABLE users ADD COLUMN holder_reason_code TEXT",        // the participation check's last reason as a code (bought.js reasonOf), for re-asking by rule, not by copy
 ]) { try { db.exec(col); } catch {} }
 /* A PAUSE (2026-11-18 review): wallets leaving the account took off what the badge needs, and nothing was sold (ogOnLeave) —
    the whole badge (no wallet left that holds its $SEND: og_tier 0, re-verified on a relink) or, for a Gold or Diamond whose
@@ -1501,15 +1492,7 @@ CREATE INDEX IF NOT EXISTS idx_dh_moves_pending ON dh_moves(status, id);
 CREATE INDEX IF NOT EXISTS idx_dh_moves_user ON dh_moves(user_id, status, applied);
 `);
 
-BOUGHT_LIB.migrate(db);   // the tape's tables and the verdicts' (acq_state, buy_claims, hold_migration_log, ethusd_cells, bought_tokens)
-/* A Send Call's (or a Send It's) size paid later (owner's Q5: "spent under the Q1 rule"): a buy counts once its coins were held 24
-   hours, so a call made on a fresh buy is paid its base now and its size once the buy counts — or once its verdict first exists.
-   paid_spend: the size already paid for; done_at: settled. Calls made before "$100 bought" are never resized. */
-db.exec(`CREATE TABLE IF NOT EXISTS size_topups (
-  id INTEGER PRIMARY KEY, kind TEXT NOT NULL, call_id INTEGER NOT NULL, user_id INTEGER NOT NULL, token TEXT NOT NULL, at INTEGER NOT NULL,
-  liq REAL, paid_spend REAL NOT NULL DEFAULT 0, due_at INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0, done_at INTEGER, UNIQUE (kind, call_id, user_id));
-CREATE INDEX IF NOT EXISTS idx_size_topups_open ON size_topups(done_at, user_id, token);`);
-try { for (const t of ['dh_follow', 'dh_moves', 'acq_state', 'hold_migration_log']) db.prepare('DELETE FROM ' + t + ' WHERE user_id IN (SELECT id FROM users WHERE deleted_at IS NOT NULL)').run(); } catch {}
+try { for (const t of ['dh_follow', 'dh_moves']) db.prepare('DELETE FROM ' + t + ' WHERE user_id IN (SELECT id FROM users WHERE deleted_at IS NOT NULL)').run(); } catch {}
 
 /* ===== Data history: a member's data is kept, so a mistake can be undone (owner, 2026-10-17) ========================
    "make sure all data is always cached so errors like this never happen and we can restore user's data if we need to
@@ -3037,19 +3020,17 @@ async function refreshHolder(userId, opts = {}) {
   const pctSend = Number(sendWei) / Number(ss) * 100;
   const pctGwc = Number(gwcWei) / Number(gs) * 100;
   const sendBp = Math.round(pctSend * 10000), gwcBp = Math.round(pctGwc * 10000);
-  /* THE $100 FLOOR, BOUGHT (owner, 2026-11-17: "make it $100 of value bought in the token not the current token value"). Per
-     coin — the two coins carry separate streaks — the member's "$100 bought" verdict (boughtVerdict: $100 spent on counted
-     buys, a buy counting once its coins were held 24 hours, with at least $10 of that cost still held), which the background
-     worker keeps; today's price never decides it. A verdict that is not there yet is not an answer: qual keeps its previous
-     value, so a member's status stands until their verdict is made — and a first-ever read with no verdict starts nothing yet
-     (fail-closed for new, fail-safe for existing). What the bag is worth NOW is still read and shown, labelled as such. */
+  /* THE $100 HOLD FLOOR. Priced live, per coin, and the two coins are judged separately because they carry
+     separate streaks. A price we cannot read is not an answer: qual stays NULL and the previous verdict
+     stands, so a Dexscreener outage can never reset an honest holder's months-long streak — while a first-
+     ever read with no price simply does not start one yet (fail-closed for new, fail-safe for existing). */
   let sendPx = null, gwcPx = null;
-  try { [sendPx, gwcPx] = await Promise.all([guardedPriceUsd(TOK.SEND), guardedPriceUsd(TOK.GWC)]); } catch {}   // both from their own pools, guarded: "worth now", for the dashboard
+  try { [sendPx, gwcPx] = await Promise.all([guardedPriceUsd(TOK.SEND), guardedPriceUsd(TOK.GWC)]); } catch {}   // both from their own pools, guarded
   const sendUsd = sendPx > 0 ? sendTok * sendPx : null;
   const gwcUsd = gwcPx > 0 ? gwcTok * gwcPx : null;
-  const qualOf = (v, before) => v == null ? (before == null ? null : (before ? 1 : 0)) : (v ? 1 : 0);
-  const sendQual = qualOf(boughtVerdict(userId, TOK.SEND, 1), prev ? prev.send_qual : null);
-  const gwcQual = qualOf(boughtVerdict(userId, TOK.GWC, 1), prev ? prev.gwc_qual : null);
+  const qualOf = (usd, before) => usd == null ? (before == null ? null : (before ? 1 : 0)) : (usd >= MIN_HOLD_USD ? 1 : 0);
+  const sendQual = qualOf(sendUsd, prev ? prev.send_qual : null);
+  const gwcQual = qualOf(gwcUsd, prev ? prev.gwc_qual : null);
   /* Only a coin that clears the floor contributes to a streak or to the boost. The raw %s are still stored
      (the holdings viz shows what you really hold), but the QUALIFYING score is what the streak logic and
      holderMultiplier run on — so dust is visible and worth nothing, rather than invisible and worth ×100. */
@@ -3090,9 +3071,8 @@ async function refreshHolder(userId, opts = {}) {
   const freshH = { streak_start: streakStart, gwc_streak_start: gwcStreak, last_check: now(), paused_at: nx.pausedAt, paused_ms: nx.pausedMs, gwc_paused_at: nx.gwcPausedAt, gwc_paused_ms: nx.gwcPausedMs };
   const hd = holdDaysOf(freshH);
   return { hasWallet: true, multiplier: holderMultiplier(userId), pct: score, pctSend, pctGwc, holdDays: hd, gwcDays: gwcDaysOf(freshH), sendTok, gwcTok, streakStart, gwcStreakStart: gwcStreak, streakPaused: !!nx.pausedAt, gwcStreakPaused: !!nx.gwcPausedAt, fresh: true, diamond: diamondInfo(effHoldDays(freshH)),
-    // the floor, and exactly where this account sits against it, so the dashboard can say why a bag earns nothing: what was
-    // bought (the basis since 2026-11-17) and, beside it, what the bag is worth now (labelled; it decides nothing)
-    minHoldUsd: MIN_HOLD_USD, sendUsd, gwcUsd, basis: 'bought', bought: { SEND: boughtView(userId, TOK.SEND), GWC: boughtView(userId, TOK.GWC) },
+    // the floor, and exactly where this account sits against it, so the dashboard can say why a bag earns nothing
+    minHoldUsd: MIN_HOLD_USD, sendUsd, gwcUsd,
     sendQualifies: sendQual == null ? null : !!sendQual, gwcQualifies: gwcQual == null ? null : !!gwcQual };
 }
 
@@ -4304,6 +4284,15 @@ function ogBetterScan(cur, s) {
   if (s.tier !== cur.tier) return s.tier > cur.tier;
   return s.firstBuyMs < cur.firstBuyMs;
 }
+/* Pure: is a coin, SUMMED across every linked wallet read (`heldWei`, a BigInt or a decimal string), worth the OG floor
+   at the guarded price `px`? true / false — or null when the price could not be read, which is no answer at all. It
+   used to value only the ONE wallet that earned the tier (best.X.balWei), so a bag split across a hot wallet and a
+   hardware wallet read as under the floor while the account held far more than it. */
+function ogFloorOk(heldWei, px) {
+  if (!(px > 0)) return null;
+  let w = 0n; try { w = BigInt(heldWei || 0); } catch { return false; }
+  return Number(w) / 1e18 * px >= OG_MIN_HOLD_USD;
+}
 /* ===== Which tier, on which basis (owner, 2026-11-17, the day the beta ended: "Moving forward after beta, only consider
    people who have bought Send for the silver OG and bronze OG badges") ===============================================
    Two ways to earn a badge; an account gets the better one it qualifies for:
@@ -4315,9 +4304,8 @@ function ogBetterScan(cur, s) {
    needs less held and claims one wallet, not two.
    best     coin -> the best qualifying (not disqualified) scan across the linked wallets, picked by ogBetterScan
    holdsAny coin -> does ANY linked wallet still hold it
-   floor    coin -> that coin's "$100 bought" verdict across every linked wallet ($100 spent on counted buys, $10 of it still
-            held at cost: true / false / null = no answer yet; ogBoughtFacts); omitted, the floor is not asked (what the
-            history alone earns)
+   floor    coin -> ogFloorOk of that coin summed over every linked wallet (true / false / null = price unreadable);
+            omitted, the floor is not asked (what the history alone earns)
    Returns { tier, basis: 'both'|'send'|null, wallets: what og_claims records (only the wallets that earned it), buyMs: the
    date the tier was earned on (both: the later of the two coins' earliest buys; send: the earliest $SEND buy), needs: the
    coins it must keep holding, capped: a $SEND tier held down to Silver, unknown: a price that decides it could not be
@@ -4364,19 +4352,20 @@ function ogClaimWallets(pick, monthFrom) {
 function ogOnLink(userId) {
   db.prepare('UPDATE users SET og_diamond_at = NULL WHERE id = ? AND og = 1 AND og_tier = ? AND og_revoked = 0 AND og_requal = 0').run(userId, OG_TIER.GOLD);
 }
-/* Gold → Diamond, for an account already holding Gold. The same floor a grant needs — $100 of each coin BOUGHT, with $10 of it
-   still held at cost (`floor`, the bought verdicts; a 20× badge needs a real bag behind it at least as much as a 10× one does);
-   a verdict that could not decide it, or one under the floor, is not a definitive "no" — the question stays open and the
-   sweep asks again. Every wallet the answer rests on is claimed for this
+/* Gold → Diamond, for an account already holding Gold. The same $100-of-each floor a grant needs (a 20× badge needs a real
+   bag behind it at least as much as a 10× one does); a price that cannot be read, or a bag under the floor today, is not a
+   definitive "no" — the question stays open and the sweep asks again. Every wallet the answer rests on is claimed for this
    account in the same transaction as the badge (ogClaimWallets: the wallets that earned each coin's Gold and every wallet
    whose month buys were counted); one claimed by another account while this read ran is no answer — the question stays
    open, and the next read leaves that wallet out. Nothing is written when the linked wallets changed since the read began
    (`same`), and the badge only moves while it is still a live, unrevoked Gold. */
-async function grantDiamondUpgrade(userId, best, held, { same, monthFrom, floor } = {}) {
+async function grantDiamondUpgrade(userId, best, held, { same, monthFrom } = {}) {
+  let sendPx = null, gwcPx = null;
+  try { sendPx = await guardedPriceUsd(TOK.SEND); gwcPx = await guardedPriceUsd(TOK.GWC); } catch {}
   if (same && !same()) return OG_TIER.GOLD;                                                 // a wallet came or went while the chain was read: asked again with the wallets linked now
-  if (!floor || floor.SEND == null || floor.GWC == null) return OG_TIER.GOLD;               // no answer yet — asked again when the verdicts are complete
-  // decided the way a grant is: each coin's $100 bought (with $10 of it still held at cost), across every linked wallet
-  if (!(floor.SEND === true && floor.GWC === true)) {
+  if (!(sendPx > 0) || !(gwcPx > 0)) return OG_TIER.GOLD;                                   // no price, no answer — asked again within the hour
+  // valued the way a grant is: each coin summed over every linked wallet, at the guarded price
+  if (!(ogFloorOk(held && held.SEND, sendPx) && ogFloorOk(held && held.GWC, gwcPx))) {
     db.prepare('UPDATE users SET og_checked_at = ? WHERE id = ?').run(now(), userId);        // a real answer for today: re-asked every 6 hours, as a grant is
     return OG_TIER.GOLD;
   }
@@ -4471,13 +4460,14 @@ function ogReadDecides(pick, failed) {
    read, a wallet already claimed by another account, or nothing better is no change. A complete read that finds the
    earning $SEND buy came after the beta (uncapped) stops the asking: no $GWC can make that Gold — except for a Gold or
    Diamond paused at Silver (og_paused_tier: its $GWC sits in a wallet that was unlinked), which stays open for that wallet
-   and comes back up only on $GWC held without a break since the pause (ogGoldHeldBack); otherwise it waits at Silver.
-   The floor is "$100 bought" of each coin (the bought verdicts, `floor`), never today's price. */
-async function liftOgSilver(userId, u, { best, holdsAny, diamondOk, held, failed, spans, same, monthFrom, floor }) {
+   and comes back up only on $GWC held without a break since the pause (ogGoldHeldBack); otherwise it waits at Silver. */
+async function liftOgSilver(userId, u, { best, holdsAny, diamondOk, held, failed, spans, same, monthFrom }) {
   const complete = !failed.SEND && !failed.GWC;
   const pausedGold = u.og_paused_tier >= OG_TIER.GOLD && !ogCapped(u.og_cap);
+  let sendPx = null, gwcPx = null;
+  try { sendPx = await guardedPriceUsd(TOK.SEND); gwcPx = await guardedPriceUsd(TOK.GWC); } catch {}
   if (same && !same()) return OG_TIER.SILVER;   // a wallet came or went while the chain was read: asked again with the wallets linked now
-  const pick = ogAccountTier({ best, holdsAny, diamondOk, floor: floor || {} });   // "$100 bought" of each coin (the bought verdicts), never today's price
+  const pick = ogAccountTier({ best, holdsAny, diamondOk, floor: { SEND: ogFloorOk(held.SEND, sendPx), GWC: ogFloorOk(held.GWC, gwcPx) } });
   let what = ogLiftWhat(pick, u.og_buy_ms);
   // a gap in $GWC since the pause is a sale, or $GWC in a wallet not linked now — not Gold today, and never capped by it:
   // the wallet may come back, and no rebuy can close a gap (ogHeldThrough), so buying $GWC again never brings Gold back
@@ -4682,7 +4672,7 @@ function ogPauseSilverText(from, pick) {
 function ogRestoreText(pick) {
   const name = OG_TIER_NAME[pick.tier] || '', mult = OG_TIER_MULT[pick.tier] || 1;
   return 'OG ' + name + ' restored! It was removed when OG needed both coins; ' + name + ' now needs only $SEND, and the wallets linked then show $SEND bought ' +
-    (pick.capped ? 'before the beta ended' : 'in the ' + name.toLowerCase() + ' window') + ', held without a break, $100+ of it bought (checked on-chain): ' + mult + '× Send Power.';
+    (pick.capped ? 'before the beta ended' : 'in the ' + name.toLowerCase() + ' window') + ', held without a break, $100+ today (checked on-chain): ' + mult + '× Send Power.';
 }
 /* Pure: did the account hold the coin WITHOUT A BREAK from `fromMs` until now? `spans` are the stretches each linked wallet held
    more than dust ([fromMs, toMs | null = still holding] — ogScan's heldSpans), every wallet's together: coins moved between
@@ -4816,11 +4806,12 @@ function ogRestoreSettle() {
    change the answer, which decides nothing: the pass asks again within the hour. A Silver can be decided with a $SEND
    wallet unread (nothing it could hold lowers a Silver or opens a gap); a Bronze or a "no" cannot. Restored: og_recheck = 3,
    the claim on the $SEND wallet that earned it, and a note. */
-async function restoreOg(userId, u, { best, holdsAny, held, failed, spans, same, floor }) {
+async function restoreOg(userId, u, { best, holdsAny, held, failed, spans, same }) {
+  let px = null;
+  try { px = await guardedPriceUsd(TOK.SEND); } catch {}
   if (same && !same()) return 0;                                      // a wallet came or went while the chain was read: asked again with the wallets linked now
-  if (!Array.isArray(spans)) return 0;                                // the stretches held are not dated yet (a block time): asked again
-  const pick = ogAccountTier({ best: { SEND: best.SEND }, holdsAny: { SEND: !!holdsAny.SEND }, diamondOk: false, floor: { SEND: floor ? floor.SEND : null } });   // $100 of $SEND bought (the bought verdict), not today's price
-  if (pick.unknown) return 0;                                         // no answer yet (the $SEND verdict could not decide it) — asked again
+  const pick = ogAccountTier({ best: { SEND: best.SEND }, holdsAny: { SEND: !!holdsAny.SEND }, diamondOk: false, floor: { SEND: ogFloorOk(held.SEND, px) } });
+  if (pick.unknown) return 0;                                         // no price, no answer — asked again
   const since = u.og_checked_at || u.og_buy_ms || (best.SEND ? best.SEND.firstBuyMs + OG_MONTH_MS : 0);
   const through = pick.tier > OG_TIER.NONE && ogHeldThrough(spans, since);
   if (failed.SEND && !(pick.tier === OG_TIER.SILVER && through)) return 0;   // a $SEND wallet not read could change it — asked again
@@ -4903,75 +4894,6 @@ async function routedPoolFlows(token, pair, wallet, rows, direct) {
   }
   return { take };
 }
-/* ===== OG on "$100 bought" (owner, 2026-11-17) =====================================================================
-   What the OG rules read of a member's verdicts (lib/bought.js — made in the background from the coin tape), in the shape
-   checkOg decides on. Per coin: the tier its date earns (the earliest COUNTED buy across the linked wallets — a buy held 24
-   hours; a transfer counts only when it is traced back to an original buy and carries $100 of that buy's cost), whether it
-   is still held (more than dust), the floor ($100 bought with $10 of it still held at cost: true / false / null), the
-   Diamond month, the dump standard on the account's path, and the stretches $SEND was held (the restore pass). The wallet a
-   tier is claimed on is the linked wallet its dating buy reached. Nothing here reads the chain. A verdict that is missing or
-   was made for another wallet set: `waiting` — the worker is asked for one, and asks checkOg again once it has written it
-   (boughtOnVerdict). `given` (coin → verdict) is one made for another wallet set on purpose — the restore pass's wallets
-   linked at removal (BOUGHT.evaluateSet); none there is `waiting` too. The stretches held come per coin: $SEND for the
-   restore and a paused badge, $GWC for a paused Gold (spansMissing: not dated yet — no answer on them). */
-function ogBoughtFacts(userId, coins, opts, given) {
-  const f = { best: {}, holdsAny: {}, floor: {}, failed: { SEND: false, GWC: false }, month: { SEND: { in: 0n, out: 0n }, GWC: { in: 0n, out: 0n } },
-    diamond: {}, spans: { SEND: [], GWC: [] }, spansMissing: { SEND: false, GWC: false }, monthFrom: new Set(), sawDq: false, waiting: false, diamondUndecided: false };
-  for (const c of coins) {
-    const s = given ? given[c.key] : BOUGHT ? BOUGHT.stateOf(userId, c.token) : null;
-    if (!s || !s.fresh) { if (BOUGHT && !given) BOUGHT.want(userId, c.token, { prio: 2, link: !!(opts && opts.link) }); f.waiting = true; f.failed[c.key] = true; continue; }
-    let held = 0n; try { held = BigInt(s.heldWei || '0'); } catch {}
-    f.holdsAny[c.key] = held > OG_DUST_WEI;
-    f.floor[c.key] = s.floor;
-    f.failed[c.key] = s.floor === null || (!s.complete && s.why === 'transient');
-    if (Array.isArray(s.spans)) f.spans[c.key].push(...s.spans); else f.spansMissing[c.key] = true;
-    f.diamond[c.key] = s.diamondMonth;
-    // the Diamond question reads the month's flows only where the verdict answered it yes (a no stays a no, whatever the sums)
-    try { f.month[c.key] = s.diamondMonth === true ? { in: BigInt(s.monthIn || '0'), out: BigInt(s.monthOut || '0') } : { in: 0n, out: 0n }; } catch {}
-    if (s.diamondMonth === true) for (const w of s.monthWallets || []) f.monthFrom.add(w);
-    const dq = s.dq || {};
-    if (dq.disqualified === true) { f.sawDq = true; continue; }       // the dump standard (DECIDED 2026-09-08), on the account's path
-    if (!s.tierDateMs) continue;
-    if (dq.disqualified == null) f.failed[c.key] = true;               // not decided yet (a block time it needs): no answer
-    const tier = ogTierForBuy(s.tierDateMs, c.launch);
-    if (tier > OG_TIER.NONE) f.best[c.key] = { tier, firstBuyMs: s.tierDateMs, holds: f.holdsAny[c.key], wallet: (s.tierWallets || [])[0] || null };
-  }
-  f.diamondUndecided = coins.some((c) => f.diamond[c.key] == null);
-  return f;
-}
-/* A badge a link may raise (checkOg's `raising`): a Bronze, or a Silver held to no cap below Gold. The wallets linked now decide
-   what the account earns (ogAccountTier on the bought verdicts), capped at og_cap, and only a HIGHER tier — or, at the same tier,
-   an EARLIER date — is written, with every wallet it rests on claimed in the same guarded write. A verdict that could not be
-   completed, a wallet already claimed by another account, or nothing better: no change. */
-function ogRaiseOnLink(userId, u, { best, holdsAny, diamondOk, failed, spans, same, monthFrom, floor, diamondUndecided }) {
-  if (same && !same()) return u.og_tier;
-  let pick = ogAccountTier({ best, holdsAny, diamondOk: diamondOk && !diamondUndecided, floor });
-  // a Gold or Diamond paused at a lower tier comes back only on $GWC held without a break since the pause (ogGoldHeldBack)
-  if (pick.tier >= OG_TIER.GOLD && ogGoldHeldBack(u.og_paused_tier, u.og_paused_at, spans && spans.GWC)) pick = ogAccountTier({ best: { SEND: best.SEND }, holdsAny: { SEND: holdsAny.SEND }, diamondOk: false, floor: { SEND: floor.SEND } });
-  if (pick.unknown || !pick.tier) return u.og_tier;
-  if (ogCapped(u.og_cap) && pick.tier > u.og_cap) {
-    if (u.og_cap <= u.og_tier) return u.og_tier;
-    pick = ogAccountTier({ best: { SEND: best.SEND }, holdsAny: { SEND: holdsAny.SEND }, diamondOk: false, floor: { SEND: floor.SEND } });   // held to Silver: what $SEND alone earns
-    if (!pick.tier || pick.tier > u.og_cap) return u.og_tier;
-  }
-  if (!ogReadDecides(pick, failed)) return u.og_tier;
-  const up = pick.tier > u.og_tier, earlier = pick.tier === u.og_tier && pick.buyMs > 0 && pick.buyMs < (u.og_buy_ms || Infinity);
-  if (!up && !earlier) return u.og_tier;
-  const claimAddrs = ogClaimWallets(pick, monthFrom);
-  for (const a of claimAddrs) { const prior = db.prepare('SELECT user_id FROM og_claims WHERE addr_idx = ?').get(bidx(a)); if (prior && prior.user_id !== userId) return u.og_tier; }
-  let g;
-  try {
-    db.exec('BEGIN');
-    // the pause (og_paused_tier) ends when the badge is back at the tier it had, as a grant ends it
-    g = db.prepare("UPDATE users SET og_tier = ?, og_buy_ms = ?, og_checked_at = ?, og_diamond_at = CASE WHEN ? = 4 THEN ? ELSE og_diamond_at END, og_paused_at = CASE WHEN ? >= og_paused_tier THEN 0 ELSE og_paused_at END, og_paused_tier = CASE WHEN ? >= og_paused_tier THEN 0 ELSE og_paused_tier END WHERE id = ? AND og = 1 AND og_tier = ? AND og_revoked = 0 AND og_requal = 0 AND EXISTS (SELECT 1 FROM identities WHERE user_id = users.id AND type = 'wallet')")
-      .run(pick.tier, pick.buyMs, now(), pick.tier, now(), pick.tier, pick.tier, userId, u.og_tier);
-    if (g.changes) for (const a of claimAddrs) db.prepare('INSERT INTO og_claims (addr_idx, user_id, tier, claimed_at) VALUES (?,?,?,?) ON CONFLICT(addr_idx) DO UPDATE SET tier = excluded.tier WHERE og_claims.user_id = excluded.user_id').run(bidx(a), userId, pick.tier, now());
-    db.exec('COMMIT');
-  } catch { try { db.exec('ROLLBACK'); } catch {} return u.og_tier; }
-  if (!g.changes) return u.og_tier;
-  if (up) notify(userId, pick.tier === OG_TIER.DIAMOND ? '💎' : '🏅', ogGrantText(pick, u.og_tier), 'og');
-  return pick.tier;
-}
 const _ogScanning = new Set(); // coalesce concurrent scans of the same user
 /* A check that arrived while that user's scan was running (a wallet linked mid-scan, say): the running scan read the wallets
    linked when IT began, so it runs once more as it ends, with the wallets linked then — the late check used to be dropped,
@@ -5016,16 +4938,11 @@ async function checkOg(userId, opts = {}) {
   const requal = !u.og_revoked && !!u.og_requal && u.og_tier > OG_TIER.SILVER;
   const upgrading = !requal && u.og_tier === OG_TIER.GOLD && !u.og_diamond_at;
   const lifting = !requal && u.og_tier === OG_TIER.SILVER && !!u.og_lift;
-  /* A link asks every lower badge again too, raise-only (owner, 2026-11-17: the buy date correct for every member, from the
-     earliest counted buy across all linked wallets): a Bronze whose wallets now show an earlier $SEND buy, or a Silver or
-     Bronze whose wallets now earn the both-coins tier — up to the account's cap (og_cap), never down (ogRaiseOnLink). */
-  const raising = !!opts.link && !requal && !upgrading && !lifting && (u.og_tier === OG_TIER.SILVER || u.og_tier === OG_TIER.BRONZE) && !!u.og;
-  if (u.og_tier > 0 && !upgrading && !lifting && !requal && !raising) return u.og_tier;
-  // past the windows AND past the grace — stop asking (a badge waiting to be re-decided, or re-checked once, still is; and so is
-  // a link — on a link only, never by the sweep: a Gold that just linked a wallet, because Diamond supersedes Gold on a link
-  // (ogOnLink), a lower badge an earlier buy may raise, and a PAUSED badge (og_paused_tier), whose relink must still bring it
-  // back, on the same continuity rules)
-  if (now() > OG_GRANT_UNTIL_MS && !requal && !restoring && !(opts.link && (upgrading || raising || u.og_paused_tier > 0))) return u.og_tier || 0;
+  if (u.og_tier > 0 && !upgrading && !lifting && !requal) return u.og_tier;
+  // past the windows AND past the grace — stop paying the explorer (a badge waiting to be re-decided, or re-checked once, still is;
+  // and so is a link — on a link only, never by the sweep: a Gold that just linked a wallet, because Diamond supersedes Gold on
+  // a link (ogOnLink), and a PAUSED badge (og_paused_tier), whose relink must still bring it back, on the same continuity rules)
+  if (now() > OG_GRANT_UNTIL_MS && !requal && !restoring && !(opts.link && (upgrading || u.og_paused_tier > 0))) return u.og_tier || 0;
   if (_ogScanning.has(userId)) { ogAgain(userId, opts); return 0; }   // the running scan goes again when it ends
   _ogScanning.add(userId);
   try {
@@ -5055,42 +4972,70 @@ async function checkOg(userId, opts = {}) {
       { key: 'SEND', token: TOK.SEND, pair: OG_PAIR.SEND, launch: OG_LAUNCH.SEND },
       { key: 'GWC', token: TOK.GWC, pair: OG_PAIR.GWC, launch: OG_LAUNCH.GWC },
     ].filter((c) => !sendOnly || c.key === 'SEND');
-    /* "$100 bought" (owner, 2026-11-17): every fact below comes from the member's verdicts (ogBoughtFacts — lib/bought.js, made in
-       the background from the coin tape), never from a read made here. The tier's date is the earliest COUNTED buy across the
-       linked wallets — a buy held 24 hours, the member's own, or a transfer traced back to the original buy when it carries
-       $100 of that buy's cost — and the floor is $100 BOUGHT with $10 of it still held at cost, in place of today's price. A
-       wallet whose badge or verification backs another account adds none of its buys here (the verdicts' claims). A verdict
-       missing, made for another wallet set, or not complete enough is no answer: nothing is written, and the worker asks
-       again once it has made one (boughtOnVerdict). The restore pass judges ONLY the wallets linked when the badge was removed
-       (addrs): a verdict for exactly those is made here, in that background pass (BOUGHT.evaluateSet — nothing is stored). */
-    let given = null;
-    if (restoring) { given = {}; for (const c of COINS) given[c.key] = BOUGHT ? await BOUGHT.evaluateSet(userId, c.token, addrs) : null; }
-    const facts = ogBoughtFacts(userId, COINS, opts, given);
-    if (facts.waiting) return u.og_tier || 0;
-    const { best, holdsAny, floor, failed, spans, monthFrom, sawDq } = facts;
-    const held = null;   // no longer read: the floor is the bought verdict (floor), never a balance at a price
-    const scanFailed = failed.SEND || failed.GWC;   // a verdict that could not be completed
-    /* Diamond, decided only on complete verdicts: bought both in $GWC's first month, a net buyer of both that month (the
-       verdict's own month question: traced coins count only from an origin that was itself a net buyer then). */
-    const diamondOk = ogDiamondOk(!scanFailed, best, holdsAny, facts.month);
+    /* ONE BADGE PER WALLET, EVER (the claim guard below): a linked wallet whose badge is already spent on another account
+       (claims outlive unlinking) can earn nothing here, so it is never the scan this account's tier is earned on. Picked
+       anyway, it hid every other linked wallet of that coin — an earlier one already claimed elsewhere stopped this
+       account's own unclaimed wallet from earning its Silver. Its balance still counts: it is in this account's wallets. */
+    const claimedElsewhere = new Set(addrs.filter((a) => { const o = db.prepare('SELECT user_id FROM og_claims WHERE addr_idx = ?').get(bidx(a)); return !!(o && o.user_id !== userId); }));
+    const best = {};                 // coin -> the best qualifying scan across this user's wallets
+    const holdsAny = {};             // coin -> does ANY linked wallet still hold it
+    const held = { SEND: 0n, GWC: 0n };   // coin -> balance summed over every linked wallet read: what the $100 floor values
+    const month = { SEND: { in: 0n, out: 0n }, GWC: { in: 0n, out: 0n } };   // coin -> market flows in $GWC's first month, every wallet summed
+    const monthFrom = new Set();     // the wallets whose month buys were counted: a Diamond rests on them, so a Diamond claims them (ogClaimWallets)
+    let sawDq = false;               // a wallet bought in a window and still holds, but failed the standard (or is claimed elsewhere)
+    const failed = { SEND: false, GWC: false };   // coin -> at least one wallet's read of it could not be completed
+    const spans = { SEND: [], GWC: [] };   // coin -> every linked wallet's stretches of holding it (heldSpans): "held without a break" — $SEND for the restore pass, $GWC for a paused Gold
+    for (const c of COINS) {
+      for (const a of addrs) {
+        let s;
+        // Isolate the failure to this ONE wallet-and-coin. Aborting the whole account here (which is
+        // what `return 0` did) meant a single 429 on wallet 3 threw away clean results for wallets 1
+        // and 2 — and since nothing is then written, the grant sweep re-selected the same account
+        // forever and never reached anyone behind it. The pre-tier code isolated failures this way
+        // too; losing that was a regression, not a tightening.
+        try { s = await ogScan(a, c.token, c.pair, c.launch); }
+        catch { failed[c.key] = true; continue; }
+        // "Still holds" is asked across the WALLET SET, not of the wallet that bought — the same way
+        // refreshHolder() sums holdings for revocation. Requiring one wallet to both buy and still
+        // hold denied anyone who moved their bag to a hardware wallet after buying, which the rules
+        // never said and the previous behaviour allowed.
+        if (s.holds) holdsAny[c.key] = true;
+        try { held[c.key] += BigInt(s.balWei || '0'); } catch {}   // reconciled against the chain by ogScan, so this is the wallet's real balance
+        if (Array.isArray(s.heldSpans)) spans[c.key].push(...s.heldSpans);
+        // summed over EVERY wallet, disqualified or not: moving tokens between your own wallets is neither a buy
+        // nor a sell, so the account's net for the month is the honest answer to "accumulated or distributed".
+        // But a wallet whose badge is spent on another account backs THAT account: its month buys are not counted here
+        // (they made one Diamond already — linked to a Gold account, they made a second), while its month sells still are.
+        const monthIn = claimedElsewhere.has(a) ? 0n : BigInt(s.monthBoughtWei || '0');
+        month[c.key].in += monthIn; month[c.key].out += BigInt(s.monthSoldWei || '0');
+        if (monthIn > 0n) monthFrom.add(a);
+        if (s.tier === OG_TIER.NONE) continue;
+        // this wallet bought inside a window, but fails the standard for this coin — or its badge is spent elsewhere
+        if (ogDisqualified(s) || claimedElsewhere.has(a)) { sawDq = true; continue; }
+        if (ogBetterScan(best[c.key], s)) best[c.key] = { ...s, wallet: a };   // remember WHICH wallet earned it — a badge is claimed by a wallet, once
+      }
+    }
+    const scanFailed = failed.SEND || failed.GWC;   // at least one (wallet, coin) could not be read completely
+    /* Diamond, decided only on a COMPLETE read — a wallet that could not be read might hold the sells that
+       would make this account a net distributor. Bought both in the month, net accumulator of both. */
+    const diamondOk = ogDiamondOk(!scanFailed, best, holdsAny, month);
     if (!same()) return u.og_tier || 0;                           // the wallets changed while they were read: nothing below is written, and this runs again
     if (requal) return ogRequalify(userId, u, { best, holdsAny, failed });
-    if (restoring) return await restoreOg(userId, u, { best, holdsAny, held, failed, spans: facts.spansMissing.SEND ? null : spans.SEND, same, floor });   // awaited, so the scan's lock covers the write
+    if (restoring) return await restoreOg(userId, u, { best, holdsAny, held, failed, spans: spans.SEND, same });   // awaited, so the scan's lock covers the write
     if (upgrading) {
-      if (scanFailed || facts.diamondUndecided) return OG_TIER.GOLD;   // not an answer — asked again when the verdict is complete
+      if (scanFailed) return OG_TIER.GOLD;                        // not an answer — asked again on the next sweep
       if (!diamondOk) { db.prepare('UPDATE users SET og_diamond_at = ? WHERE id = ?').run(now(), userId); return OG_TIER.GOLD; }
-      return await grantDiamondUpgrade(userId, best, held, { same, monthFrom, floor });   // awaited, so the scan's lock (and the rescan below) covers the write
+      return await grantDiamondUpgrade(userId, best, held, { same, monthFrom });   // awaited, so the scan's lock (and the rescan below) covers the write
     }
-    if (lifting) return await liftOgSilver(userId, u, { best, holdsAny, diamondOk, held, failed, spans, same, monthFrom, floor });
-    if (raising) return ogRaiseOnLink(userId, u, { best, holdsAny, diamondOk, failed, spans, same, monthFrom, floor, diamondUndecided: facts.diamondUndecided });
+    if (lifting) return await liftOgSilver(userId, u, { best, holdsAny, diamondOk, held, failed, spans, same, monthFrom });
     /* A badge PAUSED with its wallets (og_tier 0, og_paused_tier: a disconnect, the last wallet unlinked, or the wallet holding
        its $SEND unlinked) comes back on a relink only if its $SEND was held without a break while it was paused (ogPauseHeld).
        Sold out meanwhile and bought back, it is revoked for good, with the note — never re-granted on the buy-back. The $SEND
        it had at the pause sitting in a wallet not linked yet decides nothing and grants nothing (a real answer for these
-       wallets: asked again in 6 hours, or on the next link); a $SEND wallet that could not be read — or stretches the verdict
-       could not date yet — decide nothing at all. Written with nothing awaited since the wallet-set check above (`same`). */
+       wallets: asked again in 6 hours, or on the next link); a $SEND wallet that could not be read decides nothing at all.
+       Written with nothing awaited since the wallet-set check above (`same`). */
     if (!u.og_tier && u.og_paused_tier > 0) {
-      const ph = ogPauseHeld(spans.SEND, u.og_paused_at, !!holdsAny.SEND, failed.SEND || facts.spansMissing.SEND);
+      const ph = ogPauseHeld(spans.SEND, u.og_paused_at, !!holdsAny.SEND, failed.SEND);
       if (ph === 'sold') {
         const r = db.prepare('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1, og_requal = 0, og_lift = 0, og_paused_tier = 0, og_paused_at = 0 WHERE id = ? AND og_tier = 0 AND og_revoked = 0 AND og_paused_tier > 0').run(userId);
         if (r.changes) notify(userId, '💔', ogPauseRevokedText(u.og_paused_tier), 'og');
@@ -5115,10 +5060,13 @@ async function checkOg(userId, opts = {}) {
       db.prepare('UPDATE users SET og_checked_at = ?, og_dq = ? WHERE id = ?').run(now(), sawDq ? 1 : 0, userId);
       return 0;
     }
-    // A badge that pays up to 20× needs a real bag behind it: every coin its tier needs must have $100 BOUGHT behind it, with at
-    // least $10 of that still held at cost (the bought verdict, `floor`; today's price never enters). A verdict that could not
-    // decide it is no answer — retried, never a "no" (ogAccountTier returns `unknown`, and nothing is written).
-    if (!same()) return 0;                                        // a wallet came or went meanwhile: asked again
+    // A badge that pays up to 20× needs a real bag behind it: every coin its tier needs must be worth at least OG_MIN_HOLD_USD
+    // right now, summed over the linked wallets (1e-9 tokens of each used to qualify). Priced at the live market; an unreadable
+    // price is no answer — retried, never a "no" (ogAccountTier returns `unknown`, and nothing is written).
+    let sendPx = null, gwcPx = null;
+    try { sendPx = await guardedPriceUsd(TOK.SEND); gwcPx = await guardedPriceUsd(TOK.GWC); } catch {}
+    if (!same()) return 0;                                        // a wallet came or went while the prices were read: asked again
+    const floor = { SEND: ogFloorOk(held.SEND, sendPx), GWC: ogFloorOk(held.GWC, gwcPx) };
     let pick = ogAccountTier({ best, holdsAny, diamondOk, floor });
     /* A Gold or Diamond PAUSED when its wallets left (og_paused_tier) comes back only on $GWC held without a break since then
        across the wallets linked now (ogGoldHeldBack): sold out of $GWC while paused and bought back, it is not Gold. It is
@@ -5448,160 +5396,51 @@ function tokenDecimalsOf(addr) {   // the cached pair carries token.decimals; 18
     return Number.isInteger(d) && d >= 0 && d <= 36 ? d : 18;
   } catch { return 18; }
 }
-/* Does this member still hold MORE THAN DUST of a token, summed over every linked wallet? This is the sell-out test only — an OG
-   badge, and every other status, is lost by selling out completely (owner, 2026-11-17: "OG badges are still only lost by
-   selling out completely"). Every dollar floor ("$100 of the token") is a BOUGHT floor now and lives in boughtVerdict (the
-   verdicts lib/bought.js keeps): this function never prices anything. It used to stop at the first wallet over its bar, so a
-   bag split across wallets read as under it; it sums. Dust is 1e-9 of a token in its own decimals (10^max(0, decimals − 9)
-   of its smallest unit) — a 6-decimal coin's "dust" used to be a thousand whole tokens. A wallet that could not be read is no
-   answer: it throws (503) rather than return false, so a partial RPC outage never reads as a sell-out. */
-const tokenDustWei = (t) => 10n ** BigInt(Math.max(0, tokenDecimalsOf(t) - 9));
-async function holdsToken(uid, tokenAddr) {
+/* THE DOLLAR FLOOR CANNOT SILENTLY BECOME A DUST FLOOR.
+   This used to read: start `need` at OG_DUST_WEI, and raise it to the dollar equivalent only `if (minUsd > 0
+   && priceUsd > 0)`. Every community caller passes `c.c_price`, a NULLABLE cached grid price — so whenever
+   that price was missing or zero, a slot the whole site describes as "at least $100 of the token" was
+   satisfied by 1e-9 tokens, and with it the verified membership, the go-live count and the flat 10x.
+
+   The $SEND/$GWC path never had this hole: qualOf() answers `null` when it cannot read a price, and null
+   means "nothing has been decided" — it keeps the previous verdict rather than falling through to dust.
+   This now behaves the same way. When a dollar floor is ASKED FOR and no price is available, the answer is
+   `null`, not `false` and certainly not "dust will do":
+     - a GRANT path treats null as falsy and refuses, which is the fail-closed direction;
+     - the REVOCATION sweep must check for null explicitly and skip, so an unreadable price never takes a
+       slot away from someone who has done nothing wrong.
+   Callers that pass no dollar floor are unaffected and still get a plain boolean. */
+async function holdsToken(uid, tokenAddr, minUsd, priceUsd) {
   const t = String(tokenAddr || '').toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(t)) return false;
-  const need = tokenDustWei(t);
-  const key = uid + ':' + t + ':dust';
+  let need = OG_DUST_WEI;
+  if (minUsd > 0) {
+    if (!(priceUsd > 0)) return null;          // floor demanded, price unknown → undecided, never "dust passes"
+    const dec = tokenDecimalsOf(t);
+    const n = BigInt(Math.ceil(minUsd / priceUsd * 1e6)) * 10n ** BigInt(Math.max(0, dec - 6));
+    if (n > need) need = n;
+  }
+  const key = uid + ':' + t + ':' + need.toString();
   const addrs = walletAddresses(uid).slice(0, MAX_LINKED_WALLETS); // EVERY linkable wallet — a bag sitting in wallet #4 must count (refreshHolder reads the same set)
   if (!addrs.length) { tokenHoldCache.delete(key); return false; } // no linked wallet = verifiably holds nothing — and a cached "held" from before a disconnect must not outlive it
   const c = tokenHoldCache.get(key);
   if (c && now() - c.at < HOLDS_TTL) return c.held;
-  let sum = 0n, failed = 0;
-  for (const a of addrs) { try { sum += await erc20Balance(t, a); } catch { failed++; } }
+  let held = false, failed = 0;
+  for (const a of addrs) {
+    try { if ((await erc20Balance(t, a)) >= need) { held = true; break; } } catch { failed++; }
+  }
   // a disconnect/link that landed while we were awaiting the chain changed the wallet set → the answer is real for the
   // OLD set only; return it but never cache it under the new set
   const same = walletAddresses(uid).slice(0, MAX_LINKED_WALLETS).join() === addrs.join();
-  if (sum > need) { if (same) tokenHoldCache.set(key, { held: true, at: now() }); return true; }
+  if (held) { if (same) tokenHoldCache.set(key, { held: true, at: now() }); return true; }
+  // "not holding" is only VERIFIED when every wallet was actually read. Any failed read means we can't know — throw (503)
+  // rather than return false, so the disconnect/sweep callers keep OG / qualification exactly as their try/catch comments
+  // promise, and a partial RPC outage can never masquerade as a sell-out (or get cached as one).
   if (failed) { const e = new Error('holdings unreadable — chain RPC unavailable'); e.status = 503; throw e; }
   if (same) tokenHoldCache.set(key, { held: false, at: now() });
   return false;
 }
-/* "$100 bought" for one member and one token (owner, 2026-11-17: "make it $100 of value bought in the token not the current
-   token value, and change that rule across the platform"): $100 or more spent on counted buys — a buy counts once its coins
-   were held 24 hours, sold later or not — with at least $10 of that purchase cost still held, across every linked wallet;
-   a transfer in counts only as the original buy it is traced back to. From the verdict the background worker keeps
-   (lib/bought.js) — no chain read, no engine run, so it is safe on any request path. true / false, or null: no answer yet (no
-   verdict, one made for another wallet set, a coin whose trades are not read yet, a buy whose dollars could not be read).
-   null is never a no: a grant path refuses for now and says it is still reading; a revoking path keeps what the member had.
-   Asking for it is what puts the coin's tape and the member's verdict on the worker's list (prio: who goes first). */
-function boughtVerdict(uid, tokenAddr, prio) {
-  try { return BOUGHT ? BOUGHT.verdictOf(uid, String(tokenAddr || '').toLowerCase(), { prio: prio || 0 }) : null; } catch { return null; }
-}
-/* A member's own "$100 bought" figures for one coin, for their own dashboard: spent on counted buys, still held at cost, bought
-   in the last 24 hours (counts from maturesAt), the verdict and its reason. null figures are unknown, never 0. */
-function boughtView(uid, tokenAddr) {
-  const s = BOUGHT ? BOUGHT.stateOf(uid, String(tokenAddr || '').toLowerCase()) : null;
-  if (!s) return { verdict: null, fresh: false, reason: 'none' };
-  const n = (x) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
-  return { verdict: s.fresh ? s.floor : null, fresh: !!s.fresh, reason: s.reason, spentUsd: n(s.spentUsd), heldCostUsd: n(s.heldCostUsd), pendingUsd: n(s.pendingUsd),
-           maturesAt: s.maturesAtMs || null, firstBuyAt: s.firstBuyMs || null, at: s.at, minUsd: MIN_HOLD_USD, heldMinUsd: BOUGHT_LIB.LIMITS.HELD_MIN_USD };
-}
-/* What a member's wallets spent on counted buys of a token that reached them before `atMs`, capped at the pool's liquidity then
-   (owner's Q5: a Send Call's size is "spent under the Q1 rule, capped at pool liquidity"). From the verdict alone — no chain read.
-   { spendUsd, final, known }: known false = no verdict yet (0 is paid for now, and the rest when it exists); final = nothing that
-   arrived before atMs can still change it (no buy from before it still inside its 24 hours, and a complete verdict). */
-function boughtSpendAt(uid, tokenAddr, atMs, liqUsd) {
-  const t = String(tokenAddr || '').toLowerCase();
-  const s = BOUGHT ? BOUGHT.stateOf(uid, t) : null;
-  if (!s || !s.fresh) { try { if (BOUGHT) BOUGHT.want(uid, t, { prio: 1 }); } catch {} return { spendUsd: 0, final: false, known: false }; }
-  const cap = liqUsd > 0 ? liqUsd : Infinity;
-  let spent = 0;
-  for (const [a, usd] of s.counted || []) if (a != null && a <= atMs && Number.isFinite(usd)) spent += usd;
-  const waiting = (s.pendingLots || []).some(([a]) => a != null && a <= atMs);
-  return { spendUsd: Math.min(Math.round(spent * 100) / 100, cap), final: !!s.complete && !waiting, known: true };
-}
-/* A size paid later (size_topups): once the verdict says nothing before the call (or the Send) can still change, the difference
-   between the size it earns and the size already paid is paid — the same award, kind and caps as at the time, one ref per call —
-   and the figures are written. After TOPUP_GIVE_UP_MS it is settled on what counts by then. */
-const TOPUP_GIVE_UP_MS = 3 * 864e5;   // three days (DAY_MS is declared further down: a TDZ at boot)
-function sizeTopupApply(r) {
-  const sz = boughtSpendAt(r.user_id, r.token, r.at, r.liq);
-  const late = now() - r.at > TOPUP_GIVE_UP_MS;
-  if (!late && (!sz.known || !sz.final)) { db.prepare('UPDATE size_topups SET tries = tries + 1, due_at = ? WHERE id = ?').run(now() + 15 * 60e3, r.id); return 0; }
-  const spend = sz.known ? sz.spendUsd : r.paid_spend;
-  let paid = 0;
-  if (spend > r.paid_spend) {
-    if (r.kind === 'call') {
-      const c = db.prepare('SELECT id, user_id, squad_id, points_paid FROM calls WHERE id = ?').get(r.call_id);
-      if (c) {
-        const extra = Math.round(PTS.send_call * sizeMult(spend)) - Math.round(PTS.send_call * sizeMult(r.paid_spend));
-        if (extra > 0) paid = c.squad_id ? awardSquadXp(c.squad_id, r.user_id, Math.min(extra, callHeadroom(c.points_paid, CALL_POINTS_CAP)), 'callsize:' + c.id)
-          : awardPoints(r.user_id, 'send_call', extra, 'callsize:' + c.id, Math.min(callHeadroom(c.points_paid, CALL_POINTS_CAP), extra * OPEN_STACK_MAX));
-        db.prepare('UPDATE calls SET entry_spend_usd = ?, points_paid = points_paid + ? WHERE id = ?').run(spend, paid, c.id);
-      }
-    } else {
-      const c = db.prepare('SELECT id, squad_id FROM calls WHERE id = ?').get(r.call_id);
-      const h = db.prepare('SELECT points_paid FROM call_hops WHERE call_id = ? AND user_id = ?').get(r.call_id, r.user_id);
-      if (c && h) {
-        const base = Math.round(PTS.hop_on * addBonus(sizeMult(spend))) - (r.paid_spend > 0 ? Math.round(PTS.hop_on * addBonus(sizeMult(r.paid_spend))) : 0);
-        // a Send on nothing counted yet was paid nothing: its own award (one ref per Send, as at the time); else the difference
-        const ref = r.paid_spend > 0 ? 'hopsize:' + r.user_id + ':' + c.id : 'hop:' + r.user_id + ':' + c.id;
-        if (base > 0) paid = c.squad_id ? awardSquadXp(c.squad_id, r.user_id, Math.min(base, callHeadroom(h.points_paid, HOP_POINTS_CAP)), ref)
-          : awardPoints(r.user_id, 'hop_on', base, ref, Math.min(callHeadroom(h.points_paid, HOP_POINTS_CAP), base * OPEN_STACK_MAX), PTS.hop_on);
-        db.prepare('UPDATE call_hops SET spend_usd = ?, points_paid = points_paid + ? WHERE call_id = ? AND user_id = ?').run(spend, paid, c.id, r.user_id);
-      }
-    }
-  }
-  db.prepare('UPDATE size_topups SET done_at = ?, paid_spend = ? WHERE id = ?').run(now(), Math.max(spend, r.paid_spend), r.id);
-  return paid;
-}
-/* ===== The switch to "$100 bought" (owner, 2026-11-17: "Switch on at once") ====================================
-   No shadow period and no grace: each feature reads the new verdict as soon as it exists (until then, a member's status
-   stands). What the switch changed is still written down — hold_migration_log, one row per member and feature, the old
-   rule's status beside the new one's (no wallet, no figure) — counted on /admin, and every member who loses a status is
-   told, with their own figure and what is missing (never "buy"). Gains apply at once and need no note. */
-function holdLog(uid, feature, was, became, reason) {
-  try { return db.prepare('INSERT OR IGNORE INTO hold_migration_log (user_id, feature, was, became, reason, at) VALUES (?,?,?,?,?,?)').run(uid, feature, was == null ? null : String(was), became == null ? null : String(became), reason || null, now()).changes > 0; } catch { return false; }
-}
-// a lost status's note: the rule, the member's own figure and what is missing — within a notification's 240 characters
-function boughtLossText(sym, st, what) {
-  const HELD = BOUGHT_LIB.LIMITS.HELD_MIN_USD, $ = (x) => '$' + (Math.round((x || 0) * 100) / 100).toFixed(2);
-  const head = (what === 'boost' ? 'Your ' + sym + ' boost' : 'Your ' + sym + ' community slot') + ' now needs $' + MIN_HOLD_USD + ' of ' + sym + ' bought (a buy counts once held 24 h), $' + HELD + ' of it still held at cost. ';
-  const tail = what === 'boost' ? ' The streak pauses; it does not reset.' : ' The slot is paused.';
-  if (st.reason === 'none-held') return head + 'Your linked wallets hold none.' + tail;
-  if (st.reason === 'short-held') return head + 'Your wallets show ' + $(st.spentUsd) + ' bought, ' + $(st.heldCostUsd) + ' still held: ' + $(HELD - (st.heldCostUsd || 0)) + ' short.' + tail;
-  return head + 'Your wallets show ' + $(st.spentUsd) + ' bought: ' + $(MIN_HOLD_USD - (st.spentUsd || 0)) + ' short.' + tail;
-}
-// what /admin shows of it: the tapes, the verdicts, the switch's gains and losses per feature, unknowns, claim conflicts
-function boughtAdmin() {
-  const b = BOUGHT ? BOUGHT.stats() : null;
-  const rows = db.prepare("SELECT CASE WHEN feature LIKE 'community:%' THEN 'community' ELSE feature END f, was, became, COUNT(*) n FROM hold_migration_log GROUP BY 1, 2, 3").all();
-  const by = {};
-  for (const r of rows) {
-    const x = by[r.f] || (by[r.f] = { gained: 0, lost: 0, same: 0, raised: 0 });
-    const w = r.was == null ? null : r.was, a = r.became;
-    if (r.f === 'og') { if (Number(a) > Number(w || 0)) { x.raised += r.n; if (Number(a) >= 3) x.raisedGoldDiamond = (x.raisedGoldDiamond || 0) + r.n; } else x.same += r.n; continue; }
-    if (r.f === 'gate') { if (a === 'ok' && w !== 'ok') x.gained += r.n; else x.same += r.n; continue; }
-    if (w === '1' && a === '0') x.lost += r.n; else if (w !== '1' && a === '1') x.gained += r.n; else x.same += r.n;
-  }
-  const unknown = db.prepare('SELECT reason_code reason, why, COUNT(*) n FROM acq_state WHERE verdict IS NULL GROUP BY 1, 2 ORDER BY n DESC').all();
-  const topups = db.prepare('SELECT SUM(done_at IS NULL) open, SUM(done_at IS NOT NULL) done FROM size_topups').get() || {};
-  // coins by name (a coin's own address shortened: the overview carries no full address of any kind)
-  const short = (x) => String(x || '').replace(/0x([0-9a-f]{4})[0-9a-f]{36}/gi, '0x$1…');
-  const label = (t) => (DH_COINS[t] ? '$' + DH_COINS[t] : (() => { const c = db.prepare('SELECT symbol FROM communities WHERE token_addr = ?').get(t); return c ? '$' + c.symbol : short(t); })());
-  const coins = b ? (b.tokens || []).map((x) => ({ label: label(x.token), core: x.core, state: x.state, why: x.why ? short(x.why) : null, head: x.head, headWhy: x.headWhy ? short(x.headWhy) : null, yes: x.yes, no: x.no, unknown: x.unknown })) : [];
-  return { ruleV: b ? b.ruleV : null, coins, queue: b ? b.queue : 0, ethUsd: b ? b.ethUsd : null, claims: b ? b.claims : 0, conflicts: b ? b.conflicts : 0,
-           migration: by, unknown, sizeTopups: { open: topups.open || 0, done: topups.done || 0 } };
-}
-// what "no answer yet" says, wherever it has to (a join, a community start)
-function boughtCheckingText(sym, tokenAddr) {
-  const row = tokenAddr && BOUGHT ? BOUGHT.tokenRow(String(tokenAddr).toLowerCase()) : null;
-  if (row && row.state === 'too-big') return sym + '’s history is too long to keep here (over ' + BOUGHT_LIB.LIMITS.TAPE_MAX_TRANSFERS.toLocaleString('en-US') + ' transfers), so what your wallets bought of it cannot be counted. Nothing has been decided.';
-  if (row && row.state === 'no-pool') return sym + ' has no pool this site can read (against WETH or USDG), so what your wallets bought of it cannot be valued. Nothing has been decided.';
-  return 'We are reading ' + sym + '’s trades from the chain to see what your linked wallets bought — the first time takes a few minutes. Nothing has been decided; try again shortly.';
-}
-/* What a "no" says, with the member's own figures (their own wallets: shown only to them): how much counts as bought, what is
-   still held at cost, and what is missing — never "buy". */
-function boughtShortText(uid, tokenAddr, sym, doWhat) {
-  const s = BOUGHT ? BOUGHT.stateOf(uid, String(tokenAddr || '').toLowerCase()) : null;
-  const MIN = MIN_HOLD_USD, HELD = BOUGHT_LIB.LIMITS.HELD_MIN_USD, $ = (x) => '$' + (Math.round((x || 0) * 100) / 100).toFixed(2);
-  const rule = 'To ' + doWhat + ' takes $' + MIN + ' of ' + sym + ' bought from the market across your linked wallets (a buy counts once its coins were held 24 hours), with at least $' + HELD + ' of it still held at what you paid.';
-  if (!walletAddresses(uid).length) return rule + ' No wallet is linked to this account yet.';
-  if (!s || !s.fresh || s.floor !== false) return rule;
-  if (s.reason === 'none-held') return rule + ' Your linked wallets hold no ' + sym + '.';
-  if (s.reason === 'short-held') return rule + ' Your wallets show ' + $(s.spentUsd) + ' bought, but only ' + $(s.heldCostUsd) + ' of it is still held — ' + $(HELD - s.heldCostUsd) + ' short.';
-  return rule + ' Your wallets show ' + $(s.spentUsd) + ' bought — ' + $(MIN - (s.spentUsd || 0)) + ' short' + (s.pendingUsd > 0 ? '; another ' + $(s.pendingUsd) + ' counts once it has been held 24 hours' + (s.maturesAtMs ? ' (from ' + new Date(s.maturesAtMs).toISOString().slice(0, 16).replace('T', ' ') + ' UTC)' : '') : '') + '.';
-}
-function forgetHoldings(uid) { for (const k of tokenHoldCache.keys()) if (k.startsWith(uid + ':')) tokenHoldCache.delete(k); try { forgetSquadGates(uid); } catch {} try { if (BOUGHT) BOUGHT.touch(uid); } catch {} } // wallet set changed → re-read on next gate (community floors and squad gates alike), and "$100 bought" made again for the wallets linked now
+function forgetHoldings(uid) { for (const k of tokenHoldCache.keys()) if (k.startsWith(uid + ':')) tokenHoldCache.delete(k); try { forgetSquadGates(uid); } catch {} } // wallet set changed → re-read on next gate (community floors and squad gates alike)
 const RPC_DOWN_MSG = "couldn't verify your holdings right now — the chain RPC is unreachable, try again in a minute";
 // How much of a token does this user hold, and since when? (Convicted-In hover; public on-chain data of the wall owner's linked wallets.)
 const HELD_TTL = 10 * 60 * 1000;
@@ -5723,8 +5562,8 @@ function qualifyReason(me, c, ip, holds) {
   // skips the holding test AND the per-network anti-sybil cap, which is safe only because a demo
   // membership grants no Send Power multiplier (see joinCommunity) — so there is nothing to farm.
   if (c.demo) return null;
-  if (holds === null) return 'What your linked wallets bought of $' + c.symbol + ' is not read yet, so the $' + MIN_COMMUNITY_HOLD_USD + '-bought floor can’t be checked. You’re in as a member; the verified slot and the 10× follow once it is.';
-  if (!holds) return 'A verified slot takes $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' bought from the market across your linked wallets (a buy counts once held 24 hours), with $10 of it still held at cost.'; // "$100 bought" of the community's own token, read from the verdicts
+  if (holds === null) return 'We couldn’t read the $' + c.symbol + ' price, so your holding can’t be checked against the $' + MIN_COMMUNITY_HOLD_USD + ' floor yet. You’re in as a member; the verified slot and the 10× follow once we can price it.';
+  if (!holds) return 'You must hold at least $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' (verified on-chain from a linked wallet).'; // MUST hold the community's own token — read-only
   const ipk = ip ? bidx(ip) : null; // IPs are stored only as blind indexes
   const ipUses = db.prepare("SELECT COUNT(*) n FROM community_members WHERE community_id=? AND qualified=1 AND join_ip=?").get(c.id, ipk).n;
   /* Both network rules answer with ONE sentence that names neither: which rule matched would tell a member
@@ -6315,21 +6154,19 @@ async function joinCommunity(me, cid, ip, holds) {
   let wentLive = false;
   /* F028: the go-live test read a counter that was written once per account at join time and never
      re-read, so one bag moved through ten accounts in ten minutes tipped a community live for good and
-     paid the founder bonus. On the tipping join, every counted member is asked again first — since 2026-11-17
-     their "$100 bought" verdict, which the background worker keeps current with the chain: a member whose
-     verdict is a no is de-qualified, one with no answer yet is simply not counted toward the threshold this
-     time (nothing is taken from them). The join still proceeds either way. One bag walked through ten accounts
-     counts once: a wallet's buys back one other account at most (buy_claims). */
+     paid the founder bonus. On the tipping join, every counted member's holdings are re-read from the
+     chain first: a member who no longer holds is de-qualified, an unreadable one is simply not counted
+     toward the threshold this time (nothing is taken from them). The join still proceeds either way. */
   if (!wasLive && qual && !c.demo && (c.qual_count + 1) >= LIVE_THRESHOLD) {
     let confirmed = 0;
     for (const m of db.prepare('SELECT user_id FROM community_members WHERE community_id=? AND qualified=1 AND user_id<>?').all(cid, me.id)) {
-      const ok = boughtVerdict(m.user_id, c.token_addr, 1);
-      if (ok === true) { confirmed++; holdLog(m.user_id, 'community:' + cid, 1, 1, 'ok'); }
+      forgetHoldings(m.user_id);
+      let ok = null;
+      try { ok = await holdsToken(m.user_id, c.token_addr, MIN_COMMUNITY_HOLD_USD, c.c_price); } catch { ok = null; }
+      if (ok === true) confirmed++;
       else if (ok === false) {
         db.prepare('UPDATE community_members SET qualified=0, qual_check_at=? WHERE community_id=? AND user_id=?').run(now(), cid, m.user_id);
         db.prepare('UPDATE communities SET qual_count = MAX(qual_count-1,0) WHERE id=?').run(cid);
-        const st = BOUGHT && BOUGHT.stateOf(m.user_id, c.token_addr);
-        if (holdLog(m.user_id, 'community:' + cid, 1, 0, st && st.reason) && st) notify(m.user_id, '📉', boughtLossText('$' + c.symbol, st, 'community'), 'points', null, '/community?id=' + cid);
       }
     }
     c.qual_count = confirmed;   // only members the chain confirmed right now count toward tipping live
@@ -6524,16 +6361,11 @@ async function sweepCommunityHolders() {
        each in turn, and the community went live permanently on holdings that no longer existed by the
        time it did. Proposals inherit the same rows, so the same bag could also cast N votes. Re-verifying
        before go-live is the only point at which the threshold means anything. */
-    const rows = db.prepare("SELECT cm.community_id, cm.user_id, c.token_addr, c.c_price, c.status, c.symbol FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.qualified = 1 AND c.status IN ('live','pending') AND c.demo = 0 ORDER BY COALESCE(cm.qual_check_at, 0) ASC LIMIT 40").all();
+    const rows = db.prepare("SELECT cm.community_id, cm.user_id, c.token_addr, c.c_price, c.status FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.qualified = 1 AND c.status IN ('live','pending') AND c.demo = 0 ORDER BY COALESCE(cm.qual_check_at, 0) ASC LIMIT 40").all();
     for (const r of rows) {
-      const holds = boughtVerdict(r.user_id, r.token_addr);   // "$100 bought", from the verdict the worker keeps (no chain read here)
+      let holds; try { holds = await holdsToken(r.user_id, r.token_addr, MIN_COMMUNITY_HOLD_USD, r.c_price); } catch { continue; } // RPC error → skip (never revoke on a transient failure)
+      if (holds === null) continue;   // price unreadable → undecided. Same rule as an RPC error: never revoke on a read we did not make.
       const t = now();
-      // no answer yet (no verdict, one for another wallet set, the coin's trades not read): never revoke on an answer we do not have.
-      // The row's turn is stamped all the same, so forty unanswered members can never hold the sweep in place.
-      if (holds === null) { db.prepare('UPDATE community_members SET qual_check_at=? WHERE community_id=? AND user_id=?').run(t, r.community_id, r.user_id); continue; }
-      // the switch: this slot's first decision under "$100 bought", beside the old rule's (it was qualified); a loss is told, once
-      const firstUnderBought = holdLog(r.user_id, 'community:' + r.community_id, 1, holds ? 1 : 0, holds ? 'ok' : ((BOUGHT && BOUGHT.stateOf(r.user_id, r.token_addr)) || {}).reason);
-      if (!holds && firstUnderBought) { const st = BOUGHT && BOUGHT.stateOf(r.user_id, r.token_addr); if (st) notify(r.user_id, '📉', boughtLossText('$' + r.symbol, st, 'community'), 'points', null, '/community?id=' + r.community_id); }
       if (holds) { db.prepare('UPDATE community_members SET qual_check_at=? WHERE community_id=? AND user_id=?').run(t, r.community_id, r.user_id); continue; }
       try { // no longer holds → revoke qualification, the go-live count, and the 10× flag
         db.exec('BEGIN');
@@ -6640,8 +6472,6 @@ function gamifySummary(u) {
       minHoldUsd: MIN_HOLD_USD,
       sendUsd: h.send_usd == null ? null : h.send_usd, gwcUsd: h.gwc_usd == null ? null : h.gwc_usd,
       sendQualifies: h.send_qual == null ? null : !!h.send_qual, gwcQualifies: h.gwc_qual == null ? null : !!h.gwc_qual,
-      // "$100 bought" (2026-11-17): what qualifies is BOUGHT — the member's own figures from their verdicts (no chain read)
-      basis: 'bought', bought: { SEND: boughtView(u.id, TOK.SEND), GWC: boughtView(u.id, TOK.GWC) },
     } : null,
     /* ═══ THE OTHER HALF OF THE LEDGER ═══════════════════════════════════════════════════════════
        Everything below this line is state the site has always kept about an account and never shown it.
@@ -7295,16 +7125,76 @@ async function jgetH(url, headers) { // jget with custom headers (for the option
   } catch { return null; }
 }
 
-/* ===== Send Call SIZE (owner, 2026-11-17: "$100 bought"; Q5 "spent under the Q1 rule, capped at pool liquidity") =====
-   Each $100 the caller's linked wallets SPENT on counted buys of the token before the call = 1× Send Power: a buy counts once its
-   coins were held 24 hours (bought and sold inside them: $0 — the wash loop), a transfer in counts only as the original buy it is
-   traced back to, and the dollars are what the buy paid at its own block (lib/acquire.js), never today's price — capped at the
-   pool's liquidity at the call (a self-made pool pumped to a paper million credits what the pool holds). boughtSpendAt reads it
-   from the caller's verdict (no chain read on the request); a size not decided yet is paid later (size_topups). It replaced the
-   old live-price measure (bought-and-still-held × price), which read every wallet's history from the explorer on the request. */
-const SIZE_MULT_CAP = 100;               // cap the size boost at 100× ($10k+ bought) so one whale call can't mint unbounded points
-const SIZE_MAX_WALLETS = MAX_LINKED_WALLETS;   // every linked wallet (convictionHolding's reads)
-function sizeMult(spendUsd) { return Math.min(SIZE_MULT_CAP, Math.max(1, (spendUsd || 0) / 100)); } // each $100 bought = 1×, floor 1×
+/* ===== Send Call SIZE: read on-chain how much $ a user genuinely put into a token =====
+   We credit the live USD value of tokens they BOUGHT from the pool AND STILL HOLD: min(boughtFromPool, heldNow) × price.
+   The min() is the anti-cheat: it defeats msg.value spoofing (a router-refund tx shows a huge tx.value but delivers ~no
+   tokens → bought≈0), wash-buys / recycled buys (sold back → held≈0), self-pool paper value (must hold real tokens at the
+   live aggregated price), seasoned-then-dumped wallets, and airdrops/transfers-in (not counted — only pool buys). You have
+   to actually still be holding what you claim to have sent. Best-effort + fail-open to 0 so it never blocks a call. */
+const SIZE_MULT_CAP = 100;               // cap the size boost at 100× ($10k+ still held) so one whale call can't mint unbounded points
+/* Must equal MAX_LINKED_WALLETS, for the same reason OG_MAX_WALLETS must. This was 3 while the Holder
+   Boost read 5, so a bag sitting in wallet #4 raised your boost but was invisible to Send Call size —
+   the user sees one "linked wallets" list and is told everything in it counts, so a quieter second cap
+   reads as a bug whichever way it falls. It costs a little latency (each wallet is a transfer scan plus a
+   balance read), which is the honest price of the promise. */
+const SIZE_MAX_WALLETS = MAX_LINKED_WALLETS;
+function sizeMult(spendUsd) { return Math.min(SIZE_MULT_CAP, Math.max(1, (spendUsd || 0) / 100)); } // each $100 held-from-buys = 1×, floor 1×
+// full on-chain position: what they BOUGHT from the pool, what they still HOLD, and spend = min(both) (the anti-cheat basis).
+async function walletTokenPosition(userId, tokenAddr, pairAddr, priceUsd, liqUsd) {
+  const addrs = walletAddresses(userId);
+  if (!addrs.length || !pairAddr || !(priceUsd > 0)) return { boughtUsd: 0, heldUsd: 0, spendUsd: 0 };
+  const pair = pairAddr.toLowerCase();
+  let boughtTok = 0, heldTok = 0, spendTok = 0;
+  let posDec = null; try { posDec = await tokenDecimals(tokenAddr); } catch {}   // chain rows carry no token metadata
+  for (const a of addrs.slice(0, SIZE_MAX_WALLETS)) {
+    try {
+      const me = a.toLowerCase();
+      /* Walk more than one page. A single default page is ~50 transfers; a wallet that has traded the
+         token at all can push its own buys off the end of it, and the netting below is only honest over
+         the whole history we can see. Bounded, and a failed page simply ends the walk with what we have. */
+      // the wallet's whole history for this token: the explorer when a keyed one answers, the chain's own Transfer logs otherwise
+      let items = [];
+      try { items = await ogTransfers(a, tokenAddr, { noTime: true, tries: 2, backoffMs: 800 }); } catch { items = []; }
+      let routedPos; try { routedPos = await routedPoolFlows(tokenAddr, pair, me, items); } catch { routedPos = { take: () => 0n }; }   // unread: only direct pool transfers count, as before
+      let inRaw = 0n, outRaw = 0n, dec = posDec != null ? posDec : 18;
+      for (const it of items) {
+        if (posDec == null && it.token && it.token.decimals != null) dec = Number(it.token.decimals) || 18;
+        const from = ((it.from && it.from.hash) || '').toLowerCase();
+        const to = ((it.to && it.to.hash) || '').toLowerCase();
+        let v = 0n; try { v = BigInt((it.total && it.total.value) || '0'); } catch { continue; }
+        if (to === me) inRaw += from === pair ? v : routedPos.take(it, 'out', v);          // tokens the POOL sent this wallet (directly, or through a router in the same transaction)
+        if (from === me) outRaw += to === pair ? v : routedPos.take(it, 'in', v);          // tokens this wallet sent the POOL (the same, the other way)
+      }
+      /* NET, not gross. "Anything the pair sent me is a buy" is not true of a Uniswap V2 pair: skim(to)
+         and burn(to) both transfer pair → you with no purchase behind them. So a token deployer pulling
+         their own liquidity was credited for the tokens they took back out — up to the full 100x size
+         multiplier — and so was anyone who donated tokens to a pool and skimmed them straight back.
+         Netting closes both, because each attack has to move tokens INTO the pair first:
+           · skim  — you can only skim what you donated, so out >= in and the net is zero.
+           · burn  — the LP position was minted by sending tokens in, so removing it nets back to zero.
+           · wash  — buy, sell to the pool, repeat: the sells cancel the buys instead of stacking.
+         A genuine buyer who later took some profit nets down to what they actually still put in, which
+         is what "how much did you send into this coin" was always supposed to mean. */
+      const netRaw = inRaw > outRaw ? inRaw - outRaw : 0n;
+      let heldRaw = 0n; try { heldRaw = await erc20Balance(tokenAddr, a); } catch {}
+      const div = Math.pow(10, dec);
+      boughtTok += Number(netRaw) / div;
+      heldTok += Number(heldRaw) / div;
+      spendTok += Number(netRaw < heldRaw ? netRaw : heldRaw) / div; // net-bought AND still held
+    } catch {}
+  }
+  /* Valued at the live price — which a thin pool's owner sets. The position can never be worth more than
+     the pool it is priced against holds, so a self-made $600 pool pumped to a paper million credits $600,
+     not a million. Only applied when the caller knows the pool's liquidity; MIN_CALL_LIQ is the floor
+     underneath it either way. */
+  const cap = (liqUsd != null && liqUsd > 0) ? liqUsd : Infinity;
+  const val = (tok) => Math.min(tok * priceUsd, cap);
+  return { boughtUsd: val(boughtTok), heldUsd: val(heldTok), spendUsd: val(spendTok) };
+}
+// USD they bought & still hold (the size-multiplier basis) — thin wrapper so the size feature is unchanged
+async function callSpendUsd(userId, tokenAddr, pairAddr, priceUsd, liqUsd) {
+  return (await walletTokenPosition(userId, tokenAddr, pairAddr, priceUsd, liqUsd)).spendUsd;
+}
 
 /* ===== Honeypot & contract read =====
    Fetch the VERIFIED Solidity source and heuristically flag owner powers that can trap or dump on holders
@@ -8630,7 +8520,7 @@ const dhTimer = setInterval(() => {
   dhResolve().catch(() => {});
 }, 60 * 1000);
 dhTimer.unref();
-function ledgerApply(tok, logs, upTo, firstSeen, watch, from) {
+function ledgerApply(tok, logs, upTo, firstSeen, watch) {
   const delta = new Map();
   let firstBlock = firstSeen;
   for (const l of logs) {
@@ -8646,10 +8536,6 @@ function ledgerApply(tok, logs, upTo, firstSeen, watch, from) {
   try {
     for (const [w, d] of delta) { if (d === 0n) continue; const cur = get.get(tok, w); const nb = (cur ? BigInt(cur.balance) : 0n) + d; put.run(tok, w, nb.toString(), nb > 0n ? 1 : 0); }
     if (watch) { db.exec('SAVEPOINT dh_hook'); try { dhLedgerHook(tok, logs); db.exec('RELEASE dh_hook'); } catch (e) { try { db.exec('ROLLBACK TO dh_hook'); db.exec('RELEASE dh_hook'); } catch {} console.warn('[diamond] the ledger hook failed on a batch (the ledger itself went on): ' + ((e && e.message) || e)); } }
-    /* "$100 bought": a taped coin's Transfers go on its tape in the same transaction as the balances they move — the first build
-       too (watch false): the tape reads nothing the ledger already did. Its own savepoint: a batch the tape refuses costs the
-       ledger nothing (the tape's next append starts a new stretch there, and its walker back-fills the gap). */
-    if (TAPE && BOUGHT && BOUGHT.taped(tok)) { db.exec('SAVEPOINT tape_hook'); try { TAPE.appendTransfers(tok, logs, { from, upTo }); db.exec('RELEASE tape_hook'); } catch (e) { try { db.exec('ROLLBACK TO tape_hook'); db.exec('RELEASE tape_hook'); } catch {} console.warn('[bought] the tape hook failed on a batch (the ledger itself went on): ' + ((e && e.message) || e)); } }
     db.prepare(`INSERT INTO holder_index (token_addr, last_block, first_block, logs, status, updated_at) VALUES (?,?,?,?,'building',?)
       ON CONFLICT(token_addr) DO UPDATE SET last_block=excluded.last_block, first_block=COALESCE(holder_index.first_block, excluded.first_block), logs=holder_index.logs + ?,
         status=CASE WHEN holder_index.status='ok' THEN 'ok' ELSE 'building' END`).run(tok, upTo, firstBlock, logs.length, now(), logs.length);
@@ -8688,7 +8574,7 @@ async function indexHolders(tokenAddr) {        // single-flight, incremental, r
         if (!Array.isArray(out)) throw new Error('the chain did not answer');
         total += out.length; reads++;
         if (total > LEDGER_MAX_LOGS) throw new Error('ledger too large');
-        firstBlock = ledgerApply(tok, out, to, firstBlock, watch, from);
+        firstBlock = ledgerApply(tok, out, to, firstBlock, watch);
         from = to + 1;
         if (out.length < 2500) window = Math.min(window * 2, Math.max(1, latest - from + 1));
         if (from <= latest) await new Promise((r) => setTimeout(r, LEDGER_PAUSE_MS));
@@ -8748,99 +8634,6 @@ async function ensureLedger(tok, opts = {}) {
   if (!v && !holderLedger(tok) && deadline - now() > 1500) v = await until(indexHolders(tok).catch(() => null));
   return v || holderLedger(tok) || cur;
 }
-
-/* ===== "$100 bought": the coin tape and the verdicts (owner, 2026-11-17; lib/tape.js, lib/bought.js) ====================
-   The tape reads through the same pace every whole-wallet read shares (paceTake, at the tape's weights: a log window over
-   200,000 blocks weighs 5) and the ledger's slow lane: the node's first refusal stands every ledger-class read down for
-   LEDGER_COOL_MS, and the next tick carries on from the cursors. Never the server's pacedBatchAll (it waits a throttle out
-   for ten minutes): the tape gives way at once, as the ledger does. Every request carries HONEST_UA (rpc / rpcBatch). */
-TAPE = TAPE_LIB.createTape({
-  db, now,
-  rpc: (m, p, w) => _rpcSlow(async () => { await paceTake(w || 1); return rpc(m, p, true); }),
-  pacedBatch: (calls, w) => _rpcSlow(async () => { await paceTake(w || calls.length); return rpcBatch(calls); }),
-  coolUntil: () => ledgerCoolUntil,
-  cool: () => { ledgerCoolUntil = now() + LEDGER_COOL_MS; },
-  crypto: { enc: encField, dec: decField, idx: bidx },
-  factories: { [FACTORY]: 'v2' },   // the chain's Uniswap-v2 factory; a v3 factory joins once one is confirmed here
-});
-// a member's linked wallets as the verdicts key them: identities ids (wallets_sig) and the addresses, oldest first
-function boughtWallets(uid) {
-  return db.prepare("SELECT id, identifier_enc FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY id").all(uid)
-    .map((r) => ({ id: r.id, addr: String(decField(r.identifier_enc) || '').toLowerCase() })).filter((w) => /^0x[0-9a-f]{40}$/.test(w.addr)).slice(0, MAX_LINKED_WALLETS);
-}
-// a coin's v2 pools against WETH and USDG (the factory's pairs), and which side the coin is on
-async function boughtPoolsFor(token) {
-  const t = String(token).toLowerCase(), out = [];
-  const known = Object.entries(TOK).find(([, a]) => a === t);
-  const cands = new Set(known ? [OG_PAIR[known[0]]] : []);
-  for (const q of [WETH_ADDR, USDG_ADDR]) { const p = await _rpcSlow(() => factoryGetPair(t, q, true)); if (p) cands.add(String(p).toLowerCase()); }
-  for (const pool of cands) {
-    const lay = await _rpcSlow(() => pairLayoutStrict(pool));
-    if (!lay || !lay.token0 || !lay.token1) continue;
-    const zero = lay.token0 === t, other = zero ? lay.token1 : lay.token0;
-    if (!zero && lay.token1 !== t) continue;
-    out.push({ pool, tokenIsZero: zero, quote: other === WETH_ADDR ? 'WETH' : other === USDG_ADDR ? 'USDG' : other });
-  }
-  return out;
-}
-BOUGHT = BOUGHT_LIB.createBought({
-  db, now, tape: TAPE, enc: encField, dec: decField, idx: bidx,
-  coins: { SEND: TOK.SEND, GWC: TOK.GWC },
-  diamond: { from: OG_DIAMOND_START, until: OG_DIAMOND_END },
-  sys: [SWAP_ROUTER, FACTORY, WETH_ADDR],
-  wallets: boughtWallets,
-  followed: (uid, token) => { const coin = DH_COINS[String(token).toLowerCase()]; if (!coin) return []; return db.prepare('SELECT addr_enc FROM dh_follow WHERE user_id = ? AND token = ?').all(uid, coin).map((r) => String(decField(r.addr_enc) || '').toLowerCase()).filter((a) => /^0x[0-9a-f]{40}$/.test(a)); },
-  refreshLedger: (t) => (DH_COINS[t] ? indexHolders(t) : ensureLedger(t, { wait: true, waitMs: 60000 })),
-  ledger: (t) => { const r = db.prepare('SELECT status, first_block, last_block, logs, consistent, decimals FROM holder_index WHERE token_addr = ?').get(t); return r ? { status: r.status, firstBlock: r.first_block, lastBlock: r.last_block, logs: r.logs || 0, consistent: r.consistent !== 0, decimals: r.decimals } : null; },
-  poolsFor: boughtPoolsFor,
-  plumbing: () => { const k = { fees: new Set(), routers: new Set() }; try { for (const r of db.prepare('SELECT addr, kind FROM bundle_plumbing').all()) (r.kind === 'router' ? k.routers : k.fees).add(r.addr); } catch {} return k; },
-  claimedElsewhere: (uid, wallet) => { const i = bidx(String(wallet).toLowerCase()); return !!(db.prepare('SELECT 1 FROM og_claims WHERE addr_idx = ? AND user_id <> ?').get(i, uid) || db.prepare('SELECT 1 FROM gate_claims WHERE addr_idx = ? AND user_id <> ?').get(i, uid)); },
-  onVerdict: (uid, token, before, after, opts) => boughtOnVerdict(uid, token, before, after, opts),
-  log: (m) => console.warn('[bought] ' + m),
-});
-/* The tape's tick, once a minute: $SEND's and $GWC's ledgers forward (their batches land on the tape in ledgerApply), every
-   stream walked from its cursor (TICK_READS requests at most — the one-time back-fill is many ticks of this), Swap blocks dated,
-   the ETH/USD grid folded. One at a time; the node's refusal ends a tick early and the next one carries on. */
-const BOUGHT_TICK_MS = 60 * 1000;
-const boughtTapeTimer = setInterval(() => { if (now() < ledgerCoolUntil) return; BOUGHT.tick().catch((e) => console.warn('[bought] tick: ' + ((e && e.message) || e))); }, BOUGHT_TICK_MS);
-boughtTapeTimer.unref();
-/* The verdicts' worker, every 15 seconds: a few (member, coin) verdicts a pass — the ones a feature asked for first (a link, a
-   gate check, a community join), then rows the tape moved under, buys turning 24 hours old, unknowns retried, members with no
-   verdict yet. In the background only: no request ever waits on it. */
-const BOUGHT_WORK_MS = 15 * 1000;
-const boughtWorkTimer = setInterval(() => { BOUGHT.work().catch((e) => console.warn('[bought] worker: ' + ((e && e.message) || e))); }, BOUGHT_WORK_MS);
-boughtWorkTimer.unref();
-/* A verdict was written (lib/bought.js, in the background). The OG badge decides on it at once (checkOg reads only the verdicts:
-   no chain read), carrying a link's right to be asked after the grant window; the holder boost, the gate and the communities
-   read it on their own next turn. */
-function boughtOnVerdict(uid, token, before, after, opts) {
-  const coin = DH_COINS[token];
-  if (coin && after && after.fresh) {
-    // the switch: a member's first answer under "$100 bought" is logged beside what the old rule said (holder_state's qualification)
-    if (after.floor !== null) {
-      const h = db.prepare('SELECT send_qual, gwc_qual FROM holder_state WHERE user_id = ?').get(uid);
-      const was = h ? (coin === 'SEND' ? h.send_qual : h.gwc_qual) : null, became = after.floor ? 1 : 0;
-      if (holdLog(uid, 'holder:' + coin, was, became, after.reason) && was === 1 && became === 0) notify(uid, '📉', boughtLossText('$' + coin, after, 'boost'), 'points');
-    }
-    const ogWas = db.prepare('SELECT og_tier, og_rule_v2_at FROM users WHERE id = ?').get(uid) || {};
-    checkOg(uid, { link: !!(opts && opts.link) }).then(() => {
-      if (ogWas.og_rule_v2_at) return;
-      // OG is decided under the new rule once both coins have a verdict for the wallets linked now: logged once, raised or not
-      const sv = BOUGHT.stateOf(uid, TOK.SEND), gv = BOUGHT.stateOf(uid, TOK.GWC);
-      if (!sv || !sv.fresh || sv.floor === null || !gv || !gv.fresh) return;
-      const t2 = (db.prepare('SELECT og_tier FROM users WHERE id = ?').get(uid) || {}).og_tier || 0;
-      holdLog(uid, 'og', ogWas.og_tier || 0, t2, t2 > (ogWas.og_tier || 0) ? 'raised' : null);
-      db.prepare('UPDATE users SET og_rule_v2_at = ? WHERE id = ? AND og_rule_v2_at IS NULL').run(now(), uid);
-    }).catch(() => {});
-  }
-  // a Send Call's or a Send It's size waiting on this verdict
-  try { for (const r of db.prepare('SELECT * FROM size_topups WHERE done_at IS NULL AND user_id = ? AND token = ?').all(uid, token)) sizeTopupApply(r); } catch (e) { console.warn('[bought] size top-up: ' + e.message); }
-}
-// the size top-ups whose verdict has not come round on its own: asked for, and settled after TOPUP_GIVE_UP_MS whatever happens
-const sizeTopupTimer = setInterval(() => {
-  try { for (const r of db.prepare('SELECT * FROM size_topups WHERE done_at IS NULL AND due_at <= ? ORDER BY due_at LIMIT 20').all(now())) sizeTopupApply(r); } catch (e) { console.warn('[bought] size top-ups: ' + e.message); }
-}, 5 * 60 * 1000);
-sizeTopupTimer.unref();
 
 let pairsRaw = [];          // [{pair, token0, token1, block}] newest last
 let pairsScanBlock = 0;
@@ -15278,7 +15071,6 @@ function adminOverview() {
     invites: { memberUnused: count('member', 'unused'), memberPending: count('member', 'pending'), memberUsed: count('member', 'used'), seedCodes: count('seed', 'unused') + count('seed', 'pending') + count('seed', 'used'), seedCodesOpen: seedCodesOpen(), perMember: INVITE_GRANT, adminUnused: count('admin', 'unused'), adminPending: count('admin', 'pending'), adminUsed: count('admin', 'used') },
     reports: { open: one('SELECT COUNT(*) n FROM reports WHERE resolved_at IS NULL').n },
     server: { node: process.version, commit: BOOT_COMMIT, checkoutCommit: gitCommit(), startedAt: BOOT_AT, uptimeSeconds: Math.round((Date.now() - BOOT_AT) / 1000), health: healthCheck() },
-    bought: (() => { try { return boughtAdmin(); } catch (e) { return { error: e.message }; } })(),   // "$100 bought": the tapes, the verdicts, the switch's counts (no member named)
     storage: { dbBytes, keySource: DATA_KEY_SOURCE, keyBesideDatabase: DATA_KEY_SOURCE === 'data-dir' || DATA_KEY_SOURCE === 'file-same-volume', backupDir: BACKUP_DIR, backupsOutsideDataDir: BACKUP_OFF_VOLUME, backupsKept: BACKUP_KEEP, backups, keys: keyStatus() },
   };
 }
@@ -16194,8 +15986,8 @@ function flagUser(userId, reason, costMult) {
   // early differs, so a ring that manufactured fake volume cannot exit as cheaply as someone who posted
   // too fast once.
   const mult = Number(costMult) > 1 ? Number(costMult) : 1;
-  db.prepare('UPDATE users SET strikes=?, restrict_level=?, restrict_reason=?, restricted_until=?, flagged_at=?, redeem_base_send=?, redeem_dur=?, redeem_mult=?, redeem_hold_until=0, redeem_floor=0, redeem_since=? WHERE id=?')
-    .run(strikes, level, String(reason).slice(0, 200), until, now(), baseSend, dur, mult, now(), userId);
+  db.prepare('UPDATE users SET strikes=?, restrict_level=?, restrict_reason=?, restricted_until=?, flagged_at=?, redeem_base_send=?, redeem_dur=?, redeem_mult=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?')
+    .run(strikes, level, String(reason).slice(0, 200), until, now(), baseSend, dur, mult, userId);
   if (typeof oidcRevokeUser === 'function') oidcRevokeUser(userId);   // read-only accounts do not sign in to apps (Sign in with Send); the guard lets suites run this function on its own
   return true;
 }
@@ -16210,17 +16002,17 @@ function checkProbation(userId, sendTok) {
   }
   if (sendTok < u.redeem_floor * 0.98) { // sold >2% below the floor before the hold was up → read-only returns
     if ((u.restrict_level || 0) >= 3) { // a broken PERMANENT buy-out hold → back to permanent (buy-out again costs $1000)
-      db.prepare('UPDATE users SET restricted_until=?, restrict_reason=?, redeem_dur=0, redeem_base_send=?, redeem_hold_until=0, redeem_floor=0, redeem_since=? WHERE id=?')
-        .run(PERM_UNTIL, 'You sold your $SEND before the hold was up — your permanent read-only is back.', sendTok, now(), userId);
+      db.prepare('UPDATE users SET restricted_until=?, restrict_reason=?, redeem_dur=0, redeem_base_send=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?')
+        .run(PERM_UNTIL, 'You sold your $SEND before the hold was up — your permanent read-only is back.', sendTok, userId);
       if (typeof oidcRevokeUser === 'function') oidcRevokeUser(userId);   // read-only accounts do not sign in to apps: every app's tokens end now, not when it lifts
-      notify(userId, '🔇', 'You sold your $SEND before the hold was up — your permanent read-only is back. $SEND bought from now on (each buy counting once held 24 hours) can lift it again.', 'restriction');
+      notify(userId, '🔇', 'You sold your $SEND before the hold was up — your permanent read-only is back. Buy & hold $SEND again to lift it.', 'restriction');
       return;
     }
     const newDur = Math.max(DAY_MS, (u.redeem_dur || DAY_MS) * 2); // timed → returns doubled
-    db.prepare('UPDATE users SET restricted_until=?, restrict_reason=?, redeem_dur=?, redeem_base_send=?, redeem_hold_until=0, redeem_floor=0, redeem_since=? WHERE id=?')
-      .run(now() + newDur, 'You sold your $SEND before the hold was up — read-only is back, and the timer is doubled.', newDur, sendTok, now(), userId);
+    db.prepare('UPDATE users SET restricted_until=?, restrict_reason=?, redeem_dur=?, redeem_base_send=?, redeem_hold_until=0, redeem_floor=0 WHERE id=?')
+      .run(now() + newDur, 'You sold your $SEND before the hold was up — read-only is back, and the timer is doubled.', newDur, sendTok, userId);
     if (typeof oidcRevokeUser === 'function') oidcRevokeUser(userId);   // read-only accounts do not sign in to apps: every app's tokens end now, not when it lifts
-    notify(userId, '🔇', 'You sold your $SEND before the hold was up — read-only is back, and doubled. $SEND bought from now on (each buy counting once held 24 hours) can lift it again.', 'restriction');
+    notify(userId, '🔇', 'You sold your $SEND before the hold was up — read-only is back, and doubled. Buy & hold again to lift it.', 'restriction');
   }
 }
 /* THE PARTICIPATION GATE'S FIRST-DAY WATCH. Selling the bag that opened the door inside its first day is
@@ -16272,7 +16064,7 @@ async function checkGateHold(userId) {
   const after = db.prepare('SELECT restrict_level, redeem_dur, strikes FROM users WHERE id = ?').get(userId) || {};
   const lvl = after.restrict_level || 1;
   const span = lvl >= 3 ? 'for good' : 'for ' + humanDur(after.redeem_dur || PROOF_SELL_WINDOW_MS);
-  notify(userId, '🔇', reason + ' That is strike ' + (after.strikes || 1) + ' of 3 — read-only ' + span + '. $SEND bought from now on lifts it early ($25 a day, $1000 if permanent); sold inside the hold, it comes back doubled.', 'restriction');
+  notify(userId, '🔇', reason + ' That is strike ' + (after.strikes || 1) + ' of 3 — read-only ' + span + '. You can still read every part of the site; buying and holding $SEND lifts it early ($25 a day of the sanction, $1000 for a permanent one), and selling that bag before the hold is up brings it back doubled.', 'restriction');
 }
 const _probTick = new Map();
 // fire-and-forget on-chain re-check while EITHER hold window is open — the redemption deal or the gate's
@@ -16337,10 +16129,10 @@ try {
   if (n) console.log('holder proofs: re-opened ' + n + ' interrupted by the last shutdown');
 } catch {}
 
-function queueHolderProof(userId, front) {
+function queueHolderProof(userId) {
   if (proofQueue.includes(userId) || proofQueue.length >= PROOF_QUEUE_MAX) return false;
   db.prepare("UPDATE users SET holder_state = 'pending', holder_proof_at = ? WHERE id = ?").run(now(), userId);
-  if (front) proofQueue.unshift(userId); else proofQueue.push(userId);   // a member pressing the button goes before the re-asks
+  proofQueue.push(userId);
   return true;
 }
 async function runProofQueue() {
@@ -16357,15 +16149,24 @@ async function runProofQueue() {
         .run(now(), 'No wallet is linked to this account yet — connect one and we will check it.', userId);
       return;
     }
-    /* "$100 bought" (owner, 2026-11-17): the door reads the member's $SEND verdict (lib/bought.js) — made here and now when there
-       is none for the wallets linked now (this queue is background work: nobody's request waits on it), else the one the worker
-       keeps. A coin tape not read far enough, or a buy whose dollars could not be read, is no answer: the door stays as it was. */
-    let st = BOUGHT ? BOUGHT.stateOf(userId, TOK.SEND) : null;
-    if (BOUGHT && (!st || !st.fresh)) { try { st = await BOUGHT.evaluate(userId, TOK.SEND); } catch { st = null; } }
-    const unreadable = false;
-    let v = holderProofVerdict(st && st.fresh ? st : null, now());
-    // the switch: the first decision under "$100 bought" beside the old one (its state), and the reason as a code (re-asked by rule, not by copy)
-    if (!v.unknown) { holdLog(userId, 'gate', u.holder_state || 'none', v.ok ? 'ok' : 'failed', st && st.reason); try { db.prepare('UPDATE users SET holder_reason_code = ? WHERE id = ?').run(v.ok ? 'ok' : (st && st.reason) || 'refused', userId); } catch {} }
+    const scans = {};
+    let unreadable = false;
+    for (const c of PROOF_COINS) {
+      scans[c.key] = [];
+      for (const a of addrs) {
+        // One wallet failing is not the account failing: isolate it, and let the verdict decide whether
+        // what we DID read is enough. A transient 429 must never be recorded as "you do not qualify".
+        try { scans[c.key].push(await ogScan(a, c.token, c.pair, c.launch)); }
+        catch { unreadable = true; }
+      }
+    }
+    // One price now, and it is the hardened read: sendPriceUsd() values at the LOWER of spot and the 24h
+    // median and refuses outright during a spike, so a pump cannot buy anyone through the door, and an
+    // unreadable price leaves the door exactly where it was. ($GWC used to be fetched here too; the gate
+    // stopped testing it, and a network call for a number nothing reads is just a slower door.)
+    let prices = {};
+    try { prices = { SEND: await sendPriceUsd().catch(() => null) }; } catch {}
+    let v = holderProofVerdict(scans, now(), prices);
     const t = now();
     if (v.ok) {
       /* F021: one wallet, one account. A wallet that already admitted somebody else cannot admit this
@@ -16375,21 +16176,20 @@ async function runProofQueue() {
     }
     if (v.ok) {
       for (const a of addrs) { try { db.prepare('INSERT OR IGNORE INTO gate_claims (addr_idx, user_id, claimed_at) VALUES (?,?,?)').run(bidx(a), userId, t); } catch {} }
-      /* The door opens, and the first day is watched. The window runs from the LATEST counted $SEND arrival — a buy, or coins
-         traced back to one that reached a linked wallet (H12: a bag transferred in today is watched like a buy made today) — so
-         somebody who has held since long before today is never in one: `until` lands in the past and stores as 0. The floor is
-         the balance that opened the door, in tokens, because that is the unit refreshHolder reports. */
+      /* The door opens, and the first day is watched. The window runs from their LAST buy, so somebody
+         who has held since long before today is never in one — `until` lands in the past and stores as 0.
+         The floor is the balance that opened the door, in tokens, because that is the unit refreshHolder
+         reports and a price cannot move a floor that is denominated in the asset itself. */
       const d = v.detail && v.detail.SEND;
-      const until = d && d.lastArrivedMs ? d.lastArrivedMs + PROOF_SELL_WINDOW_MS : 0;
+      const until = d && d.lastBuyMs ? d.lastBuyMs + PROOF_SELL_WINDOW_MS : 0;
       const watching = until > t;
-      const floor = watching && d ? Number(d.heldWei || 0) / 1e18 : 0;
+      const floor = watching && d ? Number(d.balWei || 0) / 1e18 : 0;
       db.prepare("UPDATE users SET holder_state = 'ok', holder_verified_at = ?, holder_proof_at = ?, holder_proof_reason = NULL, holder_proof = ?, gate_hold_until = ?, gate_floor = ?, gate_wallets = ? WHERE id = ?")
         .run(t, t, encField(JSON.stringify(v.detail)), watching ? until : 0, floor,
              watching ? encField(JSON.stringify(addrs.map((x) => String(x).toLowerCase()))) : null, userId);   // the account→wallet link, encrypted like every other copy of it
-      // a notification keeps 240 characters: both say all of it within them
       notify(userId, '✅', watching
-        ? 'Wallet verified — $' + MIN_HOLD_USD + '+ of $SEND bought, some still held. The site is open to you. 🚀 Keep that bag for ' + humanLeft(until - t) + ': letting it drop over ~2% before then is a strike (read-only a day, then a week, then for good).'
-        : 'Wallet verified — your linked wallets show $' + MIN_HOLD_USD + ' or more of $SEND bought, some of it still held. The whole site is open to you now. 🚀', 'wallet');
+        ? 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀 Keep that bag for ' + humanLeft(until - t) + ' and you are all set; let that balance drop by more than about 2% before then and it counts as a strike: read-only for a day the first time, a week the second, for good the third — $25 of $SEND a day buys it out, and selling that before the hold is up doubles it.'
+        : 'Wallet verified — you hold $' + MIN_HOLD_USD + ' of $SEND. The whole site is open to you now. 🚀', 'wallet');
     } else if (v.unknown || unreadable) {
       // not a verdict. Leave the door exactly as it was and say so.
       db.prepare("UPDATE users SET holder_state = 'none', holder_proof_at = ?, holder_proof_reason = ? WHERE id = ?")
@@ -16434,25 +16234,6 @@ function requeueRuleChangedProofs() {
     if (rows.length) console.log('holder proofs: re-asking ' + rows.length + ' refusal(s) made before routed buys were counted');
   } catch (e) { console.error('proof rule requeue', e && e.message); }
 }
-/* "$100 bought": every refusal the old rule made (a priced floor, "no market buy", "sold back more") is asked once more under the
-   new one — oldest first, at most what the queue has room for (twenty places are always left for members pressing the button
-   themselves), and only once $SEND's tape is read (else every answer would be "still reading"). holder_reason_code is the
-   cursor: a refusal decided under the new rule has one, and is not asked again by this. */
-function requeueBoughtRuleProofs() {
-  try {
-    const row = BOUGHT && BOUGHT.tokenRow(TOK.SEND);
-    if (!row || row.state !== 'ok' || TAPE_LIB.tapeHead(db, TOK.SEND, Object.keys(row.pools || {})).block == null) return;
-    const room = PROOF_QUEUE_MAX - 20 - proofQueue.length;
-    if (room <= 0) return;
-    const rows = db.prepare(`SELECT u.id FROM users u WHERE u.holder_verified_at IS NULL AND u.system = 0 AND u.deleted_at IS NULL
-                               AND u.holder_state = 'failed' AND u.holder_reason_code IS NULL
-                               AND EXISTS (SELECT 1 FROM identities i WHERE i.user_id = u.id AND i.type = 'wallet')
-                             ORDER BY u.holder_proof_at ASC LIMIT ?`).all(Math.min(room, 50));
-    for (const r of rows) if (!proofQueue.includes(r.id)) queueHolderProof(r.id);
-    if (rows.length) console.log('holder proofs: re-asking ' + rows.length + ' refusal(s) the old rule made, under "$100 bought"');
-  } catch (e) { console.error('proof bought requeue', e && e.message); }
-}
-setInterval(() => requeueBoughtRuleProofs(), PROOF_RETRY_MS).unref();
 setTimeout(() => requeueUnreadProofs('boot'), 20000).unref();
 setTimeout(() => requeueRuleChangedProofs(), 25000).unref();
 setInterval(() => requeueUnreadProofs(), PROOF_RETRY_MS).unref();
@@ -16495,35 +16276,53 @@ const PROOF_SELL_WINDOW_MS = DAY_MS;
 const PROOF_COINS = [
   { key: 'SEND', label: '$SEND', token: TOK.SEND, pair: OG_PAIR.SEND, launch: OG_LAUNCH.SEND },
 ];
-/* Pure, so it can be tested without a chain. `st` is the member's $SEND verdict (lib/bought.js stateOf, fresh — or null when
-   there is none for the wallets linked now). Returns { ok, reason, detail }, with `unknown` when nothing was decided (never
-   recorded as a refusal) and `short` when the only thing missing is dollars bought or held.
+/* Pure, so it can be tested without a chain. `scans` is { SEND: [scan,...] } — one ogScan per wallet.
+   Returns { ok, reason, detail }. A coin whose scans are ALL missing means the chain could not be read,
+   which is not a failure and must never be recorded as one. */
+function holderProofVerdict(scans, nowMs, prices) {
+  const t = nowMs || now();
+  const detail = {};
+  for (const c of PROOF_COINS) {
+    const rows = (scans && scans[c.key]) || [];
+    if (!rows.length) return { ok: false, unknown: true, reason: 'We could not finish reading the chain for ' + c.label + '. Nothing has been decided — try again in a minute.', detail };
+    /* The floor is the site-wide MIN_HOLD_USD, priced live — the same $100 that decides Diamond status,
+       so the site has one definition of "you actually hold this" rather than two. A price we cannot read
+       is NOT a refusal: it is the absence of an answer, and the door stays exactly as it was.
 
-   The floor is the site-wide MIN_HOLD_USD, BOUGHT (owner, 2026-11-17): $100 or more spent on $SEND from the market across the
-   linked wallets — a buy counts once its coins were held 24 hours (sold within them: $0; after: counted for good), a transfer
-   in counts only as the original buy it is traced back to — with at least $10 of that purchase cost still held. Today's price
-   never enters: a pump cannot carry anyone through the door, and a dump does not shut it on someone who bought. */
-function holderProofVerdict(st, nowMs) {
-  const c = PROOF_COINS[0], detail = {};
-  if (!st) return { ok: false, unknown: true, reason: 'We are still reading ' + c.label + '’s trades from the chain for your linked wallets. Nothing has been decided — this check runs again on its own; look back in a few minutes.', detail };
-  const big = (x) => { try { return BigInt(x || '0'); } catch { return 0n; } };
-  const held = big(st.heldWei), acquired = big(st.acquired), sold = big(st.sold);
-  const $ = (x) => '$' + (Math.round((x || 0) * 100) / 100).toFixed(2);
-  detail[c.key] = { basis: 'bought', spentUsd: st.spentUsd == null ? null : st.spentUsd, heldCostUsd: st.heldCostUsd == null ? null : st.heldCostUsd, pendingUsd: st.pendingUsd == null ? null : st.pendingUsd,
-    maturesAtMs: st.maturesAtMs || null, heldWei: held.toString(), acquiredWei: acquired.toString(), soldWei: sold.toString(), firstBuyMs: st.firstBuyMs || null, lastArrivedMs: st.lastArrivedMs || null, reason: st.reason || null };
-  const rule = 'It takes $' + MIN_HOLD_USD + ' of ' + c.label + ' bought from the market across your linked wallets (a buy counts once its coins were held 24 hours), with at least $' + BOUGHT_LIB.LIMITS.HELD_MIN_USD + ' of it still held at what you paid — the same floor that counts toward Diamond levels.';
-  /* What the history alone decides comes first: somebody who holds none, or who sold more than they bought, gets the real
-     answer whatever else could not be read. */
-  if (held <= OG_DUST_WEI && st.floor !== null) return { ok: false, reason: 'No ' + c.label + ' found in your linked wallets. ' + rule, detail };
-  if (sold > acquired) return { ok: false, reason: 'Your wallets have sold back more ' + c.label + ' than they bought. This is for holders, not traders.', detail };
-  if (st.floor === null) return { ok: false, unknown: true, reason: 'Part of your ' + c.label + ' could not be valued yet (' + ((st.unknown && st.unknown.reasons && st.unknown.reasons[0]) || 'a price or a trade still being read') + '). Nothing has been decided — it is read again on its own.', detail };
-  if (st.floor === true) {
-    // the first-day watch needs the latest arrival's time; a verdict that could not date it is no answer yet (never "skip the watch")
-    if (!st.lastArrivedMs) return { ok: false, unknown: true, reason: 'We are still dating your latest ' + c.label + ' buy on the chain. Nothing has been decided — it is read again on its own.', detail };
-    return { ok: true, reason: null, detail };
+       Worth knowing what this number means on these coins, because it is not obvious: $GWC's whole
+       supply is 1e9 tokens at a ~$11.6k FDV, so $100 is ~0.86% of everything there is, and no more than
+       ~116 wallets can clear this bar at the same time. That is a deliberate choice, made with the
+       arithmetic in hand — it is a small, early community by design, not an accident of a round number. */
+    const px = prices && prices[c.key];
+    let bal = 0n, bought = 0n, sold = 0n, firstBuyMs = null, lastBuyMs = null;
+    for (const r of rows) {
+      try {
+        bal += BigInt(r.balWei || '0');
+        bought += BigInt(r.boughtWei || '0');
+        sold += BigInt(r.soldWei || '0');
+      } catch { return { ok: false, unknown: true, reason: 'We could not read your ' + c.label + ' history cleanly. Nothing has been decided — try again.', detail }; }
+      if (r.firstBuyMs && (firstBuyMs === null || r.firstBuyMs < firstBuyMs)) firstBuyMs = r.firstBuyMs;
+      // the LATEST buy across all linked wallets — the anchor the sell window runs from
+      if (r.lastBuyMs && (lastBuyMs === null || r.lastBuyMs > lastBuyMs)) lastBuyMs = r.lastBuyMs;
+    }
+    const heldMs = firstBuyMs ? t - firstBuyMs : 0;
+    detail[c.key] = { balWei: bal.toString(), boughtWei: bought.toString(), soldWei: sold.toString(), firstBuyMs, lastBuyMs, heldMs, usd: px > 0 ? Number(bal) / 1e18 * px : null, priceUsd: px > 0 ? px : null };
+    /* What the history alone decides comes first. None of these needs a price, so an unreadable price must never
+       turn them into "try again in a minute" — somebody who never bought, or sold more than they bought, gets
+       the real answer and what to do about it, whatever the price feed is doing. */
+    if (bal <= OG_DUST_WEI) return { ok: false, reason: 'No ' + c.label + ' found in your linked wallets. You need to hold at least $' + MIN_HOLD_USD + ' of ' + c.label + '.', detail };
+    /* A market buy is still required, and the reason changed with the rule. It is no longer "so we can
+       tell how long you have held it" — nothing is timed at the door any more. It is that the sell window
+       has to run from something, and a bag that arrived without ever passing through the market gives it
+       no anchor. Tokens that came from a friend or an airdrop are somebody else's conviction. */
+    if (!firstBuyMs || !lastBuyMs) return { ok: false, reason: 'We can see your ' + c.label + ', but no market buy behind it. The bag has to be one you bought.', detail };
+    if (sold > bought) return { ok: false, reason: 'Your wallets have sold back more ' + c.label + ' than they bought. This is for holders, not traders — buy back in and the check will pass.', detail };
+    // only the dollar floor needs the price
+    if (!(px > 0)) return { ok: false, unknown: true, reason: 'We could not read the ' + c.label + ' price just now, so we cannot value your holding. Nothing has been decided — try again in a minute.', detail };
+    const usd = Number(bal) / 1e18 * px;
+    if (usd < MIN_HOLD_USD) return { ok: false, short: true, reason: 'You hold about $' + usd.toFixed(2) + ' of ' + c.label + '. It takes $' + MIN_HOLD_USD + ' — the same floor that counts toward Diamond levels.', detail };
   }
-  if (st.reason === 'short-held') return { ok: false, short: true, reason: 'Your wallets show ' + $(st.spentUsd) + ' of ' + c.label + ' bought, but only ' + $(st.heldCostUsd) + ' of it is still held, at what you paid. ' + rule, detail };
-  return { ok: false, short: true, reason: 'Your wallets show ' + $(st.spentUsd) + ' of ' + c.label + ' bought that counts' + (st.pendingUsd > 0 ? ', and ' + $(st.pendingUsd) + ' more that counts once it has been held 24 hours' : '') + '. ' + rule, detail };
+  return { ok: true, reason: null, detail };
 }
 /* Does this account still need to prove itself? Reads only stored state — no chain, no explorer — so it
    is cheap enough to sit in front of every write on the site. */
@@ -16553,9 +16352,7 @@ function holderProofState(u) {
     checkedAt: u.holder_proof_at || null,
     sellWindowHours: Math.round(PROOF_SELL_WINDOW_MS / 3600000),
     coins: PROOF_COINS.map(c => c.label),
-    minUsd: MIN_HOLD_USD,          // the same floor Diamond status uses — one number for the whole site: dollars BOUGHT (2026-11-17)
-    basis: 'bought', heldMinUsd: BOUGHT_LIB.LIMITS.HELD_MIN_USD, buyCountsAfterHours: 24,
-    bought: boughtView(u.id, TOK.SEND),   // the member's own figures (their own wallets: shown only to them)
+    minUsd: MIN_HOLD_USD,          // the same floor Diamond status uses — one number for the whole site
     wallets: walletAddresses(u.id).length,
     /* The assurance, in the words it has to be said in. A signature is not an approval and this site
        never asks for one: personal_sign puts a sentence in front of you and returns a signature over
@@ -16579,7 +16376,7 @@ function blockReadOnly(res, me) {
      not proved itself yet has done nothing wrong. */
   if (needsHolderProof(me)) {
     send(res, 403, {
-      error: 'Connect a wallet to start posting — a read-only check that your linked wallets show $' + MIN_HOLD_USD + ' of $SEND bought (a buy counts once held 24 hours; a wallet that can’t sign can be proved by a burn instead).',
+      error: 'Connect a wallet to start posting — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND (a wallet that can’t sign can be proved by a burn instead). No waiting period.',
       needsProof: true, proof: holderProofState(me),
     });
     return true;
@@ -16813,15 +16610,11 @@ const SENDERS_REFRESH_MS = 5 * 60 * 1000, SENDERS_REFRESH_CAP = 30;
 async function refreshSenderSpends(row) {
   if (now() - (_sendersRefresh.get(row.id) || 0) < SENDERS_REFRESH_MS) return; // one on-chain sweep per call per 5 min
   _sendersRefresh.set(row.id, now());
-  // "$100 bought" (2026-11-17): each Sender's figures from their verdict — spent on counted buys before the Send (its size), spent in
-  // all, and the purchase cost still held — no chain read; a Sender with no verdict yet keeps the figures they had
-  const hoppers = db.prepare('SELECT user_id, created_at FROM call_hops WHERE call_id=? AND entry_price IS NOT NULL ORDER BY created_at DESC LIMIT ?').all(row.id, SENDERS_REFRESH_CAP);
+  const price = row.cur_price > 0 ? row.cur_price : row.entry_price;
+  if (!(price > 0) || !row.pair_addr) return;
+  const hoppers = db.prepare('SELECT user_id FROM call_hops WHERE call_id=? ORDER BY created_at DESC LIMIT ?').all(row.id, SENDERS_REFRESH_CAP);
   for (const h of hoppers) {
-    try {
-      const sz = boughtSpendAt(h.user_id, row.token_addr, h.created_at, row.entry_liq), v = boughtView(h.user_id, row.token_addr);
-      if (!sz.known) continue;
-      db.prepare('UPDATE call_hops SET spend_usd=?, bought_usd=?, held_usd=? WHERE call_id=? AND user_id=?').run(sz.spendUsd, v.spentUsd != null ? v.spentUsd : sz.spendUsd, v.heldCostUsd != null ? v.heldCostUsd : 0, row.id, h.user_id);
-    } catch {}
+    try { const pos = await walletTokenPosition(h.user_id, row.token_addr, row.pair_addr, price); db.prepare('UPDATE call_hops SET spend_usd=?, bought_usd=?, held_usd=? WHERE call_id=? AND user_id=?').run(pos.spendUsd, pos.boughtUsd, pos.heldUsd, row.id, h.user_id); } catch {}
   }
 }
 function callView(row, me) {
@@ -17260,7 +17053,7 @@ const server = http.createServer(async (req, res) => {
            PROOF_STALE_MS is treated as abandoned, which is the lesson the block-0 scanner taught. */
         const stale = me.holder_state === 'pending' && (now() - (me.holder_proof_at || 0)) > PROOF_STALE_MS;
         if (me.holder_state === 'pending' && !stale && proofQueue.includes(me.id)) return send(res, 200, { queued: true, state: 'pending' });
-        if (!queueHolderProof(me.id, true)) return send(res, 503, { error: 'busy — many checks are waiting; try in a minute', code: 'busy' });
+        queueHolderProof(me.id);
         return send(res, 200, { queued: true, state: 'pending', proof: holderProofState(db.prepare('SELECT * FROM users WHERE id = ?').get(me.id)) });
       }
 
@@ -17316,13 +17109,10 @@ const server = http.createServer(async (req, res) => {
           /* The entry rules the ticket states up front, read from the same constants the wallet check
              enforces, so the numbers on the door can never drift from the numbers behind it. */
           rules: {
-            holdMinUsd: MIN_HOLD_USD,                       // dollars BOUGHT (basis), since 2026-11-17 — never today's value
-            basis: 'bought',
-            heldMinUsd: BOUGHT_LIB.LIMITS.HELD_MIN_USD,     // ...with at least this much of the purchase cost still held
-            buyCountsAfterHours: 24,                        // a buy counts once its coins were held this long (sold sooner: $0)
+            holdMinUsd: MIN_HOLD_USD,
             coins: PROOF_COINS.map(c => c.label),
             sellWindowHours: Math.round(PROOF_SELL_WINDOW_MS / 3600000),
-            ethUsdSource: 'the WETH/USDG pool on Robinhood Chain (a block-weighted median per 10,000 blocks); USDG counts as $1',
+            priceMedianHours: PRICE_MEDIAN_HOURS,   // the bag is valued at the LOWER of spot and the pool's time-weighted median over this many hours (guardedPriceUsd)
           },
           ticket: u ? ticketFor(u) : null,
         });
@@ -18149,8 +17939,8 @@ const server = http.createServer(async (req, res) => {
             db.prepare('DELETE FROM squads WHERE id = ?').run(sqr.id);
           }
           const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
-          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'acq_state', 'hold_migration_log', 'size_topups', 'tracker_cache', 'wallet_hist', 'burn_proofs'])
-            try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}   // "$100 bought": the verdicts, the switch's log and sizes still to settle go with the account; buy_claims stay, like og_claims
+          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'tracker_cache', 'wallet_hist', 'burn_proofs'])
+            try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
           OIDC.forgetUser(uid);   // Sign in with Send: every app it allowed (consents, codes, tokens) and every app it registered, with everyone's sign-ins to them
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
              in, and its unused codes would be a supply of tickets nobody answers for — make an account, delete it,
@@ -18604,7 +18394,7 @@ const server = http.createServer(async (req, res) => {
            is never gated at all — nobody should need to prove anything to stop being notified. */
         if (req.method === 'POST' && needsHolderProof(me)) {
           return send(res, 403, {
-            error: 'Connect a wallet to set alerts — a read-only check that your linked wallets show $' + MIN_HOLD_USD + ' of $SEND bought (a buy counts once held 24 hours; a wallet that can’t sign can be proved by a burn instead).',
+            error: 'Connect a wallet to set alerts — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND (a wallet that can’t sign can be proved by a burn instead). No waiting period.',
             needsProof: true, proof: holderProofState(me),
           });
         }
@@ -19467,12 +19257,8 @@ const server = http.createServer(async (req, res) => {
         const note = String(b.note || '').trim().slice(0, 280);
         const text = note || ('📣 Called $' + sym + ' — Just Send It.');
         const t = now();
-        /* Send Call SIZE (owner's Q5, 2026-11-17: "spent under the Q1 rule, capped at pool liquidity"): each $100 the caller's wallets
-           spent on counted buys of this token before the call = 1× Send Power — a buy counts once its coins were held 24 hours — read
-           from the caller's verdict (no chain read here). A buy still inside its 24 hours, or a verdict not made yet, is paid later
-           (size_topups): the base now, the size when it counts. */
-        const sz = boughtSpendAt(me.id, token, t, liq);
-        const spendUsd = sz.spendUsd;
+        // Send Call SIZE: value of tokens the caller bought & still holds → each $100 = 1× Send Power (fail-open to 0)
+        const spendUsd = await callSpendUsd(me.id, token, p2.pair.address, price, liq);
         const sm = sizeMult(spendUsd);
         const noDyor = b.viewedDetail ? 0 : 1; // flag calls made WITHOUT opening the token's full on-chain detail first
         const callIp = ipIdx(req);             // blind index only — enough to spot a ring, never enough to read the IP
@@ -19494,7 +19280,6 @@ const server = http.createServer(async (req, res) => {
           const pr = db.prepare('INSERT INTO posts (user_id, text, created_at, call_id, squad_id, private) VALUES (?,?,?,?,?,?)').run(me.id, text, t, callId, squadId || null, squadId ? 1 : 0);
           postId = Number(pr.lastInsertRowid);
           db.prepare('UPDATE calls SET post_id = ? WHERE id = ?').run(postId, callId);
-          if (!sz.final) db.prepare('INSERT OR IGNORE INTO size_topups (kind, call_id, user_id, token, at, liq, paid_spend, due_at) VALUES (?,?,?,?,?,?,?,?)').run('call', callId, me.id, token, t, liq, spendUsd, now() + 5 * 60e3);
           db.exec('COMMIT');
         } catch (e) { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not save the call'); }
         // The opening award comes out of the same per-call budget as the milestones and the hold
@@ -19670,10 +19455,8 @@ const server = http.createServer(async (req, res) => {
         const tHop = now();
         let earned = 0, squadPts = 0, paying = !dupTok;
         if (isNew) {
-          // what this follower's wallets spent on counted buys of the token before the Send (the same rule as a call's size; no chain read)
-          const hsz = dupTok ? { spendUsd: 0, final: true } : boughtSpendAt(me.id, c.token_addr, tHop, c.entry_liq);
-          const hst = dupTok ? null : boughtView(me.id, c.token_addr);
-          const pos = { spendUsd: hsz.spendUsd, boughtUsd: hst && hst.spentUsd != null ? hst.spentUsd : hsz.spendUsd, heldUsd: hst && hst.heldCostUsd != null ? hst.heldCostUsd : 0 };
+          const pos = dupTok ? { spendUsd: 0, boughtUsd: 0, heldUsd: 0 } // already holding a paying position on this token — no chain read needed
+            : await walletTokenPosition(me.id, c.token_addr, c.pair_addr, (c.cur_price > 0 ? c.cur_price : c.entry_price), c.entry_liq); // what this follower bought / still holds
           /* ONE PAYING POSITION PER TOKEN, decided under the write lock. The dup check above ran BEFORE a
              multi-second chain read, so N taps fired at once on N different calls of the same token all
              saw "no paying position yet" and all inserted one — turning a single real buy into N
@@ -19686,8 +19469,6 @@ const server = http.createServer(async (req, res) => {
             const hopEntry = paying ? ((c.cur_price > 0 ? c.cur_price : c.entry_price) || null) : null; // hopper's Xs basis = the price when they hopped on
             db.prepare('INSERT INTO call_hops (call_id, user_id, created_at, entry_price, last_check, spend_usd, bought_usd, held_usd) VALUES (?,?,?,?,?,?,?,?) ON CONFLICT(call_id, user_id) DO NOTHING')
               .run(callId, me.id, tHop, hopEntry, tHop, paying ? pos.spendUsd : 0, paying ? pos.boughtUsd : 0, paying ? pos.heldUsd : 0);
-            // a Send on a buy still inside its 24 hours (or before the follower's verdict exists) is paid when the buy counts
-            if (paying && !hsz.final) db.prepare('INSERT OR IGNORE INTO size_topups (kind, call_id, user_id, token, at, liq, paid_spend, due_at) VALUES (?,?,?,?,?,?,?,?)').run('hop', callId, me.id, c.token_addr, tHop, c.entry_liq, pos.spendUsd, now() + 5 * 60e3);
             db.exec('COMMIT');
           } catch { try { db.exec('ROLLBACK'); } catch {} return bad(res, 'could not record that — try again', 500); }
           const spendUsd = paying ? pos.spendUsd : 0;
@@ -19774,8 +19555,7 @@ const server = http.createServer(async (req, res) => {
         try { holder = await refreshHolder(me.id); }
         catch { return bad(res, 'could not read the chain right now — try again', 502); }
         // opportunistically verify OG status (early $SEND/$GWC buyer): instant for existing OGs, and at most a once-per-6h historical scan for others
-        // (it reads the member's "$100 bought" verdicts and decides; it is never awaited here — H10 — and a verdict not made yet is asked for)
-        try { const o = db.prepare('SELECT og_tier, og_revoked, og_checked_at FROM users WHERE id=?').get(me.id); if (o && !o.og_tier && !o.og_revoked && now() <= OG_GRANT_UNTIL_MS && now() - (o.og_checked_at || 0) > 6 * 3600 * 1000) checkOg(me.id).catch(() => {}); } catch {}
+        try { const o = db.prepare('SELECT og_tier, og_revoked, og_checked_at FROM users WHERE id=?').get(me.id); if (o && !o.og_tier && !o.og_revoked && now() <= OG_GRANT_UNTIL_MS && now() - (o.og_checked_at || 0) > 6 * 3600 * 1000) await checkOg(me.id); } catch {}
         const fresh = db.prepare('SELECT * FROM users WHERE id = ?').get(me.id); // SELECT * so gamifySummary sees call_limit/call_eval_at for callAllowance
         return send(res, 200, { ...gamifySummary(fresh), holderLive: holder });
       }
@@ -19791,20 +19571,24 @@ const server = http.createServer(async (req, res) => {
         const perm = (me.restrict_level || 0) >= 3;
         let holder; try { holder = await refreshHolder(me.id); } catch { return bad(res, 'could not read your wallet on-chain right now — try again', 502); }
         const newSend = holder.sendTok || 0;
-        /* "$100 bought" (owner's Q8): what lifts it is $SEND BOUGHT since the restriction began (or came back) — counted buys that
-           reached the linked wallets since then, each counting once its coins were held 24 hours, valued at what it paid at its own
-           block — never a balance difference at today's price (which a transfer in, or a pump, could fake). From the verdict alone. */
-        const st = BOUGHT ? BOUGHT.stateOf(me.id, TOK.SEND) : null;
-        if (!st || !st.fresh) { if (BOUGHT) BOUGHT.want(me.id, TOK.SEND, { prio: 3 }); return send(res, 503, { error: boughtCheckingText('$SEND'), code: 'checking' }); }
-        const since = me.redeem_since || me.flagged_at || 0;
-        let buyUsd = 0; for (const [a, usd] of st.counted || []) if (a != null && a >= since && Number.isFinite(usd)) buyUsd += usd;
-        const waiting = (st.pendingLots || []).some(([a]) => a != null && a >= since);
+        const base = me.redeem_base_send;
+        if (base < 0) { // baseline was never captured on-chain → record current holdings now; a genuine NEW buy is required on top
+          db.prepare('UPDATE users SET redeem_base_send=? WHERE id=?').run(newSend, me.id);
+          return send(res, 400, { error: 'We’ve recorded your current $SEND. Now buy at least $' + need + ' more and tap again to lift your read-only.', code: 'baseline_set' });
+        }
+        // sendPriceUsd(), not a raw lookup: it values at the LOWER of spot and the 24h median and refuses
+        // outright during a spike. A pumped price makes a buy-out cheaper (fewer dollars of new $SEND
+        // clear the bar), which is the same manipulation the Data API gate is already hardened against —
+        // and this gate decides whether a sanction is lifted, so it gets the same protection.
+        let price = 0; try { price = (await sendPriceUsd()) || 0; } catch {}
+        if (!(price > 0)) return bad(res, 'couldn’t verify the $SEND price right now — try again', 502); // fail-closed: never lift without confirming a real buy
+        const buyUsd = Math.max(0, newSend - base) * price;
         if (buyUsd < need) {
-          return send(res, 400, { error: 'Lifting your ' + (perm ? 'permanent ' : '') + 'read-only takes $' + need + ' of $SEND bought since it began; your linked wallets show $' + buyUsd.toFixed(2) + ' so far' + (waiting ? ', and a buy that counts once its coins have been held 24 hours' : '') + '.', code: 'need_more', addedUsd: Math.round(buyUsd * 100) / 100, needUsd: need });
+          return send(res, 400, { error: 'Buy at least $' + need + ' more $SEND to lift your ' + (perm ? 'permanent ' : '') + 'read-only — you’ve added $' + buyUsd.toFixed(2) + ' so far. Buy more, then tap again.', code: 'need_more', addedUsd: Math.round(buyUsd * 100) / 100, needUsd: need });
         }
         // lift now, but start the hold: keep this $SEND for `dur` or read-only returns (doubled if timed, permanent if it was permanent)
         db.prepare('UPDATE users SET restricted_until=0, redeem_hold_until=?, redeem_floor=?, redeem_base_send=? WHERE id=?').run(now() + dur, newSend, newSend, me.id);
-        notify(me.id, '🔓', 'Your linked wallets show $' + Math.round(buyUsd) + ' of $SEND bought since the restriction, and your ' + (perm ? 'permanent ' : '') + 'read-only is lifted. Keep your $SEND (don’t sell any) for ' + humanDur(dur) + ' to clear this for good — sell before then and ' + (perm ? 'the permanent mute returns' : 'read-only returns, doubled') + '.', 'restriction');
+        notify(me.id, '🔓', 'You bought $' + Math.round(buyUsd) + ' of $SEND and lifted your ' + (perm ? 'permanent ' : '') + 'read-only. Keep your $SEND (don’t sell any) for ' + humanDur(dur) + ' to clear this for good — sell before then and ' + (perm ? 'the permanent mute returns' : 'read-only returns, doubled') + '.', 'restriction');
         const u2 = db.prepare('SELECT * FROM users WHERE id = ?').get(me.id);
         return send(res, 200, { ok: true, lifted: true, boughtUsd: Math.round(buyUsd * 100) / 100, restriction: restrictionOf(u2), probation: probationOf(u2) });
       }
@@ -21059,26 +20843,24 @@ const server = http.createServer(async (req, res) => {
         if (!(pr.market.liquidityUsd != null && pr.market.liquidityUsd >= MIN_COMMUNITY_LIQ)) return bad(res, 'needs at least $' + MIN_COMMUNITY_LIQ + ' pooled liquidity to start a community');
         const brand = JSON.stringify(sanitizeBrand(pr.brand || {}));
         const sym = String(pr.token.symbol || '?').slice(0, 16), name = String(pr.token.name || 'Token').slice(0, 60);
-        // Starting a community is a holder claim like any other, so it takes the same floor: $100 of the token BOUGHT, with at least
-        // $10 of it still held at what was paid (boughtVerdict — the verdict the background worker keeps; no chain read here)
-        const holdsC = boughtVerdict(me.id, token, 3);
-        const devWalletC = isTokenDev(me.id, pr.token);
-        // no answer yet: the coin's trades are being read (the first time takes a few minutes) — undecided, never "you don't hold it"
-        if (holdsC === null && !devWalletC) return send(res, 503, { error: boughtCheckingText('$' + sym, token), code: 'checking' });
+        // Starting a community is a holder claim like any other, so it takes the same floor: $100 of the token, priced live.
+        let holdsC; try { holdsC = await holdsToken(me.id, token, MIN_HOLD_USD, Number(pr.market.priceUsd)); } catch { return bad(res, RPC_DOWN_MSG, 503); }
+        // price unreadable → undecided, not "dust will do" and not "you don't hold it"
+        if (holdsC === null) return bad(res, 'We couldn’t price this token just now, so we can’t check your holding against the $' + MIN_HOLD_USD + ' floor. Nothing has been decided — try again in a minute.', 503);
         // The token's own deployer/owner wallet may start the community WITHOUT holding — a dev often keeps a clean
         // wallet. The deployer is the creator address a keyed explorer gives, else GoPlus Security's creator_address
         // (token.deployerSource says which), and the owner is owner() from the contract (GoPlus's owner_address only
         // where it has none); only ever matched against a wallet they proved control of by signature. It grants the
         // community, NOT a qualified member slot: qualifyOptIn still needs real holdings, so a dev can't tip a
         // community live on their own.
-        const devWallet = devWalletC;
-        if (!holdsC && !devWallet) return bad(res, 'Starting the $' + sym + ' community takes $' + MIN_HOLD_USD + ' of $' + sym + ' bought from the market across your linked wallets (a buy counts once its coins were held 24 hours), with at least $' + BOUGHT_LIB.LIMITS.HELD_MIN_USD + ' of it still held at what you paid. (The token’s own deployer wallet can start it without that.)', 403);
+        const devWallet = isTokenDev(me.id, pr.token);
+        if (!holdsC && !devWallet) return bad(res, 'You must hold $' + sym + ' to start its community — connect a wallet that holds it. (The token’s own deployer wallet can start it without holding.)', 403);
         const ip = clientIp(req);
         const info = db.prepare('INSERT INTO communities (creator_id, token_addr, pair_addr, symbol, name, brand, status, creator_ip, c_price, c_mc, c_pc24, c_liq, c_holders, c_at, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)')
           .run(me.id, token, pr.pair.address, sym, name, brand, 'pending', ip ? bidx(ip) : null, pr.market.priceUsd, pr.market.marketCap, (pr.priceChange && pr.priceChange.h24) || null, pr.market.liquidityUsd, (pr.holders && pr.holders.count) || null, now(), now());
         // auto-opt-in the starter, but pass their REAL holding status: a deployer who started without holding joins as
         // a member and does NOT count toward the 10 verified holders needed to go live
-        await joinCommunity(me, info.lastInsertRowid, ip, holdsC === true);
+        await joinCommunity(me, info.lastInsertRowid, ip, holdsC);
         const c = db.prepare('SELECT * FROM communities WHERE id=?').get(info.lastInsertRowid);
         // announce it on the public wall — a brand-new community needs holders to find it to go live at all
         try { communityInvitePost(c.id, 'new'); } catch {}
@@ -21441,10 +21223,11 @@ const server = http.createServer(async (req, res) => {
             let holds;
             if (c.demo) holds = true;   // the open sandbox: no token, no wallet, no chain call — anyone may walk in
             else {
-              holds = boughtVerdict(me.id, c.token_addr, 3);   // only real buyers of THIS token can opt in: $MIN_COMMUNITY_HOLD_USD of it bought, the site-wide floor (no chain read here)
+              try { holds = await holdsToken(me.id, c.token_addr, MIN_COMMUNITY_HOLD_USD, c.c_price); } catch { return bad(res, RPC_DOWN_MSG, 503); } // only real, on-chain-verified holders of THIS token can opt in — at MIN_COMMUNITY_HOLD_USD of it, which is the site-wide $100 floor
               // `null` is not a refusal, it is the absence of an answer — say which one this is
-              if (holds === null) return send(res, 503, { error: boughtCheckingText('$' + c.symbol, c.token_addr), code: 'checking' });
-              if (!holds) return bad(res, boughtShortText(me.id, c.token_addr, '$' + c.symbol, 'join this community'), 403);
+              // `null` is not a refusal, it is the absence of an answer — say which one this is
+              if (holds === null) return bad(res, 'We couldn’t read the $' + c.symbol + ' price just now, so we can’t check your holding against the $' + MIN_COMMUNITY_HOLD_USD + ' floor. Nothing has been decided — try again in a minute.', 503);
+              if (!holds) return bad(res, 'You must hold at least $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' to join this community — connect a wallet that holds it.', 403);
             }
             const j = await joinCommunity(me, cid, clientIp(req), holds);
             if (j.error) return bad(res, j.error === 'not found' ? 'community not found' : 'could not join', j.error === 'not found' ? 404 : 500);
@@ -21486,8 +21269,11 @@ const server = http.createServer(async (req, res) => {
             if (c.status !== 'live') return bad(res, 'this community isn’t live yet — it goes live at ' + LIVE_THRESHOLD + ' verified holder slots', 403);   // qual_count, not member_count (see joinCommunity)
             // posting needs a VERIFIED slot (qualified=1), not just a membership row — the anti-sybil caps must gate the wall too, exactly as the opt-in copy promises
             if (!db.prepare('SELECT 1 FROM community_members WHERE community_id=? AND user_id=? AND qualified=1').get(cid, me.id)) return bad(res, 'posting needs a verified holder slot — opt in (and re-verify if your slot was paused) to post on this wall', 403);
-            // the verified slot above IS the holding gate (H10): the sweep keeps it to the "$100 bought" verdict every ten minutes, so a
-            // post asks the chain nothing (it used to re-read the bag at a live price on every post)
+            if (!c.demo) {   // the sandbox has no token to hold, so the holding gate does not apply there
+              let holdsP; try { holdsP = await holdsToken(me.id, c.token_addr, MIN_COMMUNITY_HOLD_USD, c.c_price); } catch { return bad(res, RPC_DOWN_MSG, 503); }
+              if (holdsP === null) return bad(res, 'We couldn’t read the $' + c.symbol + ' price just now, so we can’t check your holding against the $' + MIN_COMMUNITY_HOLD_USD + ' floor. Nothing has been decided — try again in a minute.', 503);
+              if (!holdsP) return bad(res, 'You need to hold at least $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' to post on its community wall.', 403);
+            }
             /* The SAME bucket the Send Wall uses, not a second one. A community post now lands on the public
                wall, so two buckets meant two dozen front-page posts per ten minutes per account — and on the
                sandbox, which needs no token and no wallet, the second dozen was free. One allowance per
@@ -22236,8 +22022,7 @@ const BACKUP_SCRUB = [
   'DELETE FROM arcade_guest_rounds WHERE user_id IS NULL', 'UPDATE arcade_guest_rounds SET ip = NULL, net = NULL',
   'DELETE FROM email_misses', 'DELETE FROM visit_keys', 'DELETE FROM visit_seen', 'DELETE FROM dh_moves',
   'DELETE FROM sessions', 'DELETE FROM wallet_challenges', 'DELETE FROM nonces', 'DELETE FROM burn_proofs',
-  'DELETE FROM oauth_codes', 'DELETE FROM oauth_tokens',
-  'DELETE FROM tape_receipts',   // "$100 bought": receipts of members' own transactions, a cache read again from the chain; buy_claims and acq_state are kept   // Sign in with Send: live codes and tokens are not kept in a copy (an app signs its members in again after a restore)
+  'DELETE FROM oauth_codes', 'DELETE FROM oauth_tokens',   // Sign in with Send: live codes and tokens are not kept in a copy (an app signs its members in again after a restore)
   // Sendy's questions he could not answer and his answers nobody rated go after 90 days on the live site (lib/sendybrain.js prune)
   'DELETE FROM sendy_misses', 'DELETE FROM sendy_qa WHERE up = 0 AND down = 0',
   /* Market Data's bulk public history (lib/marketdata.js) is read again from its sources after a restore, so a copy does not carry it —

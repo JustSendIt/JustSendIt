@@ -1,11 +1,11 @@
-/* The participation check reads what a wallet BOUGHT of $SEND (owner, 2026-11-17: "$100 bought") from the coin tape
-   the server keeps from the CHAIN (lib/tape.js, lib/bought.js): Transfer logs and the pool's Swaps → the acquisition
-   engine → a real verdict. Live (CHAIN_LIVE=1) it waits for the server's $SEND tape to be read first, then proves three
-   wallets: the burn address (holds $SEND, never bought any → a definite refusal: $0 bought), a real recent buyer found
-   from the $SEND pool's own transfers (a definite verdict either way — verified, or a stated reason — never "still
-   reading"), and a ROUTED buyer: a wallet whose $SEND came from a contract that took it out of the pool in the same
-   transaction — a market buy (lib/acquire.js follows the pool's tokens through routers). Read-only on the chain; every
-   row made here is deleted in the finally block. */
+/* The participation check reads a wallet's $SEND history from the CHAIN when the explorer cannot answer (and
+   directly when no keyed explorer is configured, as in these tests): Transfer logs → the same replay → a real
+   verdict. Two wallets from the live chain: the burn address (holds $SEND, never bought any → a definite
+   "no market buy" refusal) and a real recent buyer found from the $SEND pool's own transfers (a definite verdict
+   either way — verified, or a stated reason — never "could not finish reading the chain"). And a ROUTED buyer:
+   a wallet whose $SEND came from a contract that took it out of the pool in the same transaction — a market buy,
+   which the check used to refuse as "no market buy behind it". Read-only on the chain; every row made here is
+   deleted in the finally block. */
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, createHmac, createCipheriv, createDecipheriv, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
@@ -67,10 +67,7 @@ try {
   /* ═══ 1. the wiring, in the source ═══ */
   check('every wallet-history reader goes through ogTransfers: the explorer only when a keyed one is set, the chain otherwise and as its fallback',
     /const EXPLORER_KEYED = !!process\.env\.BLOCKSCOUT_URL;/.test(SRC) && /return rpcTokenTransfers\(wallet, token, opts\);/.test(SRC)
-    && /const rows = await ogTransfers\(a, t, \{ tries: 2/.test(SRC) && /const rows = await ogTransfers\(w, TOK\.SEND/.test(SRC));
-  check('the participation check and a Send Call\'s size read the "$100 bought" verdicts (the coin tape), not a wallet\'s history on the request',
-    /let st = BOUGHT \? BOUGHT\.stateOf\(userId, TOK\.SEND\) : null;/.test(SRC) && /let v = holderProofVerdict\(st && st\.fresh \? st : null, now\(\)\);/.test(SRC)
-    && /const sz = boughtSpendAt\(me\.id, token, t, liq\);/.test(SRC));
+    && /items = await ogTransfers\(a, tokenAddr, \{ noTime: true/.test(SRC) && /const rows = await ogTransfers\(a, t, \{ tries: 2/.test(SRC) && /const rows = await ogTransfers\(w, TOK\.SEND/.test(SRC));
   check('  ...the chain reader reads transfers FROM and TO the wallet, asks a timed-out window again before splitting it, quarters a too-large one, and never reads an undecodable log as 0',
     /await transferLogWalk\(tok, \[\[TRANSFER_TOPIC, wt\], \[TRANSFER_TOPIC, null, wt\]\], start, head, CHAIN_HISTORY_MAX\)/.test(SRC) && /if \(TOO_MANY_RE\.test\(m\) && window > 50\) \{ window = Math\.max\(50, Math\.floor\(window \/ 4\)\); if \(!slow\) ceiling = window;/.test(SRC)
     && /const slow = \/timed out\|timeout\|aborted\/i\.test\(m\);\s+if \(slow && tries < 2\) \{ tries\+\+;/.test(SRC) && /a transfer this reader cannot decode/.test(SRC));
@@ -80,29 +77,26 @@ try {
     /async function routedPoolFlows\(token, pair, wallet, rows, direct\)/.test(SRC) && /const routed = await routedPoolFlows\(token, pair, wallet, rows, isMarket\)/.test(SRC)
     && /isAcquisition\(from\) \? v : routed\.take\(r, 'out', v\)/.test(SRC) && /isMarket\(to\) \? v : routed\.take\(r, 'in', v\)/.test(SRC)
     && /const n = v < f\[dir\] \? v : f\[dir\]; f\[dir\] -= n; return n;/.test(SRC) && /if \(a === b\) return 0n;   \/\/ a wallet paying itself neither bought nor sold/.test(SRC));
-  check('  ...what is already counted in full uses up its transaction first (a taxed sell is one sale)',
-    /if \(to === w && from !== w && direct\(from\)\) f\.out = f\.out > v \? f\.out - v : 0n;/.test(SRC));
+  check('  ...what is already counted in full uses up its transaction first (a taxed sell is one sale), and Send Call sizing uses the same rule',
+    /if \(to === w && from !== w && direct\(from\)\) f\.out = f\.out > v \? f\.out - v : 0n;/.test(SRC) && /routedPos = await routedPoolFlows\(tokenAddr, pair, me, items\)/.test(SRC)
+    && /inRaw \+= from === pair \? v : routedPos\.take\(it, 'out', v\)/.test(SRC));
   check('  ...and the refusals the old rule made ("no market buy", "sold back more") are asked once more after boot',
     /setTimeout\(\(\) => requeueRuleChangedProofs\(\), 25000\)/.test(SRC) && /holder_proof_reason LIKE '%no market buy behind it%' OR u\.holder_proof_reason LIKE '%have sold back more%'/.test(SRC)
-    && /Your wallets have sold back more ' \+ c\.label/.test(SRC));
+    && /no market buy behind it\. The bag has to be one you bought/.test(SRC) && /Your wallets have sold back more ' \+ c\.label/.test(SRC));
   check('a check that ended unread is asked again by itself (every 15 minutes, and once after boot)', /setTimeout\(\(\) => requeueUnreadProofs\('boot'\), 20000\)/.test(SRC) && /setInterval\(\(\) => requeueUnreadProofs\(\), PROOF_RETRY_MS\)/.test(SRC));
 
   if (!LIVE_CHAIN) check(liveSkipped('the burn address, a real buyer and a routed buyer, each read from the chain and judged'), true, 'skipped');
   else {
-  /* ═══ 2. the burn address: holds $SEND, never bought — a definite refusal, read from the chain ═══
-     The verdicts are made from the server's $SEND tape: the first time it is read from the chain (paced, a few minutes), so the
-     wallets are proved only once it is complete. */
-  const tapeReady = async (ms) => { const until = Date.now() + ms; while (Date.now() < until) { try { const r = db.prepare("SELECT state FROM bought_tokens WHERE token = ?").get(SEND); const c = db.prepare("SELECT block FROM tape_cursor WHERE stream = ?").get('transfer:' + SEND); if (r && r.state === 'ok' && c) return true; } catch {} await new Promise(ok => setTimeout(ok, 10000)); } return false; };
-  if (!(await tapeReady(20 * 60 * 1000))) { check('the server\'s $SEND tape was not read in 20 minutes this run — the live verdicts are not asserted', true); }
-  else {
+  /* ═══ 2. the burn address: holds $SEND, never bought — a definite refusal, read from the chain ═══ */
   const tag = randomBytes(3).toString('hex');
   const D = mkUserWithWallet('__cp_dead_' + tag, DEAD);
   const dr = await proveAndWait(D);
-  check('the burn address gets a real verdict from the chain — $0 of $SEND bought — not "still reading"',
-    dr.row && dr.row.holder_state === 'failed' && /\$0\.00 of \$SEND bought/.test(dr.row.holder_proof_reason || '') && !UNREAD.test(dr.row.holder_proof_reason || ''),
+  check('the burn address gets a real verdict from its on-chain history — "no market buy behind it" — not "could not read"',
+    dr.row && dr.row.holder_state === 'failed' && /no market buy/i.test(dr.row.holder_proof_reason || '') && !UNREAD.test(dr.row.holder_proof_reason || ''),
     JSON.stringify(dr.row && { s: dr.row.holder_state, r: dr.row.holder_proof_reason }) + (dr.timedOut ? ' (timed out)' : ''));
   let dd = null; try { dd = JSON.parse(decField(dr.row && dr.row.holder_proof) || 'null'); } catch {}
-  check('  ...it holds half a billion $SEND, and nothing it holds was bought — decided with no price at all', dd && dd.SEND && BigInt(dd.SEND.heldWei) > 10n ** 24n && dd.SEND.spentUsd === 0 && dd.SEND.basis === 'bought', JSON.stringify(dd && dd.SEND && { held: dd.SEND.heldWei, spent: dd.SEND.spentUsd }));
+  // usd is null when the price read was refused — this refusal does not need the price
+  check('  ...its balance was read and reconciled (half a billion $SEND), and nothing was ever bought from the market — decided without needing the price', dd && dd.SEND && BigInt(dd.SEND.balWei) > 10n ** 24n && dd.SEND.boughtWei === '0' && (dd.SEND.usd == null || dd.SEND.usd > 100), JSON.stringify(dd && dd.SEND && { bal: dd.SEND.balWei, bought: dd.SEND.boughtWei, usd: dd.SEND.usd }));
 
   /* ═══ 3. a real buyer, found from the pool's own transfers ═══ */
   const head = parseInt(await rpc('eth_blockNumber', []), 16);
@@ -117,16 +111,17 @@ try {
   else {
     const B = mkUserWithWallet('__cp_buy_' + tag, buyer);
     let br = await proveAndWait(B);
-    // a block time or an ETH/USD cell the verdict needed may still be being read: once more after a rest
-    if (br.row && UNREAD.test(br.row.holder_proof_reason || '')) { await new Promise(ok => setTimeout(ok, 60000)); br = await proveAndWait(B); }
-    if (br.row && UNREAD.test(br.row.holder_proof_reason || '')) { check('the buyer\'s verdict was not complete this run (a price or a block time still being read) — not asserted', true); }
+    const PRICE_UNREAD = /could not read the \$SEND price/i;
+    // the price is its own chain read, and the public node throttles bursts: one more try after a rest before calling it
+    if (br.row && PRICE_UNREAD.test(br.row.holder_proof_reason || '')) { await new Promise(ok => setTimeout(ok, 20000)); br = await proveAndWait(B); }
+    if (br.row && PRICE_UNREAD.test(br.row.holder_proof_reason || '')) { check('the $SEND price could not be read this run (the node throttled it) — the buyer verdict is not asserted', true); }
     else {
     let bd = null; try { bd = JSON.parse(decField(br.row && br.row.holder_proof) || 'null'); } catch {}
     const verified = !!(br.row && br.row.holder_verified_at);
     check('a real $SEND buyer gets a definite verdict from the chain (verified, or a stated reason) — never "could not read"',
       br.row && (verified || (br.row.holder_state === 'failed' && !UNREAD.test(br.row.holder_proof_reason || ''))),
       JSON.stringify(br.row && { s: br.row.holder_state, v: br.row.holder_verified_at, r: br.row.holder_proof_reason }) + (br.timedOut ? ' (timed out)' : ''));
-    check('  ...and its market buy was found in that history (dollars bought or still maturing, with a first-buy time)', bd && bd.SEND && ((bd.SEND.spentUsd || 0) + (bd.SEND.pendingUsd || 0)) > 0 && bd.SEND.firstBuyMs > 0, JSON.stringify(bd && bd.SEND && { spent: bd.SEND.spentUsd, pending: bd.SEND.pendingUsd, first: bd.SEND.firstBuyMs }));
+    check('  ...and its market buy was found in that history (bought > 0, with a first-buy time)', bd && bd.SEND && BigInt(bd.SEND.boughtWei) > 0n && bd.SEND.firstBuyMs > 0, JSON.stringify(bd && bd.SEND && { bought: bd.SEND.boughtWei, first: bd.SEND.firstBuyMs }));
     }
     try { db.prepare('DELETE FROM gate_claims WHERE user_id = ?').run(B.id); } catch {}
   }
@@ -162,14 +157,13 @@ try {
     let rr = await proveAndWait(R);
     if (rr.row && UNREAD.test(rr.row.holder_proof_reason || '')) { await new Promise(ok => setTimeout(ok, 20000)); rr = await proveAndWait(R); }   // the node throttled a read: once more after a rest
     let rd = null; try { rd = JSON.parse(decField(rr.row && rr.row.holder_proof) || 'null'); } catch {}
-    const info = JSON.stringify(rr.row && { s: rr.row.holder_state, r: rr.row.holder_proof_reason, spent: rd && rd.SEND && rd.SEND.spentUsd, pending: rd && rd.SEND && rd.SEND.pendingUsd, via: routedVia }) + (rr.timedOut ? ' (timed out)' : '');
+    const info = JSON.stringify(rr.row && { s: rr.row.holder_state, r: rr.row.holder_proof_reason, bought: rd && rd.SEND && rd.SEND.boughtWei, via: routedVia }) + (rr.timedOut ? ' (timed out)' : '');
     if (rr.row && UNREAD.test(rr.row.holder_proof_reason || '')) check('the routed buyer\'s history could not be read this run (the node throttled it) — not asserted', true, info);
     else {
-      check('a wallet whose $SEND came through a router is credited the buy (not $0 bought)', rr.row && !/\$0\.00 of \$SEND bought/.test(rr.row.holder_proof_reason || ''), info);
-      check('  ...its routed buy is counted as bought (or still maturing), with a first-buy time', rd && rd.SEND && ((rd.SEND.spentUsd || 0) + (rd.SEND.pendingUsd || 0)) > 0 && rd.SEND.firstBuyMs > 0, info);
+      check('a wallet whose $SEND came through a router is NOT refused as "no market buy behind it"', rr.row && !/no market buy/i.test(rr.row.holder_proof_reason || ''), info);
+      check('  ...its routed buy is counted as bought, with a first-buy time', rd && rd.SEND && BigInt(rd.SEND.boughtWei) > 0n && rd.SEND.firstBuyMs > 0, info);
     }
     try { db.prepare('DELETE FROM gate_claims WHERE user_id = ?').run(R.id); } catch {}
-  }
   }
   }
 } catch (e) {
@@ -177,7 +171,7 @@ try {
   check('the suite ran to the end', false, e.message);
 } finally {
   for (const id of made) {
-    for (const t of ['sessions', 'identities', 'notifications', 'points_events', 'gate_claims', 'holder_state', 'acq_state', 'buy_claims']) { try { db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(id); } catch {} }
+    for (const t of ['sessions', 'identities', 'notifications', 'points_events', 'gate_claims', 'holder_state']) { try { db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(id); } catch {} }
     try { db.prepare('DELETE FROM users WHERE id = ?').run(id); } catch {}
   }
   console.log('cleanup — throwaway users left:', db.prepare("SELECT COUNT(*) n FROM users WHERE username LIKE '\\_\\_cp\\_%' ESCAPE '\\'").get().n);

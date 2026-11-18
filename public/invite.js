@@ -77,7 +77,7 @@
         '<div class="inv-step" id="step-code">' +
           '<h2 class="inv-title">Redeem your ticket</h2>' +
           '<div class="inv-panel">' +
-            '<p class="inv-note">Enter the invite code someone sent you. <b>Each code works once.</b> Full access also takes a read-only wallet check: <b><span data-rule="min">$100</span> of <span data-rule="coin">$SEND</span> bought</b> across the wallets you link, with <span data-rule="held">$10</span> of it still held.</p>' +
+            '<p class="inv-note">Enter the invite code someone sent you. <b>Each code works once.</b> Full access also takes a read-only wallet check: <b><span data-rule="min">$100</span> of <span data-rule="coin">$SEND</span></b> across the wallets you link.</p>' +
             '<label class="inv-note" for="inv-in" style="display:block;margin-top:0.7rem;">Invite code</label>' +
             '<input class="inv-in" id="inv-in" inputmode="text" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="24" placeholder="ABCD2345" aria-describedby="inv-err">' +
             '<p class="inv-err" id="inv-err" role="status" aria-live="polite"></p>' +
@@ -146,10 +146,10 @@
           '<p class="inv-sub">Reading the site is open to everyone. Posting, calling and voting are for people who hold the coins — so we read your wallet, once, and check two things.</p>' +
           '<div class="inv-panel">' +
             '<ul class="inv-tests" id="inv-tests">' +
-              '<li data-t="hold"><span class="inv-tick">○</span><div><b>You bought <span id="inv-min">$100</span> of $SEND</b><small>Dollars spent on market buys across every wallet you link, at what each buy paid: today’s price never decides it. A buy counts once its coins have been held <span data-rule="after">24 hours</span>, at least <span data-rule="held">$10</span> of what you paid has to be still held, and coins sent to you count only as the buy they trace back to.</small></div></li>' +
+              '<li data-t="hold"><span class="inv-tick">○</span><div><b>You hold <span id="inv-min">$100</span> of $SEND</b><small>Valued at the lower of the current price and its <span data-rule="median">24-hour</span> median, across every wallet you link. Dust does not count.</small></div></li>' +
               '<li data-t="net"><span class="inv-tick">○</span><div><b>You\'re not a net seller</b><small>You haven\'t sold more back to the market than you bought from it.</small></div></li>' +
             '</ul>' +
-            '<p class="inv-note">⏳ <b>A buy counts after a day — and the day after you are in is watched.</b> A buy made today counts toward the <span data-rule="min">$100</span> once its coins have been held <span data-rule="after">24 hours</span>; sold inside them, it adds nothing. Once you are in, the <span data-rule="hours">24 hours</span> after your latest $SEND arrival (a buy, or coins traced in) are watched: if the balance drops more than about 2% inside them, the account goes read-only for a day.</p>' +
+            '<p class="inv-note">⏳ <b>No waiting period — but keep the bag.</b> The door opens as soon as you hold it. If you sell that $SEND within 24 hours of buying it, the account goes read-only for a day; buying back in lifts it early.</p>' +
             '<p class="inv-safe">🔒 <b>Read-only, and it stays read-only.</b> You sign a sentence to prove the wallet is yours. That signature <b>moves nothing, approves nothing and costs no gas</b> — this site can never send your funds anywhere, and never asks your wallet to.</p>' +
             '<p class="inv-note">🔥 <b>Wallet can’t sign (GMGN), or not on the list?</b> Prove it by a burn instead: within an hour, send any amount of $SEND or ETH — as much or as little as you like — from it to the burn address yourself. Whatever you send is gone for good — and it needs an email and a password on your account, since a burn can’t sign you in.</p>' +
             '<p class="inv-err" id="inv-proof-err" role="status" aria-live="polite"></p>' +
@@ -219,9 +219,9 @@
       '<ol class="inv-tests inv-rules-list">' +
         '<li><span class="inv-tick">1</span><div><b>Redeem an invite code</b><small>Someone already inside hands you one. Each code works once.</small></div></li>' +
         '<li><span class="inv-tick">2</span><div><b>Connect your wallet — read-only</b><small>You sign a sentence to prove the wallet is yours. That signature moves nothing, approves nothing and costs no gas. A wallet that can’t sign (GMGN) is proved instead by sending any amount of $SEND or ETH from it to the burn address yourself.</small></div></li>' +
-        '<li><span class="inv-tick">3</span><div><b><span data-rule="min">$100</span> of <span data-rule="coin">$SEND</span> bought</b><small>Spent on market buys across every wallet you link, at what each buy paid: a buy counts once its coins have been held <span data-rule="after">24 hours</span>, at least <span data-rule="held">$10</span> of it has to be still held, and you can\'t be a net seller. Today’s price never decides it. That unlocks full access: posting, calling and voting.</small></div></li>' +
+        '<li><span class="inv-tick">3</span><div><b>Hold <span data-rule="min">$100</span> of <span data-rule="coin">$SEND</span></b><small>Valued at the lower of the current price and its <span data-rule="median">24-hour</span> median, across every wallet you link, and you can\'t be a net seller. That unlocks full access: posting, calling and voting.</small></div></li>' +
       '</ol>' +
-      '<p class="inv-note">Under <span data-rule="min">$100</span>? You can still make your account. It stays <b>read-only</b> until your wallets show <span data-rule="min">$100</span> of <span data-rule="coin">$SEND</span> bought. Once you are in, the <span data-rule="hours">24 hours</span> after your latest $SEND arrives are watched: selling it inside them makes the account read-only for a day.</p>' +
+      '<p class="inv-note">Under <span data-rule="min">$100</span>? You can still make your account. It stays <b>read-only</b> until your wallets hold <span data-rule="min">$100</span> of <span data-rule="coin">$SEND</span>. Sell that $SEND within <span data-rule="hours">24 hours</span> of buying it and the account goes read-only for a day.</p>' +
     '</section>';
   }
   function paintRules() {
@@ -233,11 +233,8 @@
     if (Array.isArray(r.coins) && r.coins.length) root.querySelectorAll('[data-rule="coin"]').forEach(n => { n.textContent = r.coins.join(' + '); });
     const hrs = Number(r.sellWindowHours);
     if (Number.isFinite(hrs) && hrs > 0) root.querySelectorAll('[data-rule="hours"]').forEach(n => { n.textContent = hrs + (hrs === 1 ? ' hour' : ' hours'); });
-    // "$100 bought" (since 2026-11-17): the cost still held, and how long a buy is held before it counts — no price window any more
-    const held = Number(r.heldMinUsd);
-    if (Number.isFinite(held) && held > 0) root.querySelectorAll('[data-rule="held"]').forEach(n => { n.textContent = '$' + held.toLocaleString('en-US'); });
-    const after = Number(r.buyCountsAfterHours);
-    if (Number.isFinite(after) && after > 0) root.querySelectorAll('[data-rule="after"]').forEach(n => { n.textContent = after + (after === 1 ? ' hour' : ' hours'); });
+    const med = Number(r.priceMedianHours);
+    if (Number.isFinite(med) && med > 0) root.querySelectorAll('[data-rule="median"]').forEach(n => { n.textContent = med + '-hour'; });
   }
   function ticketHtml(idPrefix) {
     const p = idPrefix ? idPrefix + '-' : '';
@@ -632,11 +629,7 @@
 
        These patterns have to track holderProofVerdict()'s wording, which is a real coupling: when the
        gate dropped $GWC and the waiting period, "It takes $100 of each coin" became "It takes $100", and
-       a pattern still looking for "of each" silently stopped marking the one failure people hit most.
-       Since "$100 bought" (2026-11-17) every refusal of the floor ends with the rule, "It takes $100 of $SEND bought from
-       the market" — none held, short of $100 bought, or under $10 still held at cost — and "No $SEND found" leads the
-       none-held one; "no market buy" is an old-rule refusal still stored until it is re-asked. A "still reading" or
-       "could not be valued yet" answer is not a refusal, matches neither pattern, and leaves both tests unjudged. */
+       a pattern still looking for "of each" silently stopped marking the one failure people hit most. */
     set('hold', /No \$SEND found|no market buy|It takes \$\d+\b/i.test(r) ? 'no' : '');
     set('net', /sold back more/i.test(r) ? 'no' : '');
   }
