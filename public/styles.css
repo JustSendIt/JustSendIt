@@ -1250,6 +1250,28 @@ html.motion-off .trk-token summary, html.motion-off .trk-token summary::before {
 #music-player.playing .mp-title .eq span:nth-child(3) { animation-delay: 0.4s; }
 @keyframes eq { 0%,100% { transform: scaleY(0.5); } 50% { transform: scaleY(1.2); } }
 #music-player input[type=range] { width: 64px; accent-color: var(--green); }
+/* The songs (2026-11-17): the title is the song playing with its maker under it, a link to their page; ♫ opens the list above the
+   player, as the nudge sits — "Play all, in order" (the default) and each song, its maker a link of its own beside it */
+#music-player .mp-now { display: inline-flex; flex-direction: column; min-width: 0; }
+#music-player .mp-by { color: var(--green-bright); font-weight: 700; font-size: max(var(--text-floor), 0.72rem); text-decoration: underline; text-underline-offset: 2px; }
+#music-player .mp-songs { font-size: max(var(--text-floor), 1.1rem); font-weight: 800; line-height: 1; }
+#music-player:not(:hover):not(:focus-within) .mp-songs { margin-left: 0.3rem; }   /* folded, the gap is 0: ♫ keeps a little air, and barely moves as it unfolds */
+#music-player .mp-menu { position: absolute; bottom: calc(100% + 0.5rem); left: 0; z-index: 2; display: grid; gap: 0.35rem; width: max-content; max-width: min(88vw, 22rem);
+  padding: 0.6rem; border-radius: 16px; background: var(--ink-2); border: 1.5px solid color-mix(in srgb, var(--green) 45%, transparent); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+#music-player .mp-menu[hidden] { display: none; }
+#music-player .mp-menu-h { margin: 0; font-weight: 800; font-size: max(var(--text-floor), 0.78rem); letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-dim); }
+#music-player .mp-opts { display: grid; gap: 0.35rem; }
+#music-player .mp-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.15rem 0.6rem; }
+#music-player .mp-opt { min-height: 44px; white-space: normal; text-align: left; }
+#music-player .mp-opt small { font-size: max(var(--text-floor), 0.72rem); font-weight: 600; }
+#music-player .mp-row .mp-by { min-height: 44px; display: inline-flex; align-items: center; padding: 0 0.25rem; }
+/* folded, the maker's line takes no height (the capsule kept the two-line title's height, and changed it with the song); a touch screen
+   gets a 44 px target; the focus ring sits inside the title's clipped box */
+#music-player:not(:hover):not(:focus-within) .mp-title .mp-by { display: none; }
+@media (pointer: coarse) { #music-player .mp-title .mp-by { display: inline-flex; align-items: center; min-height: 44px; } }
+#music-player .mp-title .mp-by:focus-visible { outline-offset: -3px; }
+/* the chosen song (or "Play all") under forced colours, where the fill is replaced: the system's highlight */
+@media (forced-colors: active) { #music-player .mp-opt[aria-pressed="true"] { background: Highlight; color: HighlightText; border-color: Highlight; } }
 /* ===== THE PLAYER KEEPS TO ITSELF ================================================================
    It is a FIXED overlay, so whatever is under it cannot be tapped — and a measured sweep of every page
    at nine widths from 320 to 1440 found that this one control was the ONLY thing on the site covering

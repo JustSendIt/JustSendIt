@@ -97,7 +97,7 @@ try {
     /if you like, one song you made or have the rights to share \(an MP3 or WAV, set in My Wall Style\)\. The song starts for a visitor once their browser allows sound, usually at their first tap on the wall, and a control on the wall lets them pause it\./.test(wallCard)
     && /Someone else's wall carries ⚑ Report, which sends the wall itself — its pictures, bio or song — to the moderators\./.test(wallCard), wallCard.slice(0, 400));
   check('  ...and its ⏸ rule covers a wall\'s song (never starts by itself while on; off does not start it; its own player still plays it)',
-    /pauses the site's sound effects and its decorative motion \(the ticker, the floating emoji\) together, and a wall's song with them, and this browser remembers it\. While it is on, a wall's song never starts by itself, and turning it off does not start one; the song's own player still plays it when you press it\. The theme tune has its own button/.test(ABOUT));
+    /pauses the site's sound effects and its decorative motion \(the ticker, the floating emoji\) together, and a wall's song with them, and this browser remembers it\. While it is on, a wall's song never starts by itself, and turning it off does not start one; the song's own player still plays it when you press it\. The music player at the bottom left has its own button/.test(ABOUT));
   /* the docs describe the ⏸ rule as shipped: hold them to the code that does it, so docs without the code fail here */
   const UPAGE = PUB('upage.js');
   check('  ...and that ⏸ rule is in the wall song code (no start while motion-off, on open or on the first press; ⏸ pauses a playing song)',
