@@ -791,7 +791,8 @@ async function browserWalk() {
     // a real press, where the control is drawn: it lands on whatever is on top there, as a reader's does
     const settle = async () => { let y0 = -1; for (let i = 0; i < 60; i++) { await sleep(80); const y = await ev('scrollY'); if (y === y0) return; y0 = y; } };   // a smooth scroll has ended
     const press = async (expr) => {
-      const r = await ev('(() => { const e = ' + expr + '; e.scrollIntoView({ block: "nearest", behavior: "instant" }); const b = e.getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()');
+      // brought into view, and clear of the sticky header (the nav and the top-gainers strip under it, --nav-h): a point under the header is the header's
+      const r = await ev('(() => { const e = ' + expr + '; e.scrollIntoView({ block: "nearest", behavior: "instant" }); let b = e.getBoundingClientRect(); const head = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")) || 0; if (b.top + b.height / 2 < head + 4) { window.scrollBy({ top: b.top + b.height / 2 - head - 24, behavior: "instant" }); b = e.getBoundingClientRect(); } return [b.left + b.width / 2, b.top + b.height / 2]; })()');
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await cdp('Input.dispatchMouseEvent', { type, x: r[0], y: r[1], button: type === 'mouseMoved' ? 'none' : 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
     };
     /* "Show as a list", opened with a real press — once any smooth scroll has ended (a card brought into view scrolls smoothly on
@@ -943,7 +944,7 @@ async function browserWalk() {
       await sleep(1300);
       const s1 = await ev('(() => { const p = ' + POP + '; return { top: p.scrollTop, mh: p.style.maxHeight, changes: window.__mktStyle }; })()');
       await ev('window.scrollBy({ top: 90, behavior: "instant" }), true'); await sleep(400);
-      const s2 = await ev('(() => { const p = ' + POP + ', r = p.getBoundingClientRect(), nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")) || 0, e = document.elementsFromPoint(r.left + r.width / 2, Math.max(2, nav - 6)).find((x) => !x.closest("#tip-bubble")); return { mh: p.style.maxHeight, top: Math.round(r.top), nav, navOver: !!e && !!e.closest(".nav"), open: !p.hidden }; })()');
+      const s2 = await ev('(() => { const p = ' + POP + ', r = p.getBoundingClientRect(), nav = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")) || 0, e = document.elementsFromPoint(r.left + r.width / 2, Math.max(2, nav - 6)).find((x) => !x.closest("#tip-bubble")); return { mh: p.style.maxHeight, top: Math.round(r.top), nav, navOver: !!e && !!(e.closest(".nav") || e.closest("#mv-strip")), open: !p.hidden }; })()');   /* the sticky header is the nav and the top-gainers strip under it: both rise over the open list */
       await ev(TRIG + '.click(), true');
       check('  ...on a phone on its side the open list lies over the player\'s nudge where they meet (so it is not cut short above it) and is not measured again while the nudge and a description come and go: its height is never touched',
         meet.meet && meet.onTop && still === 0, JSON.stringify({ meet, still }));
@@ -1649,7 +1650,7 @@ async function browserWalk() {
         await press('document.querySelector("#mkt-map [data-coin=' + coin + '] circle")'); await until('!document.getElementById("mkt-map-card").hidden');
         await settle();
         taps.push(Object.assign({ w, coin }, await ev(`(() => { const c = document.getElementById('mkt-map-card'), h = document.getElementById('mkt-mapc-h'), dl = c.querySelector('dl'), cs = getComputedStyle(c);
-          const nav = document.querySelector('nav.nav'), navB = nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 0, foot = innerHeight - parseFloat(cs.scrollMarginBottom), cb = c.getBoundingClientRect();
+          const nav = document.querySelector('nav.nav'), strip = document.getElementById('mv-strip'), navB = Math.max(0, nav ? nav.getBoundingClientRect().bottom : 0, strip && !strip.hidden ? strip.getBoundingClientRect().bottom : 0), foot = innerHeight - parseFloat(cs.scrollMarginBottom), cb = c.getBoundingClientRect();   // the sticky header: the nav and the strip under it
           return { navB: Math.round(navB), foot: Math.round(foot), top: Math.round(cb.top), bottom: Math.round(cb.bottom), h3: Math.round(h.getBoundingClientRect().top), dl: Math.round(dl.getBoundingClientRect().top), focus: document.activeElement && document.activeElement.id }; })()`)));
       }
       const tapOK = (t) => t.focus === 'mkt-mapc-h' && t.h3 >= t.navB - 1 && t.dl + 40 <= t.foot && (t.bottom - t.top <= t.foot - t.navB - 8 ? t.top >= t.navB - 1 && t.bottom <= t.foot + 1 : t.top >= t.navB - 1 && t.top <= t.navB + 24);
@@ -1789,52 +1790,62 @@ async function browserWalk() {
 
     /* ═══ the dashboard layer (owner, 2026-11-17): the movers banner, the market at a glance, a coin's on-chain data, Watchlist and Calls ═══ */
     const MVF = FIX('movers.json');
-    const moversReady = () => until('document.querySelectorAll("#mkt-movers-win .mkt-movers-list:not(.mkt-movers-dup) [data-mover]").length === 10 && document.querySelectorAll("#mkt-glance-grid .mkt-gl").length === 8');
+    // the top-gainers strip under the nav (movers-strip.js, on every page since 2026-11-17), and the glance it feeds on this page
+    const moversReady = () => until('!document.getElementById("mv-strip").hidden && document.querySelectorAll("#mv-strip-win .mv-list:not(.mv-dup) [data-mover]").length === ' + MVF.rows.length + ' && document.querySelectorAll("#mkt-glance-grid .mkt-gl").length === 8');
     const modalReady = () => until('(() => { const m = document.getElementById("token-modal"); return m && !m.hasAttribute("hidden") && !document.querySelector("#tm-body .tm-loading"); })()');
     const modal = () => ev('(() => { const m = document.getElementById("token-modal"), f = m.querySelector(".tm-full"); return { open: !m.hasAttribute("hidden"), title: document.getElementById("tm-title").textContent, lead: (m.querySelector(".tm-lead") || {}).textContent || "", msg: (m.querySelector(".tm-msg") || {}).textContent || "", dash: !!m.querySelector(".tkd-head"), full: f && !f.hidden ? f.getAttribute("href") : null }; })()');
     const closeModal = async () => { await ev('document.querySelector("#token-modal .tm-x").click(), true'); await until('document.getElementById("token-modal").hasAttribute("hidden")'); };
-    await step('the movers banner: the ten biggest moves, in order, moving where motion is wanted', async () => {
+    await step('the top-gainers strip: the biggest rises only, in order, under the nav and sticking with it, moving where motion is wanted', async () => {
       await go('/market', 1280); await moversReady();
-      const b = await ev('(() => { const w = document.getElementById("mkt-movers-win"), tr = w.querySelector(".mkt-movers-track"), lists = w.querySelectorAll(".mkt-movers-list"), first = [...lists[0].querySelectorAll("[data-mover]")];'
-        + ' return { ids: first.map((x) => x.dataset.mover), texts: first.map((x) => x.textContent), dup: lists.length === 2 && lists[1].getAttribute("aria-hidden") === "true" && lists[1].inert === false && [...lists[1].querySelectorAll("[data-mover]")].filter((b) => b.tabIndex === -1).length === 10,'
-        + ' anim: getComputedStyle(tr).animationName, state: getComputedStyle(tr).animationPlayState, dur: tr.style.getPropertyValue("--mv-dur"), src: document.getElementById("mkt-movers-src").textContent, tips: first.every((x) => (x.dataset.tip || "").length >= 8) }; })()');
+      const b = await ev('(() => { const s = document.getElementById("mv-strip"), w = document.getElementById("mv-strip-win"), tr = w.querySelector(".mv-track"), lists = w.querySelectorAll(".mv-list"), first = [...lists[0].querySelectorAll("[data-mover]")], nav = document.querySelector("body > nav.nav"), cs = getComputedStyle(s);'
+        + ' return { ids: first.map((x) => x.dataset.mover), texts: first.map((x) => x.textContent), hrefs: first.map((x) => x.getAttribute("href")), dup: lists.length === 2 && lists[1].getAttribute("aria-hidden") === "true" && lists[1].inert === false && [...lists[1].querySelectorAll("[data-mover]")].filter((x) => x.tabIndex === -1).length === ' + MVF.rows.length + ','
+        + ' anim: getComputedStyle(tr).animationName, state: getComputedStyle(tr).animationPlayState, dur: tr.style.getPropertyValue("--mv-dur"), tip: document.getElementById("mv-strip-h").dataset.tip, label: document.getElementById("mv-strip-h").textContent, after: nav.nextElementSibling === s,'
+        + ' pos: cs.position, top: Math.round(parseFloat(cs.top)), navH: Math.round(nav.getBoundingClientRect().height), stripH: Math.round(s.getBoundingClientRect().height), varH: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-h")), varBar: parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--nav-bar-h")), tips: first.every((x) => (x.dataset.tip || "").length >= 8), banner: !!document.getElementById("mkt-movers") }; })()');
       const want = MVF.rows.map((r) => r.id), t0 = b.texts[0] || '';
-      check('the banner runs the ten coins of /api/market/movers in its order (the biggest 24 h move either way first), each with its ticker, price and move, a description on every one; the copy that closes the loop is hidden from readers and the keyboard (but can be pressed)',
-        JSON.stringify(b.ids) === JSON.stringify(want) && /^ENA\$0\.1665▼ −20\.1%$/.test(t0) && /^HYPE/.test(b.texts.join('|')) === false && b.dup && b.tips, JSON.stringify(b).slice(0, 600));
-      check('  ...it moves (one loop, its length setting its speed) and says what it ranks, when it was read, and that it is not advice',
-        b.anim === 'mkt-mv' && b.state === 'running' && /^\d+s$/.test(b.dur) && /Ranked by the size of the 24 h move, either way, among CoinGecko’s 100 largest coins/.test(b.src) && /not advice, never a tip to buy/.test(b.src), JSON.stringify({ anim: b.anim, state: b.state, dur: b.dur, src: b.src }));
-      const r = await ev('(() => { const b = document.getElementById("mkt-movers").getBoundingClientRect(); return [b.left + b.width / 2, b.top + b.height / 2]; })()');
+      check('the strip runs the coins of /api/market/movers in its order — only rises, the biggest first (owner: "only show positive percentage gains") — each with its ticker, price and rise, a link to its on-chain data on Market Data; the loop\'s copy is hidden from readers and out of the tab order (but can be pressed); the page\'s old banner is gone',
+        JSON.stringify(b.ids) === JSON.stringify(want) && MVF.rows.length > 0 && b.texts.every((t) => /▲ \+/.test(t) && !/▼/.test(t)) && /^HYPE\$89\.09▲ \+10\.4%$/.test(t0) && b.hrefs[0] === '/market?coin=hyperliquid' && b.dup && b.tips && !b.banner, JSON.stringify(b).slice(0, 700));
+      check('  ...it sits right under the nav and sticks with it (sticky at the nav\'s own height); --nav-h counts the nav and the strip, so a page\'s own sticky bars clear both; its label opens Market Data and says what it ranks, when it was read, and that it is not advice',
+        b.after && b.pos === 'sticky' && b.stripH <= 64 && Math.abs(b.top - b.navH) <= 1 && Math.abs(b.varBar - b.navH) <= 1 && Math.abs(b.varH - (b.navH + b.stripH)) <= 1 && /📈 Top gainers/.test(b.label)
+        && /only coins that went up/.test(b.tip) && /read \d{4}-\d\d-\d\d \d\d:\d\d UTC/.test(b.tip) && /Not advice, never a tip to buy/.test(b.tip) && b.anim === 'mv-strip-run' && b.state === 'running' && /^\d+s$/.test(b.dur), JSON.stringify(b).slice(0, 700));
+      await ev('window.scrollTo(0, document.documentElement.scrollHeight), true'); await sleep(200);
+      const stuck = await ev('(() => { const s = document.getElementById("mv-strip").getBoundingClientRect(), n = document.querySelector("body > nav.nav").getBoundingClientRect(); return { sTop: Math.round(s.top), nBottom: Math.round(n.bottom), y: scrollY }; })()');
+      await ev('window.scrollTo(0, 0), true');
+      check('  ...scrolled down the page, the strip is still in view, right under the nav', stuck.y > 300 && Math.abs(stuck.sTop - stuck.nBottom) <= 1, JSON.stringify(stuck));
+      const r = await ev('(() => { const b = document.getElementById("mv-strip").getBoundingClientRect(); return [b.left + b.width * 0.6, b.top + b.height / 2]; })()');
       await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: r[0], y: r[1], button: 'none' }); await sleep(150);
-      const hov = await ev('getComputedStyle(document.querySelector(".mkt-movers-track")).animationPlayState');
+      const hov = await ev('getComputedStyle(document.querySelector(".mv-track")).animationPlayState');
       await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 880, button: 'none' }); await sleep(150);
-      await ev('document.querySelector("#mkt-movers-win [data-mover]").focus({ preventScroll: true }), true'); await sleep(80);
-      const foc = await ev('(() => { const cs = getComputedStyle(document.querySelector(".mkt-movers-track")); return cs.animationName === "none" ? "stopped" : cs.animationPlayState; })()');
+      await ev('document.querySelector("#mv-strip-win [data-mover]").focus({ preventScroll: true }), true'); await sleep(80);
+      const foc = await ev('(() => { const cs = getComputedStyle(document.querySelector(".mv-track")); return cs.animationName === "none" ? "stopped" : cs.animationPlayState; })()');
       await ev('document.activeElement.blur(), true');
-      await ev('document.querySelector("#mkt-movers-win [data-mover]").focus(), true'); await key('Tab', 'Tab', 9); await sleep(120);
-      const kb = await ev('(() => { const a = document.activeElement, w = document.getElementById("mkt-movers-win"), tr = w.querySelector(".mkt-movers-track"), r = a.getBoundingClientRect(), wr = w.getBoundingClientRect(); return { id: a.dataset.mover, fv: a.matches(":focus-visible"), anim: getComputedStyle(tr).animationName, dup: getComputedStyle(w.querySelector(".mkt-movers-dup")).display, inView: r.left >= wr.left - 1 && r.right <= wr.right + 1 }; })()');
+      await ev('document.querySelector("#mv-strip-win [data-mover]").focus(), true'); await key('Tab', 'Tab', 9); await sleep(120);
+      const kb = await ev('(() => { const a = document.activeElement, w = document.getElementById("mv-strip-win"), tr = w.querySelector(".mv-track"), r = a.getBoundingClientRect(), wr = w.getBoundingClientRect(); return { id: a.dataset.mover, fv: a.matches(":focus-visible"), anim: getComputedStyle(tr).animationName, dup: getComputedStyle(w.querySelector(".mv-dup")).display, inView: r.left >= wr.left - 1 && r.right <= wr.right + 1 }; })()');
       await ev('document.activeElement.blur(), true');
-      const still = '(() => { const w = document.getElementById("mkt-movers-win"), tr = w.querySelector(".mkt-movers-track"); return { anim: getComputedStyle(tr).animationName, dup: getComputedStyle(w.querySelector(".mkt-movers-dup")).display, ox: getComputedStyle(w).overflowX }; })()';
+      const still = '(() => { const w = document.getElementById("mv-strip-win"), tr = w.querySelector(".mv-track"); return { anim: getComputedStyle(tr).animationName, dup: getComputedStyle(w.querySelector(".mv-dup")).display, ox: getComputedStyle(w).overflowX }; })()';
       await ev('document.documentElement.classList.add("motion-off"), true'); const off = await ev(still); await ev('document.documentElement.classList.remove("motion-off"), true');
       await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] }); const rm = await ev(still); await cdp('Emulation.setEmulatedMedia', { features: [] });
       const stillOK = (x) => x.anim === 'none' && x.dup === 'none' && x.ox === 'auto';
-      check('  ...it stops under a pointer and while a mover has the focus; reached with the keyboard (Tab) it stops as a row, the copy gone, the focused mover inside the strip; under ⏸ (html.motion-off) and the reduced-motion setting it does not move at all: the copy goes and the row scrolls by hand',
+      check('  ...it stops under a pointer and while a coin in it has the focus; reached with the keyboard (Tab) it stops as a row, the copy gone, the focused coin inside the strip; under ⏸ (html.motion-off) and the reduced-motion setting it does not move at all: the copy goes and the row scrolls by hand',
         hov === 'paused' && (foc === 'paused' || foc === 'stopped') && kb.id === MVF.rows[1].id && kb.fv && kb.anim === 'none' && kb.dup === 'none' && kb.inView && stillOK(off) && stillOK(rm), JSON.stringify({ hov, foc, kb, off, rm }));
       const lay = {};
-      for (const w of [320, 390]) { await go('/market', w); await moversReady(); lay[w] = await ev(LAYOUT); }
-      check('  ...at 320 and 390 px the banner and the glance fit: no sideways scroll, nothing outside the column, no text under the floor',
-        [320, 390].every((w) => lay[w].sw <= lay[w].iw && !lay[w].out.length && !lay[w].small.length), JSON.stringify(lay).slice(0, 600));
+      for (const w of [320, 390]) { await go('/market', w); await moversReady(); lay[w] = await ev(LAYOUT); lay[w].strip = await ev('(() => { const s = document.getElementById("mv-strip"), h = document.getElementById("mv-strip-h").getBoundingClientRect(); return { h: Math.round(s.getBoundingClientRect().height), w: Math.round(s.getBoundingClientRect().width), right: Math.round(s.getBoundingClientRect().right), labelW: Math.round(h.width), sub: getComputedStyle(document.querySelector(".mv-strip-sub")).display }; })()'); }
+      check('  ...at 320 and 390 px the strip and the glance fit: no sideways scroll, nothing outside the column, no text under the floor; the strip is one row (64 px at most), its label kept to its first line there',
+        [320, 390].every((w) => lay[w].sw <= lay[w].iw && !lay[w].out.length && !lay[w].small.length && lay[w].strip.right <= w && lay[w].strip.sub === 'none' && lay[w].strip.h <= 64), JSON.stringify(lay).slice(0, 700));
       FAKE.moversPatch = (j) => Object.assign(j, { rows: [], gainers: [], losers: [], dominance: [], counts: { up: 0, down: 0, flat: 0, none: 0, of: 0 }, why: 'CoinGecko\'s top 100 coins has not been read yet — the server reads them every 10 minutes' });
-      await go('/market', 1280); await until('/not been read yet/.test(document.getElementById("mkt-movers-win").textContent)');
-      const unread = await ev('[...document.querySelectorAll("#mkt-glance-grid .mkt-gl")].map((t) => t.textContent).find((x) => /Top 100/.test(x)) || ""');
+      await go('/market', 1280); await until('/Not read yet/.test(document.getElementById("mkt-glance-grid").textContent)');
+      const unread = { strip: await textOf('#mv-strip-win'), tile: await ev('[...document.querySelectorAll("#mkt-glance-grid .mkt-gl")].map((t) => t.textContent).find((x) => /Top 100/.test(x)) || ""') };
+      FAKE.moversPatch = (j) => Object.assign(j, { rows: [], gainers: [] });
+      await go('/market', 1280); await until('!document.getElementById("mv-strip").hidden');
+      const noneUp = await textOf('#mv-strip-win');
+      await until('/None went up/.test(document.getElementById("mkt-glance-grid").textContent)', 4000);
+      const noneTile = await ev('[...document.querySelectorAll("#mkt-glance-grid .mkt-gl")].map((t) => t.textContent).find((x) => /gainer/.test(x)) || ""');
       FAKE.moversPatch = null;
-      check('  ...before the 100 are read, the banner says why and the breadth tile says "Not read yet" with the server\'s reason — never ▼ 0 ▲ 0',
-        /Not read yet/.test(unread) && /has not been read yet/.test(unread) && !/▼ 0|▲ 0/.test(unread), unread);
-      FAKE.moversDown = true; await go('/market', 1280);
-      await until('!!document.querySelector("#mkt-movers-src [data-retry=movers]")');
-      const down = { t: await textOf('#mkt-movers-win'), retry: await ev('!!document.querySelector("#mkt-movers-src [data-retry=movers]")') };
-      FAKE.moversDown = false; await ev('document.querySelector("#mkt-movers-src [data-retry=movers]").click(), true'); const back = await moversReady();
-      check('  ...a read that fails says why with a Try again, never an empty banner or a made-up move, and Try again reads it again',
-        /could not be read just now/i.test(down.t) && down.retry && !!back, JSON.stringify(down));
+      check('  ...before the 100 are read the strip says so in its own room (it never comes and goes, so the page never jumps) and the breadth tile says "Not read yet" with the server\'s reason — never ▼ 0 ▲ 0; on a day nothing went up the strip says so (stablecoins left out, as they were) and the gainer tile says "None went up" — never "Not read yet" for a read that was made, never a falling coin',
+        /^Top gainers: the 100 largest coins are not read yet\.$/.test(unread.strip) && /Not read yet/.test(unread.tile) && /has not been read yet/.test(unread.tile) && !/▼ 0|▲ 0/.test(unread.tile) && /^None of the 100 largest coins \(stablecoins left out\) rose in the last 24 h\.$/.test(noneUp) && /None went up/.test(noneTile) && /of the 100 largest coins in 24 h, stablecoins left out/.test(noneTile) && !/Not read yet/.test(noneTile), JSON.stringify({ unread, noneUp, noneTile }));
+      FAKE.moversDown = true; await go('/market', 1280); await until('/Can’t read the top gainers/.test(document.getElementById("mv-strip-win").textContent)');
+      const down = { strip: await textOf('#mv-strip-win'), h: await ev('Math.round(document.getElementById("mv-strip").getBoundingClientRect().height)'), tile: await ev('[...document.querySelectorAll("#mkt-glance-grid .mkt-gl")].map((t) => t.textContent).find((x) => /gainer/.test(x)) || ""') };
+      FAKE.moversDown = false;
+      check('  ...a read that fails keeps the strip\'s room (the page never jumps) with one honest line — never an empty strip or a made-up rise — and the glance says it was not read', /^Can’t read the top gainers just now\.$/.test(down.strip) && down.h <= 64 && /Not read yet/.test(down.tile), JSON.stringify(down));
     });
 
     await step('the market at a glance: one tile per headline figure, each a way in', async () => {
@@ -1856,50 +1867,67 @@ async function browserWalk() {
     });
 
     await step('a coin pressed anywhere opens its on-chain data: a token contract its dashboard, any other coin its card', async () => {
-      const ENA = MVF.rows.find((r) => r.id === 'ethena').onchain.address, WLD = MVF.rows.find((r) => r.id === 'worldcoin-wld').onchain.address;
+      const ENA = FIX('heatmap.json').rows.find((r) => r.id === 'ethena').onchain.address, WLD = FIX('heatmap.json').rows.find((r) => r.id === 'worldcoin-wld').onchain.address;
       const sp = FIX('scan-robinhood-' + SEND + '.json');
       const reKey = (addr, sym, name) => { const j = JSON.parse(JSON.stringify(sp)); j.chain = 'ethereum'; j.pair.chain = 'ethereum'; Object.assign(j.pair.token, { address: addr, symbol: sym, name }); return j; };
       FAKE.scanAs = { ['ethereum:' + ENA]: reKey(ENA, 'ENA', 'Ethena') };
       await go('/market', 1280); await moversReady();
       const o0 = FAKE.other.length, m0 = FAKE.log.length;
-      await ev('(() => { const b = document.querySelector("#mkt-movers-win [data-mover=ethena]"); b.focus({ preventScroll: true }); b.click(); })(), true'); await modalReady();
+      // the biggest faller's tile: Ethena, a token contract on Ethereum
+      await ev('(() => { const b = document.querySelector("#mkt-glance-grid [data-glance=coin][data-arg=ethena]"); b.focus({ preventScroll: true }); b.click(); })(), true'); await modalReady();
       const ena = await modal();
-      check('a mover with a token contract on a chain the Scanner reads (Ethena on Ethereum) opens the site\'s token popup: the Scanner\'s dashboard from a quiet /api/market/scan read on that chain (never the Robinhood Chain lookup), a line saying where the figures come from, and a full page that names the chain',
+      check('a coin with a token contract on a chain the Scanner reads (Ethena on Ethereum, from its glance tile) opens the site\'s token popup: the Scanner\'s dashboard from a quiet /api/market/scan read on that chain (never the Robinhood Chain lookup), a line saying where the figures come from, and a full page that names the chain',
         ena.open && /Ethena \$ENA/.test(ena.title) && ena.dash && /^CoinGecko #46 · \$0\.1665/.test(ena.lead) && /token contract on Ethereum, read from the chain/.test(ena.lead) && ena.full === '/newpairs?scan=' + ENA + '&chain=ethereum'
         && FAKE.log.slice(m0).includes('/api/market/scan?chain=ethereum&address=' + ENA) && !FAKE.other.slice(o0).some((x) => x.startsWith('/api/pairs/lookup')), JSON.stringify(ena));
       await key('Escape', 'Escape', 27); await until('document.getElementById("token-modal").hasAttribute("hidden")');
-      const ret = await ev('document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.mover || document.activeElement.id : ""');
-      await ev('document.querySelector("#mkt-movers-win [data-mover=\\"worldcoin-wld\\"]").click(), true'); await modalReady();
+      const ret = await ev('document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.arg || document.activeElement.id : ""');
+      await ev('document.activeElement && document.activeElement.blur && document.activeElement.blur(), true');
+      await ev('document.querySelector("#mkt-map .mkt-bub[data-coin=\\"worldcoin-wld\\"]").dispatchEvent(new MouseEvent("click", { bubbles: true })), true'); await modalReady();
       const wld = await modal(); await closeModal();
-      check('  ...Esc closes it and gives the mover its focus back; a contract the chain could not be read for says so in the server\'s words, under the same line — never a verdict',
+      check('  ...Esc closes it and gives the tile its focus back; a contract the chain could not be read for (Worldcoin, from its bubble) says so in the server\'s words, under the same line — never a verdict',
         ret === 'ethena' && wld.open && !wld.dash && /^⏳ The chain could not be read for this token just now — nothing here is a judgement about it\./.test(wld.msg) && /token contract on Ethereum/.test(wld.lead), JSON.stringify({ ret, wld }));
       await ev('document.querySelector("#mkt-map .mkt-bub[data-coin=ethena]").dispatchEvent(new MouseEvent("click", { bubbles: true })), true'); await modalReady();
       const bub = await modal(); await closeModal();
-      await ev('document.querySelector("#mkt-glance-grid [data-glance=coin][data-arg=ethena]").click(), true'); await modalReady();
-      const tile = await modal(); await closeModal();
-      check('  ...the same coin\'s bubble on the map and its glance tile open the same popup',
-        /Ethena \$ENA/.test(bub.title) && bub.dash && /Ethena \$ENA/.test(tile.title) && tile.dash, JSON.stringify({ bub, tile }));
-      // a press on the loop's copy (a real one, hit-tested): the strip held where the copy fills the window (no mover focused: a focused
-      // one stops the strip as a row, the copy put away)
+      check('  ...the same coin\'s bubble on the map opens the same popup', /Ethena \$ENA/.test(bub.title) && bub.dash, JSON.stringify(bub));
+      // a coin in the strip, pressed on this page (a real press, on the loop's copy — hit-tested): it opens here, the page is not left
       await ev('document.activeElement && document.activeElement.blur && document.activeElement.blur(), true');
-      await ev('(() => { const tr = document.querySelector("#mkt-movers-win .mkt-movers-track"); tr.style.animation = "none"; tr.style.transform = "translateX(-50%)"; })(), true'); await sleep(100);
-      const dupTarget = await ev('(() => { const b = document.querySelector("#mkt-movers-win .mkt-movers-dup [data-mover]"), r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, top = document.elementFromPoint(x, y); return { id: b.dataset.mover, x, y, hit: !!top && (top === b || b.contains(top)) }; })()');
+      await ev('(() => { const tr = document.querySelector("#mv-strip-win .mv-track"); tr.style.animation = "none"; tr.style.transform = "translateX(-50%)"; })(), true'); await sleep(100);
+      const dupTarget = await ev('(() => { const b = document.querySelector("#mv-strip-win .mv-dup [data-mover]"), r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, top = document.elementFromPoint(x, y); return { id: b.dataset.mover, x, y, hit: !!top && (top === b || b.contains(top)) }; })()');
+      const url0 = await ev('location.href');
       for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await cdp('Input.dispatchMouseEvent', { type, x: dupTarget.x, y: dupTarget.y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
-      await modalReady(); const dupM = await modal(); await closeModal();
-      check('  ...a press on a mover the loop is showing from its copy opens it too (the copy is not inert: hit-tested, it is the button)', dupTarget.hit && dupTarget.id === 'ethena' && /Ethena \$ENA/.test(dupM.title) && dupM.dash, JSON.stringify({ dupTarget, dupM }));
+      const hype = await until('!document.getElementById("mkt-map-card").hidden && /^HYPE/.test(document.getElementById("mkt-map-card").textContent) ? document.getElementById("mkt-map-card").textContent : null');
+      check('  ...a coin pressed in the strip on Market Data opens here — the loop\'s copy can be pressed too (hit-tested) — and the page is not left: Hyperliquid, whose place on-chain is not known in this coin list, opens its card saying why',
+        dupTarget.hit && dupTarget.id === 'hyperliquid' && !!hype && (await ev('location.href')) === url0 && /not in CoinGecko\'s coin list/.test(hype), JSON.stringify({ dupTarget, hype: String(hype).slice(0, 200) }));
       await ev('document.querySelector("#mkt-glance-grid [data-glance=coin][data-arg=bitcoin]").click(), true');
-      await until('!document.getElementById("mkt-map-card").hidden && /On-chain/.test(document.getElementById("mkt-map-card").textContent)');
+      await until('!document.getElementById("mkt-map-card").hidden && /^BTC/.test(document.getElementById("mkt-map-card").textContent)');
       const btc = await ev('(() => { const c = document.getElementById("mkt-map-card"), b = c.querySelector("[data-coin-chain]"); return { t: c.textContent, chain: b ? b.dataset.coinChain : null, tip: b ? (b.dataset.tip || "").length : 0, modal: !document.getElementById("token-modal").hasAttribute("hidden") }; })()');
       await ev('document.querySelector("#mkt-map-card [data-coin-chain]").click(), true');
       await until('location.search === "?chain=bitcoin"'); await viewReady();
       const bv = await textOf('#mkt-vh');
-      await ev('document.querySelector("#mkt-movers-win [data-mover=\\"pearl-2\\"]").click(), true');
+      await ev('document.querySelector("#mkt-map .mkt-bub[data-coin=\\"pearl-2\\"]").dispatchEvent(new MouseEvent("click", { bubbles: true })), true');
       await until('!document.getElementById("mkt-map-card").hidden && /^PEARL/.test(document.getElementById("mkt-map-card").textContent)');
       const pearl = await textOf('#mkt-map-card .mkt-coin-oc');
       const pearlRow = FIX('heatmap.json').rows.find((r) => r.id === 'pearl-2');
-      check('  ...a chain\'s own coin (Bitcoin, from the dominance tile) opens its card, whose ⛓️ On-chain box opens its chain\'s data in the main view; a coin whose place on-chain is not known (Pearl, from the banner: not in the coin list the server read) opens its card saying why — never "no contract"',
+      check('  ...a chain\'s own coin (Bitcoin, from the dominance tile) opens its card, whose ⛓️ On-chain box opens its chain\'s data in the main view; a coin whose place on-chain is not known (Pearl, from its bubble: not in the coin list the server read) opens its card saying why — never "no contract"',
         !btc.modal && btc.chain === 'bitcoin' && btc.tip >= 8 && /⛓️ On-chain/.test(btc.t) && /Bitcoin/.test(bv) && /Dominance/.test(btc.t)
         && pearlRow.onchain === null && pearl.includes(pearlRow.onchainWhy.slice(1, 60)) && !/no contract|No token contract/i.test(pearl), JSON.stringify({ btc: Object.assign({}, btc, { t: btc.t.slice(0, 300) }), bv, pearl }));
+      // from another page: the strip's link is /market?coin=<id> — the coin opens on arrival, and the address loses ?coin
+      await go('/market?coin=ethena', 1280); await modalReady();
+      const fromAway = { m: await modal(), url: await ev('location.pathname + location.search') };
+      await closeModal();
+      check('  ...a coin pressed in the strip on any other page arrives as /market?coin=<id>: it opens on arrival (Ethena\'s dashboard), and the address loses ?coin (it is a press, not a place)',
+        fromAway.m.open && /Ethena \$ENA/.test(fromAway.m.title) && fromAway.m.dash && fromAway.url === '/market', JSON.stringify(fromAway));
+      // the movers could not be read: a coin asked for still opens, from the map's own read
+      FAKE.moversDown = true; await go('/market?coin=ethena', 1280); await modalReady();
+      const noMovers = { m: await modal(), url: await ev('location.pathname + location.search') };
+      await closeModal(); FAKE.moversDown = false;
+      // a coin that is not among the 100 (gone from them, or a link mistyped): one line says so; no card, no popup, nothing scrolled to
+      await go('/market?coin=not-a-listed-coin', 1280); await until('!!document.querySelector("#mkt-map .mkt-bub")');
+      await until('[...document.querySelectorAll(".toast")].some((t) => /not among the 100 largest/.test(t.textContent))', 4000);
+      const unknown = await ev('({ toast: [...document.querySelectorAll(".toast")].map((t) => t.textContent).join(" | "), card: document.getElementById("mkt-map-card").hidden, modal: !!(document.getElementById("token-modal") && !document.getElementById("token-modal").hidden), url: location.pathname + location.search, y: Math.round(scrollY) })');
+      check('  ...when the movers could not be read the coin asked for still opens (from the map\'s read); a coin that is not among the 100 says so in one line — no card, no popup, the page not scrolled to the map',
+        noMovers.m.open && /Ethena \$ENA/.test(noMovers.m.title) && noMovers.url === '/market' && /^That coin is not among the 100 largest coins just now, so Market Data has no reading of it\.$/.test(unknown.toast) && unknown.card && !unknown.modal && unknown.url === '/market' && unknown.y === 0,
+        JSON.stringify({ noMovers: { open: noMovers.m.open, title: noMovers.m.title, url: noMovers.url }, unknown }));
       // the map folded away and not read: a coin's card from a tile opens the map, reads it, and opens the card from the map's own row
       await ev('localStorage.setItem("jsi:market-map", "hidden"), true');
       const h0 = FAKE.log.filter((x) => x.startsWith('/api/market/heatmap')).length;
@@ -2090,7 +2118,7 @@ async function runSuite() {
       && /edges = \[r\.left \+ 3, r\.right - 3\]/.test(pickCode) && /if \(how === 'open' && use\.h < need\) \{ const up = pickRoom\(true, band\); if \(up\.h > use\.h\) use = up; else placePick\(false\); \}/.test(pickCode)
       && /pick\.fixed = getComputedStyle\(\$\('mkt-side'\)\)\.position === 'sticky';/.test(pickCode) && /const under = pick\.fixed \? pickCover\(r, band, up\) : null;/.test(pickCode)
       && /new MutationObserver\(/.test(pickCode) && /pickMO\.observe\(document\.body, \{ subtree: true, childList: true, attributes: true, attributeFilter: \['hidden', 'class', 'style'\] \}\);/.test(pickCode)
-      && /t\.contains\(filterBox\) \|\| t\.id === 'tip-bubble' \|\| t\.classList\.contains\('rk-layer'\)/.test(pickCode) && /pick\.soon = setTimeout\(pickWatch, 300\);/.test(pickCode)
+      && /t\.contains\(filterBox\) \|\| t\.id === 'tip-bubble' \|\| t\.id === 'mv-strip' \|\| t\.classList\.contains\('rk-layer'\)/.test(pickCode) && /pick\.soon = setTimeout\(pickWatch, 300\);/.test(pickCode)
       && /window\.addEventListener\('scroll', \(e\) => \{ if \(filterBox && !filterBox\.contains\(e\.target\)\) fitPick\(\); \}/.test(code)
       && /\.mkt-cpick-p \{\s*position: absolute;[^}]*z-index: 260;[^}]*overflow-y: auto;/.test(CSS) && /\.mkt-cpick-p\[hidden\] \{ display: none; \}/.test(CSS)
       && /\.mkt-cpick-p\.is-up \{ top: auto; bottom: calc\(100% \+ 0\.4rem\); \}/.test(CSS) && /\.mkt-cpick-p\.is-fixed \{ position: fixed; \}/.test(CSS) && /body:has\(#mkt-tchain-p:not\(\[hidden\]\)\) > \.nav \{ z-index: 300; \}/.test(CSS));
@@ -2170,8 +2198,8 @@ async function runSuite() {
     let legendOK = false; try { legendOK = JSON.stringify(vm.runInNewContext(legendJS)) === JSON.stringify(MM.BUCKETS.map((b) => [b.key, b.label])); } catch {}
     const bucketJS = (code.match(/function mapBucket\(v\) \{[\s\S]*?\n  \}/) || [])[0];
     let bucketOK = false; try { const f = vm.runInNewContext('(' + bucketJS + ')'); bucketOK = [null, NaN, 0, 0.0001, 2, 2.01, 5, 5.01, 10, 10.01, 99, -0.0001, -2, -2.01, -5, -5.01, -10, -10.01, -60].every((x) => f(x) === MM.bucketOf(x)); } catch {}
-    check('  ...market.js reads it from /api/market/heatmap alone (getJSON, one answer: Top 50 and the stablecoins are cut from it here), and its legend and steps are lib/marketmap.js\'s — the same nine steps and "no 24 h change given", the same edges (exactly 10% is ">5%", exactly 0 is "0%", no change is never 0%)',
-      /const j = await getJSON\('\/api\/market\/heatmap'\);/.test(code) && (code.match(/\/api\/market\/heatmap/g) || []).length === 4 && legendOK && bucketOK, JSON.stringify({ legendOK, bucketOK }));
+    check('  ...market.js reads it from /api/market/heatmap alone (getJSON, one answer: Top 50 and the stablecoins are cut from it here — the map\'s read, and the same read asked for quietly for a coin pressed on another page while the map is folded), and its legend and steps are lib/marketmap.js\'s — the same nine steps and "no 24 h change given", the same edges (exactly 10% is ">5%", exactly 0 is "0%", no change is never 0%)',
+      /const j = await getJSON\('\/api\/market\/heatmap'\);/.test(code) && (code.match(/\/api\/market\/heatmap/g) || []).length === 5 && /askedMap = false;\s*getJSON\('\/api\/market\/heatmap'\)/.test(code) && legendOK && bucketOK, JSON.stringify({ legendOK, bucketOK }));
     check('  ...one SVG, sized, packed and drawn here — no library, no CDN: the ring (front-chain packing and the smallest enclosing circle, the @lift:pack block) or the column (the @lift:column block), at the box\'s own pixel width with no cap, one role="img" with a summary in words (not 100 tab stops), each bubble a <title>; a bigger market cap a bigger bubble on a compressed scale (its radius the fourth root, so its area the square root) and never under its ticker\'s minimum at the floor, its colour the step\'s class',
       /\/\* @lift:pack /.test(JS) && /\/\* @lift:pack-end \*\//.test(JS) && /function packCircles\(cs\)/.test(code) && /function packEnclose\(cs\)/.test(code)
       && /\/\* @lift:column /.test(JS) && /\/\* @lift:column-end \*\//.test(JS) && /function packColumn\(cs, W\)/.test(code) && /function mapLayout\(items, W, gap\)/.test(code)
@@ -2639,7 +2667,7 @@ async function runSuite() {
       && JSON.stringify(R.heatmapCut.rows.map((r) => r.id)) === JSON.stringify(fb('/api/market/heatmap?limit=50&stables=0').rows.map((r) => r.id)) && R.heatmapCut.rows.length === 40 && R.heatmapCut.counts.drawn === 40);
     const mvIds = (j) => JSON.stringify(['rows', 'gainers', 'losers'].map((k) => j[k].map((r) => [r.id, r.change24h.v])).concat([j.counts, j.dominance.map((d) => [d.id, d.fig.v])]));
     check('  ...the movers answer on that database is the fixture\'s, mover for mover (the same ten, five gainers, five losers, counts and dominance): worked out from the same read as the map',
-      mvIds(R.movers) === mvIds(FIX('movers.json')) && R.movers.rows.length === 10 && R.movers.ranked === 'absolute 24 h move, either way', mvIds(R.movers).slice(0, 300));
+      mvIds(R.movers) === mvIds(FIX("movers.json")) && R.movers.rows.length === 10 && R.movers.ranked === 'biggest 24 h rise first, only coins that went up', mvIds(R.movers).slice(0, 300) + ' VS ' + mvIds(FIX('movers.json')).slice(0, 300));
     check('  ...and so does every answer the fake builds for itself (a chain with no history, a token from the list, a custom window, an unavailable token, a search with Dexscreener down, an RWA token\'s facts, the RWA lists sorted and filtered, the bubble map cut)', !fdrift.length && R.unavailable.unavailable === true && typeof R.searchDown.why === 'string',
       fdrift.map(([n, d]) => n + ': ' + d.slice(0, 4).join('; ')).join(' | '));
     check('  ...market.js knows which chains the server reads a token on, and which the Scanner reads, from the server\'s own lists',

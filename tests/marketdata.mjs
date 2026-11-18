@@ -2123,7 +2123,7 @@ try {
     const rowOf = (A, id) => A.rows.find((r) => r.id === id);
     const M0 = mdV.movers().body;
     check('movers: before the map\'s first read the answer is a 200 with no rows that says why — never an error, never a list made up',
-      Array.isArray(M0.rows) && M0.rows.length === 0 && M0.gainers.length === 0 && M0.losers.length === 0 && M0.counts.of === 0 && /^CoinGecko's top 100 coins has not been read yet/.test(M0.why) && M0.ranked === 'absolute 24 h move, either way' && M0.total.v === null, brief(M0));
+      Array.isArray(M0.rows) && M0.rows.length === 0 && M0.gainers.length === 0 && M0.losers.length === 0 && M0.counts.of === 0 && /^CoinGecko's top 100 coins has not been read yet/.test(M0.why) && M0.ranked === 'biggest 24 h rise first, only coins that went up' && M0.total.v === null, brief(M0));
     // the map's first read (the bubble map section's answers), then the coin list in its own slot
     const rM = await mdV.runJob('heatmap'); clockV += 20e3;
     const A0 = mdV.heatmap({}).body;
@@ -2210,13 +2210,17 @@ try {
     // the movers, from the same stored read: nothing asked
     const w3 = log.length, M = mdV.movers().body, M_api = await mdV.apiResource('movers', {}, {}), noAsk = log.length === w3;
     const chgOf = (c) => c.price_change_percentage_24h, ordered = HMX.top.map((c, i) => ({ c, i })).filter((x) => chgOf(x.c) != null);
-    const wantMov = [...ordered].sort((a, b) => Math.abs(chgOf(b.c)) - Math.abs(chgOf(a.c)) || a.i - b.i).slice(0, 10).map((x) => x.c.id);
-    const wantUp = ordered.filter((x) => chgOf(x.c) > 0).sort((a, b) => chgOf(b.c) - chgOf(a.c) || a.i - b.i).slice(0, 5).map((x) => x.c.id);
+    // owner, 2026-11-17: "only show positive percentage gains" — the banner's rows are the biggest RISES, only coins that went up
+    // ...and not a stablecoin (CoinGecko's stablecoins category, as the map flags it): a stablecoin's "rise" is noise around its peg
+    const isStable = (id) => rowOf(A2, id).stable === true;
+    const wantMov = ordered.filter((x) => chgOf(x.c) > 0 && !isStable(x.c.id)).sort((a, b) => chgOf(b.c) - chgOf(a.c) || a.i - b.i).slice(0, 10).map((x) => x.c.id);
+    const wantUp = ordered.filter((x) => chgOf(x.c) > 0 && !isStable(x.c.id)).sort((a, b) => chgOf(b.c) - chgOf(a.c) || a.i - b.i).slice(0, 5).map((x) => x.c.id);
     const wantDn = ordered.filter((x) => chgOf(x.c) < 0).sort((a, b) => chgOf(a.c) - chgOf(b.c) || a.i - b.i).slice(0, 5).map((x) => x.c.id);
-    check('movers: the 10 of the 100 with the biggest 24 h move either way, ranked by its size (worked out here from CoinGecko\'s answer: ' + wantMov.slice(0, 3).join(', ') + ' …) — each row the map\'s own figures, picture and onchain, in the banner\'s fields; nothing asked of any source',
+    check('movers: the 10 of the 100 with the biggest 24 h RISE — only coins that went up, stablecoins left out, the biggest rise first (worked out here from CoinGecko\'s answer: ' + wantMov.slice(0, 3).join(', ') + ' …) — each row the map\'s own figures, picture and onchain, in the banner\'s fields; nothing asked of any source',
       noAsk && JSON.stringify(M.rows.map((r) => r.id)) === JSON.stringify(wantMov) && M.rows.every((r) => JSON.stringify(Object.keys(r)) === JSON.stringify(MM.MOVER_KEYS))
       && M.rows.every((r) => { const h = rowOf(A2, r.id); return JSON.stringify([r.price, r.change24h, r.mcap, r.volume24h, r.stable, r.onchain, r.logo, r.rank]) === JSON.stringify([h.price, h.change24h, h.mcap, h.volume24h, h.stable, h.onchain, h.logo, h.rank]); })
-      && M.rows[0].id === 'ethena' && M.rows[0].change24h.v === -20.09284 && M.ranked === 'absolute 24 h move, either way' && M.at === A2.at, brief(M.rows.map((r) => [r.symbol, r.change24h.v])));
+      && M.rows.length === 10 && M.rows.every((r) => r.change24h.v > 0 && r.stable !== true) && !M.rows.some((r) => r.id === 'open-usd') && M.rows[0].id === 'hyperliquid' && M.rows[0].change24h.v === 10.38171 && M.ranked === 'biggest 24 h rise first, only coins that went up' && M.at === A2.at
+      && JSON.stringify(M.gainers.map((r) => r.id)) === JSON.stringify(M.rows.slice(0, 5).map((r) => r.id)), brief(M.rows.map((r) => [r.symbol, r.change24h.v])));
     check('  ...and the market at a glance from the same read: counts of the 100 (11 up, 88 down, 1 level — BUIDL\'s own 0% — none without a change), the total, the three largest coins\' dominance (Bitcoin 59.6%), the top 5 gainers (only rises) and losers (only falls)',
       JSON.stringify(M.counts) === JSON.stringify({ up: 11, down: 88, flat: 1, none: 0, of: 100 }) && JSON.stringify(M.total) === JSON.stringify(A2.total)
       && M.dominance.map((d) => d.id).join() === 'bitcoin,ethereum,tether' && M.dominance.every((d) => JSON.stringify(d.fig) === JSON.stringify(rowOf(A2, d.id).dominance) && Object.keys(d).join() === 'id,symbol,fig') && Math.abs(M.dominance[0].fig.v - 59.597) < 0.01
@@ -2230,15 +2234,23 @@ try {
     for (const id of ['ethena', 'hyperliquid']) stNull.coins.list.find((c) => c.id === id).change24h = null;   // built: two measured rows with their change taken away
     mdV._test.stSet('heatmap', stNull); clockV += 20e3; const MN = mdV.movers().body; mdV._test.stSet('heatmap', stH); clockV += 20e3;
     const lists = (m) => [...m.rows, ...m.gainers, ...m.losers];
-    check('  ...a coin with no 24 h change given is left out of every ranking and counted as "none" — never ranked as a 0% move: without ENA\'s and HYPE\'s, WLD leads and TRX is the first gainer, the counts say 2 none, and a note says why',
-      !lists(MN).some((r) => r.id === 'ethena' || r.id === 'hyperliquid') && lists(MN).every((r) => typeof r.change24h.v === 'number') && MN.rows[0].id === 'worldcoin-wld' && MN.gainers[0].id === 'tron'
+    check('  ...a coin with no 24 h change given is left out of every ranking and counted as "none" — never ranked as a 0% move: without ENA\'s and HYPE\'s, TRX leads the rises (and the gainers), the counts say 2 none, a note says why, and with 10 coins up of which one is a stablecoin the strip shows 9 and says only 9 went up',
+      !lists(MN).some((r) => r.id === 'ethena' || r.id === 'hyperliquid') && lists(MN).every((r) => typeof r.change24h.v === 'number') && MN.rows[0].id === 'tron' && MN.gainers[0].id === 'tron' && MN.rows.length === 9 && MN.rows.every((r) => r.change24h.v > 0 && r.stable !== true) && MN.notes.some((n) => /^Only 9 of the 100 \(stablecoins left out\) went up over 24 hours\.$/.test(n))
       && MN.counts.none === 2 && MN.counts.up === 10 && MN.counts.down === 87 && MN.counts.flat === 1 && MN.notes.some((n) => /^2 of the 100 coins have no 24 h change given by CoinGecko: left out of every ranking, never counted as 0%\.$/.test(n))
       && !lists(MN).some((r) => r.id === 'blackrock-usd-institutional-digital-liquidity-fund'), brief({ r0: MN.rows[0].id, g0: MN.gainers[0].id, c: MN.counts }));
+    // CoinGecko's stablecoins category not read yet (built: the same read without it, and TRX's change taken away too, so 9 rose): no
+    // coin is known to be a stablecoin, so none is left out — and the answer says so instead of claiming they were
+    const stNoSt = JSON.parse(JSON.stringify(stNull)); delete stNoSt.stables; stNoSt.coins.list.find((c) => c.id === 'tron').change24h = null;
+    mdV._test.stSet('heatmap', stNoSt); clockV += 20e3; const MS = mdV.movers().body; mdV._test.stSet('heatmap', stH); clockV += 20e3;
+    check('  ...before CoinGecko\'s stablecoins category is read no coin is left out as a stablecoin and the answer says so: stablesOut false, every row\'s stable null, the stablecoin that rose (OUSD) among the 9 rises, a note that which coins are stablecoins is not known yet, and "Only 9 of the 100 went up" — never "(stablecoins left out)"; with it read, stablesOut is true',
+      MS.stablesOut === false && M.stablesOut === true && MN.stablesOut === true && MS.rows.length === 9 && MS.rows.every((r) => r.stable === null) && MS.rows.some((r) => r.id === 'open-usd')
+      && MS.notes.some((n) => /^Which coins are stablecoins is not known yet: CoinGecko's stablecoins category has not been read/.test(n)) && MS.notes.includes('Only 9 of the 100 went up over 24 hours.') && !MS.notes.some((n) => /stablecoins left out/.test(n)),
+      brief({ so: MS.stablesOut, n: MS.rows.length, ids: MS.rows.map((r) => r.id), notes: MS.notes }));
     // the strip's edges, on built rows (the pure rule): a day with no rises, a tie
     const fakeRow = (id, v, i) => ({ id, symbol: id.toUpperCase(), name: id, rank: i + 1, change24h: { v, src: 'coingecko', at: 1 }, dominance: { v: null, src: 'coingecko', at: 1, why: 'x' } });
-    const allDown = MM.moversOf(Array.from({ length: 12 }, (_, i) => fakeRow('d' + i, -1 - i, i))), tie = MM.moversOf([fakeRow('a', -5, 0), fakeRow('b', 5, 1), fakeRow('c', -9, 2), fakeRow('z', 0, 3)]);
-    check('  ...a day with no rises has no gainers (never a falling coin called one); a tie keeps CoinGecko\'s order (the larger coin first); a 0% move is level, neither gainer nor loser',
-      allDown.gainers.length === 0 && allDown.losers.length === 5 && allDown.losers[0].id === 'd11' && tie.rows.map((r) => r.id).join() === 'c,a,b,z' && tie.gainers.map((r) => r.id).join() === 'b' && tie.losers.map((r) => r.id).join() === 'c,a' && tie.counts.flat === 1);
+    const allDown = MM.moversOf(Array.from({ length: 12 }, (_, i) => fakeRow('d' + i, -1 - i, i))), tie = MM.moversOf([fakeRow('a', -5, 0), fakeRow('b', 5, 1), fakeRow('c', -9, 2), fakeRow('d', 5, 3), fakeRow('e', -5, 4), fakeRow('z', 0, 5)]);
+    check('  ...a day with no rises has no rows and no gainers (never a falling coin called one); a tie keeps CoinGecko\'s order (the larger coin first); a 0% move is level, neither gainer nor loser',
+      allDown.rows.length === 0 && allDown.gainers.length === 0 && allDown.losers.length === 5 && allDown.losers[0].id === 'd11' && tie.rows.map((r) => r.id).join() === 'b,d' && tie.gainers.map((r) => r.id).join() === 'b,d' && tie.losers.map((r) => r.id).join() === 'c,a,e' && tie.counts.flat === 1);
     // keep-last-good: CoinGecko down, an answer cut short, an answer that is not the list, an empty list — the last good map stays, said so
     const before = JSON.stringify(ccRows());
     clockV = at1 + 864e5; clVendor.mode = 'down'; const rF1 = await mdV.runJob('coinPlatforms');
@@ -2264,7 +2276,7 @@ try {
     const hmDoc2 = DOCS.includes('/api/data/v1/heatmap') ? DOCS.slice(DOCS.indexOf('/api/data/v1/heatmap')).split('</details>')[0] : '';
     const README_M = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'), ROBOTS = fs.readFileSync(path.join(ROOT, 'public', 'robots.txt'), 'utf8');
     check('  ...the docs: /data documents movers with every key it returns (data, the ranking, counts, total, dominance, gainers, losers, contracts) and its ranking rule, and the heatmap\'s logo and onchain with its four kinds; the README says what the movers and the coin list are and how often; robots.txt opens /api/market/movers at its default address only',
-      !!mvDoc && ['data'].concat(mvKeys).every((k) => new RegExp('\\b' + k + '\\b').test(mvDoc)) && /<tr><td><code>movers<\/code><\/td>/.test(DOCS) && /ranked by the size of the move either way/.test(mvDoc) && /never ranked as 0%/.test(mvDoc)
+      !!mvDoc && ['data'].concat(mvKeys).every((k) => new RegExp('\\b' + k + '\\b').test(mvDoc)) && /<tr><td><code>movers<\/code><\/td>/.test(DOCS) && /only coins that went up, the biggest rise first/.test(mvDoc) && /stablecoins left out/.test(mvDoc) && /never ranked as 0%/.test(mvDoc)
       && ['logo', 'onchain', 'onchainWhy', 'contracts', 'scannable', '"contract"', '"quote"', '"native"', '"none"'].every((k) => hmDoc2.includes(k)) && /<tr><td>Coin contracts<\/td>[^\n]*<td>Daily<\/td><\/tr>/.test(DOCS)
       && /`movers`/.test(README_M) && /`coinPlatforms`/.test(README_M) && /\*\*`contract`\*\*[^\n]*\*\*`quote`\*\*[^\n]*\*\*`native`\*\*[^\n]*\*\*`none`\*\*/.test(README_M) && /once a day/.test(README_M.slice(README_M.indexOf('coinPlatforms') - 300))
       && /^Allow: \/api\/market\/movers\$$/m.test(ROBOTS), mvKeys.filter((k) => !new RegExp('\\b' + k + '\\b').test(mvDoc)).join(','));
@@ -2374,8 +2386,8 @@ try {
     && hm50.status === 200 && hm50.j.rows.length === 40 && hm50.j.limit === 50 && hm50.j.stables === false, brief({ s: hm.status, n: hm.j && hm.j.rows && hm.j.rows.length, n50: hm50.j && hm50.j.rows && hm50.j.rows.length }));
   // the movers through the route (2026-11-17): from the same seeded read, nothing asked of a source; the coin list not read on this server
   const mvLog = log.length, mv = await asVisitor('/api/market/movers');
-  check('GET /api/market/movers: the 10 biggest 24 h moves among the map\'s 100 coins (ENA first, down 20%), with the counts, the total, the dominance, the gainers and losers — no-store, at the routes\' 120 a minute, nothing read for it; each row\'s onchain null with why (this server has not read the coin list)',
-    mv.status === 200 && mv.j.rows.length === 10 && mv.j.rows[0].id === 'ethena' && mv.j.ranked === 'absolute 24 h move, either way' && mv.j.counts.of === 100 && mv.j.gainers.length === 5 && mv.j.losers.length === 5 && mv.j.dominance.length === 3
+  check('GET /api/market/movers: the 10 biggest 24 h rises among the map\'s 100 coins (HYPE first, up 10.4%; only coins that went up), with the counts, the total, the dominance, the gainers and losers — no-store, at the routes\' 120 a minute, nothing read for it; each row\'s onchain null with why (this server has not read the coin list)',
+    mv.status === 200 && mv.j.rows.length === 10 && mv.j.rows[0].id === 'hyperliquid' && mv.j.rows.every((r) => r.change24h.v > 0) && mv.j.ranked === 'biggest 24 h rise first, only coins that went up' && mv.j.counts.of === 100 && mv.j.gainers.length === 5 && mv.j.losers.length === 5 && mv.j.dominance.length === 3
     && mv.j.total.src === 'coingecko' && /no-store/.test(mv.cc) && !log.slice(mvLog).some((l) => /\/(hcg|cg|hlore|lore)\//.test(l)) && mv.j.rows.every((r) => r.onchain === null && typeof r.onchainWhy === 'string' && /^\/api\/market\/logo\?u=/.test(r.logo)) && mv.j.contracts.ok === false
     && /else if \(p === '\/api\/market\/movers'\) r = MKT\.movers\(\);/.test(SRC), brief({ s: mv.status, r0: mv.j && mv.j.rows && mv.j.rows[0] && mv.j.rows[0].id, c: mv.j && mv.j.counts }));
   // the RWA tab, through the routes (the RWA job ran once, on the server's own timer, against the fakes)

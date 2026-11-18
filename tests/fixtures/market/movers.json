@@ -1,372 +1,357 @@
 {
  "rows": [
   {
-   "id": "ethena",
-   "symbol": "ENA",
-   "name": "Ethena",
-   "rank": 46,
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F36530%2Flarge%2Fethena.png%3F1711701436",
+   "id": "hyperliquid",
+   "symbol": "HYPE",
+   "name": "Hyperliquid",
+   "rank": 10,
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F50882%2Flarge%2Fhyperliquid.jpg%3F1729431300",
    "price": {
-    "v": 0.166493,
+    "v": 89.09,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "price (CoinGecko)"
    },
    "change24h": {
-    "v": -20.09284,
+    "v": 10.38171,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "24 h price change, in percent (CoinGecko)"
    },
    "mcap": {
-    "v": 2229674668,
+    "v": 21298006067,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "market cap (CoinGecko)"
    },
    "volume24h": {
-    "v": 795514012,
+    "v": 3003470460,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "label": "24 h volume (CoinGecko)"
+   },
+   "stable": false,
+   "onchain": null,
+   "onchainWhy": "$HYPE is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
+  },
+  {
+   "id": "tron",
+   "symbol": "TRX",
+   "name": "TRON",
+   "rank": 8,
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F1094%2Flarge%2Fphoto_2026-04-13_09-59-16.png%3F1776048311",
+   "price": {
+    "v": 0.356128,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "label": "price (CoinGecko)"
+   },
+   "change24h": {
+    "v": 8.47961,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "label": "24 h price change, in percent (CoinGecko)"
+   },
+   "mcap": {
+    "v": 33902328370,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "label": "market cap (CoinGecko)"
+   },
+   "volume24h": {
+    "v": 1427490681,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "24 h volume (CoinGecko)"
    },
    "stable": false,
    "onchain": {
-    "kind": "contract",
-    "chain": "ethereum",
-    "address": "0x57e114b691db790c35207b2e685d4a43181e6061",
-    "scannable": true,
-    "src": "coingecko",
-    "at": 1793320560000
+    "kind": "native",
+    "chain": "tron",
+    "scannable": false,
+    "src": "defillama",
+    "at": 1793037600000,
+    "why": "$TRX is Tron’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
    },
    "onchainWhy": null
   },
   {
-   "id": "worldcoin-wld",
-   "symbol": "WLD",
-   "name": "Worldcoin",
-   "rank": 64,
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F31069%2Flarge%2Fworldcoin.jpeg%3F1696529903",
+   "id": "htx-dao",
+   "symbol": "HTX",
+   "name": "HTX DAO",
+   "rank": 58,
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F35491%2Flarge%2FFrame_1321318576.png%3F1708908626",
    "price": {
-    "v": 0.364219,
+    "v": 0.00000171,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "price (CoinGecko)"
    },
    "change24h": {
-    "v": -16.94029,
+    "v": 5.65405,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "24 h price change, in percent (CoinGecko)"
    },
    "mcap": {
-    "v": 1356762173,
+    "v": 1524513807,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "market cap (CoinGecko)"
    },
    "volume24h": {
-    "v": 331929639,
+    "v": 55152128,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "label": "24 h volume (CoinGecko)"
+   },
+   "stable": false,
+   "onchain": null,
+   "onchainWhy": "$HTX is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
+  },
+  {
+   "id": "monero",
+   "symbol": "XMR",
+   "name": "Monero",
+   "rank": 13,
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F69%2Flarge%2Fmonero_logo.png%3F1696501460",
+   "price": {
+    "v": 604.25,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "label": "price (CoinGecko)"
+   },
+   "change24h": {
+    "v": 1.12178,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "label": "24 h price change, in percent (CoinGecko)"
+   },
+   "mcap": {
+    "v": 11357465115,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "label": "market cap (CoinGecko)"
+   },
+   "volume24h": {
+    "v": 175551349,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "24 h volume (CoinGecko)"
    },
    "stable": false,
    "onchain": {
-    "kind": "contract",
-    "chain": "ethereum",
-    "address": "0x163f8c2467924be0ae7b5347228cabf260318753",
-    "scannable": true,
+    "kind": "none",
+    "scannable": false,
     "src": "coingecko",
-    "at": 1793320560000
+    "at": 1793320560000,
+    "why": "CoinGecko lists no contract for $XMR on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
    },
    "onchainWhy": null
   },
   {
-   "id": "pearl-2",
-   "symbol": "PEARL",
-   "name": "Pearl",
-   "rank": 96,
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102173580%2Flarge%2Fpearl.png%3F1780324634",
+   "id": "spiko-amundi-overnight-swap-fund-eur",
+   "symbol": "EURSAFO",
+   "name": "Spiko Amundi Overnight Swap Fund (EUR)",
+   "rank": 50,
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102172591%2Flarge%2FFund_eurSAF0.png%3F1774104814",
    "price": {
-    "v": 1.54,
+    "v": 1.14,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "price (CoinGecko)"
    },
    "change24h": {
-    "v": -16.22886,
+    "v": 0.42055,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "24 h price change, in percent (CoinGecko)"
    },
    "mcap": {
-    "v": 561067063,
+    "v": 1840525376,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "market cap (CoinGecko)"
    },
    "volume24h": {
-    "v": 12036996,
+    "v": null,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "why": "CoinGecko gives no 24 h volume for this coin"
+   },
+   "stable": false,
+   "onchain": null,
+   "onchainWhy": "$EURSAFO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
+  },
+  {
+   "id": "leo-token",
+   "symbol": "LEO",
+   "name": "LEO Token",
+   "rank": 16,
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F8418%2Flarge%2Fleo-token.png%3F1696508607",
+   "price": {
+    "v": 9.46,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "label": "price (CoinGecko)"
+   },
+   "change24h": {
+    "v": 0.06668,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "label": "24 h price change, in percent (CoinGecko)"
+   },
+   "mcap": {
+    "v": 8698111487,
+    "src": "coingecko",
+    "at": 1793320136000,
+    "label": "market cap (CoinGecko)"
+   },
+   "volume24h": {
+    "v": 241039,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "24 h volume (CoinGecko)"
    },
    "stable": false,
    "onchain": null,
-   "onchainWhy": "$PEARL is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
+   "onchainWhy": "$LEO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
-   "id": "aptos",
-   "symbol": "APT",
-   "name": "Aptos",
-   "rank": 99,
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F26455%2Flarge%2FAptos-Network-Profile-Picture_%25281%2529.png%3F1788259511",
+   "id": "figure-heloc",
+   "symbol": "FIGR_HELOC",
+   "name": "Figure Heloc",
+   "rank": 9,
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F68480%2Flarge%2Ffigure.png%3F1755863954",
    "price": {
-    "v": 0.58735,
+    "v": 1.03,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "price (CoinGecko)"
    },
    "change24h": {
-    "v": -16.16398,
+    "v": 0.02984,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "24 h price change, in percent (CoinGecko)"
    },
    "mcap": {
-    "v": 519263823,
+    "v": 26622102139,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "market cap (CoinGecko)"
    },
    "volume24h": {
-    "v": 77307839,
+    "v": 370295685,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "24 h volume (CoinGecko)"
    },
    "stable": false,
    "onchain": null,
-   "onchainWhy": "$APT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
+   "onchainWhy": "$FIGR_HELOC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
-   "id": "pump-fun",
-   "symbol": "PUMP",
-   "name": "Pump.fun",
-   "rank": 54,
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F67164%2Flarge%2Fpump.jpg%3F1751949376",
+   "id": "janus-henderson-anemoy-aaa-clo-fund",
+   "symbol": "JAAA",
+   "name": "Janus Henderson Anemoy AAA CLO Fund",
+   "rank": 95,
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F70446%2Flarge%2Fjaaa.png%3F1762078666",
    "price": {
-    "v": 0.00381052,
+    "v": 1.054,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "price (CoinGecko)"
    },
    "change24h": {
-    "v": -16.01764,
+    "v": 0.01271,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "24 h price change, in percent (CoinGecko)"
    },
    "mcap": {
-    "v": 1752051436,
+    "v": 568375059,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "market cap (CoinGecko)"
    },
    "volume24h": {
-    "v": 264605010,
+    "v": null,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h volume (CoinGecko)"
+    "why": "CoinGecko gives no 24 h volume for this coin"
    },
    "stable": false,
    "onchain": null,
-   "onchainWhy": "$PUMP is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
+   "onchainWhy": "$JAAA is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
-   "id": "near",
-   "symbol": "NEAR",
-   "name": "NEAR Protocol",
-   "rank": 21,
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F10365%2Flarge%2Fnear.jpg%3F1696510367",
+   "id": "hashnote-usyc",
+   "symbol": "USYC",
+   "name": "Circle USYC",
+   "rank": 42,
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F51054%2Flarge%2FHashnote_SDYC_200x200.png%3F1730370965",
    "price": {
-    "v": 3.97,
+    "v": 1.14,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "price (CoinGecko)"
    },
    "change24h": {
-    "v": -15.7204,
+    "v": 0.00942,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "24 h price change, in percent (CoinGecko)"
    },
    "mcap": {
-    "v": 5206935778,
+    "v": 2359193903,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "market cap (CoinGecko)"
    },
    "volume24h": {
-    "v": 979331132,
+    "v": null,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h volume (CoinGecko)"
+    "why": "CoinGecko gives no 24 h volume for this coin"
    },
    "stable": false,
    "onchain": null,
-   "onchainWhy": "$NEAR is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
+   "onchainWhy": "$USYC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
-   "id": "ether-fi",
-   "symbol": "ETHFI",
-   "name": "Ether.fi",
-   "rank": 94,
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F35958%2Flarge%2Fetherfi.jpeg%3F1710254562",
+   "id": "superstate-short-duration-us-government-securities-fund-ustb",
+   "symbol": "USTB",
+   "name": "Invesco Short Duration US Government Securities Fund",
+   "rank": 86,
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F35012%2Flarge%2FInvesco_icon_lg.png%3F1780816895",
    "price": {
-    "v": 0.581601,
+    "v": 11.26,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "price (CoinGecko)"
    },
    "change24h": {
-    "v": -15.03577,
+    "v": 0.00942,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "24 h price change, in percent (CoinGecko)"
    },
    "mcap": {
-    "v": 580550519,
+    "v": 673775028,
     "src": "coingecko",
     "at": 1793320136000,
     "label": "market cap (CoinGecko)"
    },
    "volume24h": {
-    "v": 51387658,
+    "v": null,
     "src": "coingecko",
     "at": 1793320136000,
-    "label": "24 h volume (CoinGecko)"
-   },
-   "stable": false,
-   "onchain": {
-    "kind": "contract",
-    "chain": "ethereum",
-    "address": "0xfe0c30065b384f05761f15d0cc899d4f9f9cc0eb",
-    "scannable": true,
-    "src": "coingecko",
-    "at": 1793320560000
-   },
-   "onchainWhy": null
-  },
-  {
-   "id": "jupiter-exchange-solana",
-   "symbol": "JUP",
-   "name": "Jupiter",
-   "rank": 80,
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F34188%2Flarge%2Fjup.png%3F1704266489",
-   "price": {
-    "v": 0.240279,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "price (CoinGecko)"
-   },
-   "change24h": {
-    "v": -14.72958,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "24 h price change, in percent (CoinGecko)"
-   },
-   "mcap": {
-    "v": 797463351,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "market cap (CoinGecko)"
-   },
-   "volume24h": {
-    "v": 45821718,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "24 h volume (CoinGecko)"
-   },
-   "stable": false,
-   "onchain": {
-    "kind": "contract",
-    "chain": "solana",
-    "address": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
-    "scannable": true,
-    "src": "coingecko",
-    "at": 1793320560000
-   },
-   "onchainWhy": null
-  },
-  {
-   "id": "filecoin",
-   "symbol": "FIL",
-   "name": "Filecoin",
-   "rank": 87,
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12817%2Flarge%2Ffilecoin.png%3F1696512609",
-   "price": {
-    "v": 0.787137,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "price (CoinGecko)"
-   },
-   "change24h": {
-    "v": -14.17514,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "24 h price change, in percent (CoinGecko)"
-   },
-   "mcap": {
-    "v": 659982883,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "market cap (CoinGecko)"
-   },
-   "volume24h": {
-    "v": 128807705,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "24 h volume (CoinGecko)"
+    "why": "CoinGecko gives no 24 h volume for this coin"
    },
    "stable": false,
    "onchain": null,
-   "onchainWhy": "$FIL is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
-  },
-  {
-   "id": "dash",
-   "symbol": "DASH",
-   "name": "Dash",
-   "rank": 91,
-   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F19%2Flarge%2Fdash-logo.png%3F1696501423",
-   "price": {
-    "v": 45.99,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "price (CoinGecko)"
-   },
-   "change24h": {
-    "v": -14.08586,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "24 h price change, in percent (CoinGecko)"
-   },
-   "mcap": {
-    "v": 592368329,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "market cap (CoinGecko)"
-   },
-   "volume24h": {
-    "v": 75194249,
-    "src": "coingecko",
-    "at": 1793320136000,
-    "label": "24 h volume (CoinGecko)"
-   },
-   "stable": false,
-   "onchain": null,
-   "onchainWhy": "$DASH is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
+   "onchainWhy": "$USTB is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   }
  ],
  "gainers": [
@@ -779,8 +764,9 @@
    }
   }
  ],
+ "stablesOut": true,
  "at": 1793320200000,
- "ranked": "absolute 24 h move, either way",
+ "ranked": "biggest 24 h rise first, only coins that went up",
  "total": {
   "v": 2593220316058.4814,
   "src": "coingecko",
@@ -811,12 +797,13 @@
   "ok": true
  },
  "definitions": {
-  "rows": "The 10 coins with the biggest 24 h price move, up or down, among CoinGecko's 100 largest by market cap (the bubble map's coins, from the same read): ranked by the size of the move either way — a coin down 20% ranks above one up 15%. A coin CoinGecko gives no 24 h change for is left out, never ranked as 0%; ties keep CoinGecko's order.",
-  "gainers": "The 5 coins of the 100 that rose the most over 24 hours, the biggest rise first — only coins that went up, so fewer than 5 on a day few did.",
+  "rows": "The 10 coins with the biggest 24 h price RISE among CoinGecko's 100 largest by market cap (the bubble map's coins, from the same read): only coins that went up, the biggest rise first — fewer than 10 on a day fewer went up, never a falling coin; CoinGecko's stablecoins left out once its stablecoins category is read (a stablecoin's rise is noise around its peg; see stablesOut). A coin CoinGecko gives no 24 h change for is left out, never ranked as 0%; ties keep CoinGecko's order.",
+  "gainers": "The 5 coins of the 100 that rose the most over 24 hours, the biggest rise first — only coins that went up, stablecoins left out, so fewer than 5 on a day few did.",
   "losers": "The 5 coins of the 100 that fell the most over 24 hours, the biggest fall first — only coins that went down.",
   "counts": "How many of the 100 went up, went down, stayed exactly level (CoinGecko's own 0%), or have no 24 h change given; of is how many coins were read.",
   "dominance": "The three largest coins by market cap, each with its share of CoinGecko's total market cap of every coin it lists, in percent (its fig: null with why when it cannot be worked out — see the bubble map's dominance).",
   "total": "CoinGecko's total market cap of every coin it lists.",
+  "stablesOut": "true when CoinGecko's stablecoins category has been read and its coins are left out of the rises and the gainers; false until it is (a stablecoin that rose is then among them, and a note says so).",
   "onchain": "Where the coin's on-chain data is on this site, from CoinGecko's list of every coin's contract addresses (read once a day): \"contract\" — its contract on Robinhood Chain, Ethereum or Solana (preferred in that order), which the Scanner profiles (scannable: true); \"quote\" — its contract there is a base trading asset, a stablecoin or wrapped coin other tokens are priced in (WETH, USDG, USDC, USDT, DAI, WBTC, wrapped SOL), which the Scanner does not profile; \"native\" — no such contract, and the coin is the own coin of a chain Market Data reads (DefiLlama names it), whose chain view has its figures; \"none\" — no contract on those three chains that CoinGecko lists, and not the own coin of a chain Market Data reads. onchain is null, with onchainWhy saying why, until CoinGecko's list (or, for a coin with no contract there, DefiLlama's list of chains) has been read; onchainWhy is null otherwise.",
   "logo": "The coin's picture as CoinGecko gives it, served through this site's own image proxy (/api/market/logo) — never fetched by your browser from CoinGecko; null when CoinGecko gives none, or when it would be Robinhood's artwork (a Robinhood Chain token's picture named after its own address, or a Robinhood Stock Token's).",
   "change24h": "CoinGecko's change in the coin's US-dollar price over the last 24 hours, in percent (−5.27 means down 5.27%); null with why when CoinGecko gives none, never 0."

@@ -73,15 +73,8 @@
   <p class="np-hero-warn">⚠️ Figures can be late, wrong or missing — a missing one is shown as missing, never as zero. Not advice, never a tip to buy. <b>Do your own research.</b></p>
 </header>
 
-<!-- the biggest 24 h moves among the 100 largest coins (owner, 2026-11-17: "a moving banner showing the token the price and percentage
-     move, ranked by the 24hr percentage move … linked to all the on-chain data"): market.js draws it from /api/market/movers, read even
-     while the bubble map is folded away; a mover opens its on-chain data, as a bubble does. It moves only where motion is wanted: it stops
-     for a pointer or the keyboard on it, under ⏸ and under the reduced-motion setting (market.css), where it is a row that scrolls by hand -->
-<section class="mkt-movers" id="mkt-movers" aria-labelledby="mkt-movers-h">
-  <h2 class="mkt-movers-h" id="mkt-movers-h">📈 Top movers <span class="mkt-movers-sub">24 h · top 100</span></h2>
-  <div class="mkt-movers-win" id="mkt-movers-win"><p class="mkt-movers-wait">Reading the biggest moves…</p></div>
-</section>
-<p class="mkt-movers-src" id="mkt-movers-src"></p>
+<!-- the top gainers (owner, 2026-11-17) run in the strip under the nav on every page (movers-strip.js); market.js opens a coin
+     pressed there on this page -->
 
 <main id="main" tabindex="-1">
   <div class="mkt-wrap">
@@ -388,6 +381,7 @@
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>
+<script src="movers-strip.js"></script>
 <script src="wallet.js"></script>
 <script src="auth.js"></script>
 <script src="moderation.js"></script>

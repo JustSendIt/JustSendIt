@@ -183,10 +183,24 @@
 
     // Publish the real nav height so sticky sub-bars (e.g. #np-controls) offset correctly
     // rather than assuming a fixed height — the persistent bar (logo+level+account) is one row.
+    /* --nav-bar-h is the nav alone (the top-gainers strip sticks right under it, movers-strip.js); --nav-h is everything stuck to
+       the top — the nav plus the strip when it shows — which is what a page's own sticky bars, scroll margins and pop-ups clear */
     function syncNavHeight() {
       var h = nav.getBoundingClientRect().height;
-      if (h) document.documentElement.style.setProperty('--nav-h', Math.round(h) + 'px');
+      if (!h) return;
+      // the strip counts only while it sticks (a short screen lets it scroll away with the page: styles.css)
+      var strip = document.getElementById('mv-strip'), sh = strip && !strip.hidden && getComputedStyle(strip).position === 'sticky' ? strip.getBoundingClientRect().height : 0;
+      document.documentElement.style.setProperty('--nav-bar-h', Math.round(h) + 'px');
+      document.documentElement.style.setProperty('--nav-h', Math.round(h + sh) + 'px');
     }
+    // the strip is put in before this runs (its script is read with the page; this waits for the page) — and it says when it changes
+    function watchStrip() {
+      syncNavHeight();
+      var strip = document.getElementById('mv-strip');
+      if (strip && window.ResizeObserver && !strip._navObs) { strip._navObs = 1; new ResizeObserver(syncNavHeight).observe(strip); }   // its row can wrap its label on a narrow screen
+    }
+    document.addEventListener('mvstrip:change', watchStrip);
+    watchStrip();
     syncNavHeight();
     fit();
     /* The timers and the ResizeObserver above wait at least a frame — in a tab that is not in front, a second or more —
