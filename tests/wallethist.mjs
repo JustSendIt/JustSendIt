@@ -296,7 +296,7 @@ try {
   /* ═══ 7. the bell: text and href carry no address ═══ */
   {
     const ctx = vm.createContext({ db, bidx, decField, String, Boolean, now: () => Date.now(), console });
-    vm.runInContext(grab(/const NOTIF_KEEP = [^\n]+\n/, 'NOTIF_KEEP') + grab(/const NOTIF_KEEP_SYSTEM = [^\n]+\n/, 'NOTIF_KEEP_SYSTEM') + grab(/const NOTIF_KEEP_ALERT = [^\n]+\n/, 'NOTIF_KEEP_ALERT') +
+    vm.runInContext(grab(/const NOTIF_TEXT_MAX = [^\n]+\n/, 'NOTIF_TEXT_MAX') + grab(/const NOTIF_KEEP = [^\n]+\n/, 'NOTIF_KEEP') + grab(/const NOTIF_KEEP_SYSTEM = [^\n]+\n/, 'NOTIF_KEEP_SYSTEM') + grab(/const NOTIF_KEEP_ALERT = [^\n]+\n/, 'NOTIF_KEEP_ALERT') +
       grab(/function walletList\(userId\) \{[\s\S]*?\n\}\n/, 'walletList') + grab(/function notifyLink\(href\) \{[\s\S]*?\n\}\n/, 'notifyLink') + grab(/function notify\(userId, icon, text, kind, actorId, href, postId\) \{[\s\S]*?\n\}\n/, 'notify') +
       grab(/function walletReadNotice\(uid, w\) \{[\s\S]*?\n\}\n/, 'walletReadNotice') + grab(/function walletReadNotify\(uid, w\) \{[\s\S]*?\n\}\n/, 'walletReadNotify') + grab(/function walletReadStoppedNotify\(uid, w, checkpointed\) \{[\s\S]*?\n\}\n/, 'walletReadStoppedNotify') +
       '\nthis.notice = walletReadNotice; this.ring = walletReadNotify; this.stopped = walletReadStoppedNotify;', ctx);

@@ -181,13 +181,22 @@
     const cur = tiers.find(([k, t]) => o.tierNow === t);
     let me = '';
     if (!ctx.signedIn) me = 'The badge follows a wallet that got in early and still holds. ' + signInBtn('Sign in to link a wallet');
+    /* a Gold or Diamond whose $GWC was found sold, marked before drops were written at once (o.mine.requal): no OG bonus is paid
+       until Silver is written, so the card never shows the old tier's multiplier for it */
+    else if (o.mine && o.mine.og && o.mine.tier && o.mine.requal) me = '<b>OG ' + esc(o.mine.name) + ' — moving to Silver.</b> Your linked wallets no longer hold $GWC, which ' + esc(o.mine.name) + ' needs, so it doesn’t come back; Silver needs only <b>$SEND</b>, which your ' + esc(o.mine.name) + ' buy proves. No OG bonus is paid until it’s written.';
     else if (o.mine && o.mine.og && o.mine.tier) me = 'You hold <b>OG ' + esc(o.mine.name) + ' — ' + o.mult[o.mine.tier] + '×</b> on everything you earn. ' + (needs(o.mine.tier).length > 1
-      ? (sendOnly ? 'It stays ' + esc(o.mine.name) + ' while both coins stay in your wallet; sell out of $GWC and it drops to Silver or Bronze on $SEND alone, sell out of $SEND and it’s gone.' : 'It stays for as long as both coins stay in your wallet.')
-      : 'It stays for as long as $SEND stays in your wallet; this tier doesn’t need $GWC.');
+      ? (sendOnly ? 'It stays ' + esc(o.mine.name) + ' while both coins stay in your wallets; sell out of $GWC and it drops to Silver on $SEND alone, sell out of $SEND and it’s gone.' : 'It stays for as long as both coins stay in your wallet.')
+      : 'It stays for as long as $SEND stays in your wallet; this tier doesn’t need $GWC.')
+      // a Gold or Diamond paused at Silver: the wallet holding its $GWC was unlinked — not a sale
+      + (o.mine.paused > o.mine.tier ? ' Your <b>OG ' + esc(o.name[o.mine.paused] || '') + '</b> is paused: the wallet holding its $GWC was unlinked — relink it, its $GWC held without a break, and it comes back.' : '');
     // removed before 2026-11-17 (a sell-out of either coin ended any tier then): re-checked once on $SEND alone (o.mine.recheck)
-    else if (o.mine && o.mine.revoked && o.mine.recheck) me = '<b>OG status removed — being re-checked once.</b> It was removed while OG needed both coins to keep; Silver and Bronze now need only <b>$SEND</b>, so if your linked wallets still hold $SEND and it earns one of them, it comes back (checked on-chain).';
-    // revoked (sold out of $SEND, or re-checked and not restored): the server never grants this account a badge again, so no window is offered
-    else if (o.mine && o.mine.revoked) me = '<b>OG status removed.</b> This account sold out of a coin its badge needed, so the badge and its Send Power bonus are gone — and can’t be reclaimed, whichever window is open.';
+    else if (o.mine && o.mine.revoked && o.mine.recheck) me = '<b>OG status removed — being re-checked once.</b> It was removed while OG needed both coins to keep; Silver and Bronze now need only <b>$SEND</b>, so if the wallets linked when it was removed still hold $SEND, held without a break, and it earns one of them, it comes back (checked on-chain). A wallet linked since doesn’t count.';
+    // re-checked once and not restored: which coin went was never recorded, so it is not said to have sold $SEND
+    else if (o.mine && o.mine.revoked && o.mine.rechecked) me = '<b>OG status removed.</b> It was removed under the old rule, when selling out of either coin ended a badge, and was re-checked once on $SEND alone without coming back — so the badge and its Send Power bonus can’t be reclaimed, whichever window is open.';
+    // revoked under today's rule: the linked wallets were found holding no $SEND; the server never grants this account a badge again
+    else if (o.mine && o.mine.revoked) me = '<b>OG status removed.</b> This account’s linked wallets were found holding no $SEND, which every badge needs, so the badge and its Send Power bonus are gone — and can’t be reclaimed, whichever window is open.';
+    // paused by wallets leaving (not a sale): back on relinking the wallet that holds its $SEND
+    else if (o.mine && o.mine.paused) me = 'Your <b>OG ' + esc(o.name[o.mine.paused] || '') + '</b> is paused — it follows your wallets, and the wallets linked now don’t re-verify it on their own. Relink your $SEND wallet and it’s re-verified on-chain' + (o.mine.paused >= 3 ? ' (and it needs $GWC held without a break meanwhile).' : '.');
     else me = !o.open ? 'No badge on this account, and every window has closed.'
       : cur && needs(cur[1]).length === 1 ? 'No badge on this account. The ' + esc(o.name[cur[1]]) + ' window goes to wallets that bought <b>$SEND</b> before it closes and still hold it — $GWC isn’t needed. Link a wallet on your profile to be checked.'
       : 'No badge on this account. It goes to wallets that got into <b>both $SEND and $GWC</b> inside a window and still hold both — link a wallet on your profile to be checked.';
@@ -205,7 +214,7 @@
         : '<b>Four tiers, one rule.</b> Diamond was the first month of $GWC — bought both, and bought more of each than you sold that month — and has closed. Gold closes with the beta, Silver 90 days after that, Bronze when $GWC turns one year old — the same dates for both coins — and your tier is the <b>lower</b> of your two coins, because the rule is that you held both. ')
         + (o.closes ? 'Gold ' + (o.closes.gold <= now ? 'closed ' : 'closes ') + esc(dateShort(o.closes.gold)) + ', Silver ' + esc(dateShort(o.closes.silver)) + ', Bronze ' + esc(dateShort(o.closes.bronze)) + '; after that no badge is granted. ' : '')
         + 'A wallet that dumped its whole holding inside its first month <i>and</i> holds less today than it did then earns nothing. '
-        + (sendOnly ? 'Sell out entirely of $SEND, ever, and the badge is revoked; sell out of $GWC alone and a Gold or Diamond drops to Silver or Bronze on $SEND alone. ' : 'Sell out of either coin entirely, ever, and the badge is revoked. ')
+        + (sendOnly ? 'Sell out entirely of $SEND, ever, and the badge is revoked; sell out of $GWC alone and a Gold or Diamond drops to Silver on $SEND alone. Unlinking a wallet is not a sale: it pauses what your other wallets can’t show. ' : 'Sell out of either coin entirely, ever, and the badge is revoked. ')
         + 'Everything is read from the chain and re-checked; a read that cannot complete is retried, never guessed.',
     });
   }

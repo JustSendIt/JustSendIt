@@ -49,7 +49,7 @@ try {
      (and Gold) for good while a sell-out of $GWC alone drops them to what $SEND alone earns (tests/ogsilver.mjs runs both) */
   check('Diamond (and Gold) need both coins; selling out of $SEND loses them for good, selling out of $GWC alone drops them (ogLoss)', /const OG_TIER_NEEDS = \{ 4: \['SEND', 'GWC'\], 3: \['SEND', 'GWC'\],/.test(SRC)
     && /if \(sendTok <= OG_DUST \|\| gwcTok <= OG_DUST\) ogAfterHolderRead\(userId, sendTok, gwcTok\);/.test(SRC)
-    && /const loss = ogLoss\(gone\);\n\s+if \(loss === 'revoke'\) \{\n\s+db\.prepare\('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1, og_requal = 0 WHERE id = \?'\)/.test(SRC)
+    && /const loss = ogLoss\(gone\);\n\s+if \(loss === 'revoke'\) \{\n\s+db\.prepare\('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1, og_requal = 0, og_lift = 0, og_paused_tier = 0, og_paused_at = 0 WHERE id = \?'\)/.test(SRC)
     && /return gone\.includes\('SEND'\) \? 'revoke' : 'drop';/.test(SRC));
 
   /* ═══ 2. the decision, on fixed inputs ═══ */

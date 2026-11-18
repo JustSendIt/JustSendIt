@@ -92,8 +92,9 @@
     if (!t) return '';
     return 'OG ' + t.name + ' — bought ' + (t.both ? 'BOTH $Send and $GWC ' : '$Send ') + t.when + ' and still holds ' + (t.both ? 'both' : 'it') + ' (checked on-chain). '
       + 'Permanent badge + a ' + t.mult + '× Send Power bonus on everything (+' + (t.mult - 1) + '× on top of any other boosts — boosts add, they don’t multiply). '
-      // since 2026-11-17 only selling out of $Send ends a badge; selling $GWC alone drops Gold or Diamond to what $Send alone earns
-      + (t.both ? 'Drops to Silver or Bronze if they sell out of $GWC; lost if they sell out of their $Send.' : 'Lost if they sell out of their $Send.');
+      // since 2026-11-17 only selling out of $Send ends a badge; selling $GWC alone drops Gold or Diamond to Silver — what the $Send
+      // their own Gold-window buy proves earns on its own (the server's ogDropPick), so it is never Bronze and never nothing
+      + (t.both ? 'Drops to Silver if they sell out of $GWC; lost if they sell out of their $Send.' : 'Lost if they sell out of their $Send.');
   };
   // kept for anything still reading the old global; gold is the tier it always described
   window.OG_TIP = window.ogTip(3);

@@ -271,7 +271,11 @@ async function unlinkWallet(address) {
     const current = await currentFactorBody('Unlinking a wallet changes how you sign in.');   // two-factor on or off: removing a way in is a security change
     const j = await api('/api/wallet/unlink', { method: 'POST', body: { address, current } });
     if (window.SFX) SFX.play('remove');
-    sendToast('Wallet unlinked 🔌' + (j.ogRevoked ? ' — OG badge revoked: your wallets had sold out of $Send' : j.ogDropped ? ' — no $GWC left, so your OG badge is being re-checked on $Send alone' : ''));
+    // the server decides OG from every wallet before this one went (ogLeaveVerdict): only a sale ends or lowers a badge; unlinking pauses
+    sendToast('Wallet unlinked 🔌' + (j.ogRevoked ? ' — OG badge revoked: none of your wallets holds $Send'
+      : j.ogDropped ? ' — no $GWC left in any of your wallets, so your OG badge is now Silver'
+      : j.ogPaused === 'gwc' ? ' — it holds your $GWC, so your OG badge is paused at Silver until you relink it'
+      : j.ogPaused === 'all' ? ' — your OG badge is paused until a wallet holding its $Send is linked again' : ''));
     await loadMe();
     refocus('wl-status');   // the button that had focus was just re-rendered away
     if (window.loadConnectedWallet) loadConnectedWallet();
