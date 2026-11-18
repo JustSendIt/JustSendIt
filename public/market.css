@@ -73,6 +73,7 @@
    out of the clip) and kept out from under what is pinned instead */
 .mkt-cpick-p.is-fixed { position: fixed; }
 body:has(#mkt-tchain-p:not([hidden])) > .nav { z-index: 300; }
+body:has(#mkt-tchain-p:not([hidden])) > .mv-strip { z-index: 299; }   /* the top-gainers strip is part of what sticks at the top: it rises with the nav */
 .mkt-cpick-p > li { min-width: 0; }
 /* each chain is the account menu's item (styles.css .npm-item: black ink on the green fill, the matrix tile), a tick in front */
 .mkt-copt { min-height: 44px; padding: 0.35rem 0.7rem 0.35rem 0.45rem; line-height: 1.2; }
@@ -477,51 +478,9 @@ html.motion-off .mkt-caret { transition: none; }   /* the nav's ⏸ stops motion
 /* ════════ the dashboard layer (owner, 2026-11-17: the movers banner, the market at a glance, the Watchlist and Calls tabs, a coin's
    on-chain data, the view's "Jump to") ════════ */
 
-/* ---------- the movers banner: a strip under the page's head, across the whole width ---------- */
-.mkt-movers { display: flex; align-items: stretch; margin: 0; padding: 0; border-block: 1px solid color-mix(in srgb, var(--green) 30%, transparent); background: var(--ink-1); position: relative; z-index: 4; }
-.mkt-movers-h {
-  flex: none; display: flex; flex-direction: column; justify-content: center; gap: 0.1rem; margin: 0; padding: 0.3rem 0.85rem;
-  font-family: var(--font-mono); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; font-size: max(var(--text-floor), 0.8rem);
-  color: var(--green-bright); background: var(--ink-2); border-right: 1px solid color-mix(in srgb, var(--green) 30%, transparent); line-height: 1.15;
-}
-.mkt-movers-sub { color: var(--text-mute); font-size: max(var(--text-floor), 0.7rem); letter-spacing: 0.04em; }
-.mkt-movers-win { flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; align-items: center; }
-.mkt-movers-wait { margin: 0; padding: 0.6rem 0.9rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); }
-.mkt-movers-track { display: flex; width: max-content; animation: mkt-mv var(--mv-dur, 40s) linear infinite; }
-.mkt-movers-list { display: flex; gap: 0.45rem; margin: 0; padding: 0.3rem 0.225rem; list-style: none; }
-@keyframes mkt-mv { to { transform: translateX(-50%); } }
-/* a pointer on it or the keyboard in it stops it, so a mover can be read and pressed */
-.mkt-movers:hover .mkt-movers-track, .mkt-movers:focus-within .mkt-movers-track { animation-play-state: paused; }
-/* a mover reached with the keyboard: the strip stops where it is a row (as under ⏸), so the browser can bring the focused one into view —
-   paused mid-loop, it sat clipped off the edge with its focus ring unseen */
-.mkt-movers:has(.mkt-mover:focus-visible) .mkt-movers-track { animation: none; }
-.mkt-movers:has(.mkt-mover:focus-visible) .mkt-movers-dup { display: none; }
-.mkt-movers:has(.mkt-mover:focus-visible) .mkt-movers-win { overflow-x: auto; overscroll-behavior-x: contain; }
-/* ⏸ and the reduced-motion setting: it does not move at all — the copy goes, and the row scrolls by hand */
-html.motion-off .mkt-movers-track { animation: none; }
-html.motion-off .mkt-movers-dup { display: none; }
-html.motion-off .mkt-movers-win { overflow-x: auto; overscroll-behavior-x: contain; }
-@media (prefers-reduced-motion: reduce) {
-  .mkt-movers-track { animation: none; }
-  .mkt-movers-dup { display: none; }
-  .mkt-movers-win { overflow-x: auto; overscroll-behavior-x: contain; }
-}
-.mkt-mover {
-  display: inline-flex; align-items: center; gap: 0.45rem; min-height: 44px; padding: 0.25rem 0.8rem; border-radius: 999px;
-  border: 1px solid var(--hair); background: var(--ink-2); color: var(--text); font-family: inherit; font-size: max(var(--text-floor), 0.9rem);
-  white-space: nowrap; cursor: pointer; line-height: 1.1;
-}
-.mkt-mover:hover { border-color: var(--g-hot); }
-.mkt-mover:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
-.mkt-mover .mkt-logo { width: 24px; height: 24px; border-radius: 50%; }
-.mkt-mover-s { font-weight: 800; }
-.mkt-mover-p { color: var(--text-dim); font-variant-numeric: tabular-nums; }
-.mkt-mover-c { font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums; }
-.mkt-mover.is-up .mkt-mover-c, .mkt-gl-c.is-up { color: var(--rh-green); }
-.mkt-mover.is-down .mkt-mover-c, .mkt-gl-c.is-down { color: var(--red); }
-.mkt-movers-src { max-width: var(--dash-max); margin: 0.35rem auto 0; padding: 0 1.25rem; color: var(--text-mute); font-size: max(var(--text-floor), 0.78rem); line-height: 1.4; }
-.mkt-movers-src:empty { display: none; }
-@media (max-width: 520px) { .mkt-movers-h { padding: 0.3rem 0.55rem; } }
+.mkt-gl-c.is-up { color: var(--rh-green); }
+.mkt-gl-c.is-down { color: var(--red); }
+
 
 /* ---------- the market at a glance: one tile per headline figure, two across on a phone, four from 760px ---------- */
 .mkt-glance { margin: 0.6rem 0 1.3rem; padding: 0; }   /* a <section>: styles.css pads every one like a home-page band */

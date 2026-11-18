@@ -505,7 +505,8 @@
     for (const r of recs) {
       let t = r.target;
       while (t !== document.body && t.parentElement && t.parentElement !== document.body) t = t.parentElement;
-      if (t !== document.body && (t.contains(filterBox) || t.id === 'tip-bubble' || t.classList.contains('rk-layer'))) continue;
+      // ...nor the top-gainers strip under the nav: the list already stops short of it (--nav-h counts it), so nothing in it can lie over the list
+      if (t !== document.body && (t.contains(filterBox) || t.id === 'tip-bubble' || t.id === 'mv-strip' || t.classList.contains('rk-layer'))) continue;
       pick.soon = setTimeout(pickWatch, 300);
       return;
     }
@@ -1133,7 +1134,6 @@
     if (r.dataset.retry === 'list') { memo.clear(); loadList(); } else if (r.dataset.retry === 'view') { memo.clear(); loadView(); } else if (r.dataset.retry === 'scan') { const h = $('mkt-scan-host'); if (h) { h._asked = false; loadScan(h); } }
     else if (r.dataset.retry === 'rwa') { const h = $('mkt-rwa-host'); if (h) { memo.clear(); loadRwa(h); } }
     else if (r.dataset.retry === 'map') { memo.delete('/api/market/heatmap'); loadMap(false); }
-    else if (r.dataset.retry === 'movers') { memo.delete('/api/market/movers'); loadMovers(); }   // on the line under the banner, outside the strip
     else if (r.dataset.retry === 'search' && form) { memo.clear(); if (form.requestSubmit) form.requestSubmit(); else form.dispatchEvent(new Event('submit', { cancelable: true })); }
   });
 
@@ -2735,21 +2735,25 @@
     if (document.fonts && document.fonts.status !== 'loaded') document.fonts.ready.then(() => { if (MAP.shown && MAP.ans) drawMap(false); }).catch(() => {});
   }
 
-  /* ════════════════════════════ the movers banner and the market at a glance ════════════════════════════
-     Owner, 2026-11-17: "Have the top 10 market movers within the top 100 top tokens in the bubble maps be a moving banner showing the
-     token the price and percentage move, ranked by the 24hr percentage move. Have it linked to all the on-chain data shown on the market
-     page." /api/market/movers is worked out by the server from the SAME reading as the bubble map (CoinGecko's 100 largest, every 10
-     minutes — no read of its own from any vendor): the ten with the biggest 24 h move either way, ranked by the size of the move, with
-     the market's total, its breadth, its biggest gainers and fallers and the three largest coins' dominance. It is read even while the
-     map is folded away (the map itself is not), and again every five minutes while the page is in view. Each mover opens its on-chain
-     data, as a bubble does. The banner moves only where motion is wanted (market.css): it stops for a pointer or the keyboard, under ⏸
-     and under the reduced-motion setting, where it is a row that scrolls by hand. */
-  const mvEl = { sec: $('mkt-movers'), win: $('mkt-movers-win'), src: $('mkt-movers-src'), grid: $('mkt-glance-grid') };
+  /* ════════════════════════════ the movers and the market at a glance ════════════════════════════
+     Owner, 2026-11-17: a moving banner of the top movers among the 100 largest coins, "linked to all the on-chain data shown on the
+     market page"; the same day: "only show positive percentage gains" and "add that as a sticky banner to every page on the site". The
+     banner is now the strip under the nav on every page (movers-strip.js); this page takes its answer (movers:data) for the tiles below
+     — the market's total, its breadth, its biggest gainers and fallers and the three largest coins' dominance, all from the server's
+     one reading of CoinGecko's 100 largest (/api/market/movers, the bubble map's read) — and opens a coin pressed in the strip here
+     (movers:open), or asked for from another page (?coin=). */
+  const mvEl = { grid: $('mkt-glance-grid') };
   const MV = { ans: null, at: 0, seq: 0, timer: 0, fail: null, calls: null };
   const RH_VIEW = '/api/market/chain?key=robinhood';   // the page's first view: the same read, kept a minute
   const MV_EVERY = 5 * 60e3, CALLS_TOP = '/api/calls/top-tokens?window=24h';
+  /* The movers come from the top-gainers strip under the nav (movers-strip.js, on every page since 2026-11-17): it reads
+     /api/market/movers and tells this page (movers:data), so the tiles and the strip show one answer and the page asks once. A page
+     without the strip (it could not be loaded) reads the answer itself. */
+  document.addEventListener('movers:data', (e) => { if (e.detail && Array.isArray(e.detail.rows)) { MV.ans = e.detail; MV.at = Date.now(); MV.fail = null; paintSoon(); } openAskedCoin(); });   // a coin asked for opens even when the movers could not be read (from the map)
+  // a coin pressed in the strip opens here (its popup, or its card under the map) — the strip leaves the page alone for it
+  document.addEventListener('movers:open', (e) => { const id = e.detail && e.detail.id; if (id) openCoin(coinRow(id), id); });
   async function loadMovers() {
-    if (!mvEl.sec) return;
+    if (window.SendMovers) { if (window.SendMovers.answer) document.dispatchEvent(new CustomEvent('movers:data', { detail: window.SendMovers.answer })); return; }
     const my = ++MV.seq;
     try {
       const j = await getJSON('/api/market/movers');
@@ -2764,50 +2768,17 @@
   /* the banner and the tiles are drawn again only when nobody is on them: a refresh while a mover or a tile has the focus, or while a
      coin's popup (opened from one, and giving its focus back to it on closing) is up, waits until the focus has left them */
   const mvBusy = () => { const a = document.activeElement, tm = document.getElementById('token-modal');
-    return !!(a && ((mvEl.sec && mvEl.sec.contains(a)) || (mvEl.grid && mvEl.grid.contains(a)))) || !!(tm && !tm.hidden); };
-  function paintSoon() { if (mvBusy()) { MV.dirty = true; return; } MV.dirty = false; paintMovers(); paintGlance(); }
+    return !!(a && mvEl.grid && mvEl.grid.contains(a)) || !!(tm && !tm.hidden); };
+  function paintSoon() { if (mvBusy()) { MV.dirty = true; return; } MV.dirty = false; paintGlance(); }
   document.addEventListener('focusout', () => { if (MV.dirty) setTimeout(() => { if (MV.dirty && !mvBusy()) paintSoon(); }, 0); });
   function planMovers() {
     clearTimeout(MV.timer);
-    MV.timer = setTimeout(() => { if (document.visibilityState === 'visible') { memo.delete('/api/market/movers'); loadMovers(); memo.delete(CALLS_TOP); loadCallsTop(); } else planMovers(); }, MV_EVERY);
+    MV.timer = setTimeout(() => { if (document.visibilityState === 'visible') { if (!window.SendMovers) { memo.delete('/api/market/movers'); loadMovers(); } else planMovers(); memo.delete(CALLS_TOP); loadCallsTop(); } else planMovers(); }, MV_EVERY);
   }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && mvEl.sec && MV.at && Date.now() - MV.at >= MV_EVERY) { memo.delete('/api/market/movers'); loadMovers(); memo.delete(CALLS_TOP); loadCallsTop(); }
+    if (document.visibilityState === 'visible' && MV.at && Date.now() - MV.at >= MV_EVERY) { if (!window.SendMovers) { memo.delete('/api/market/movers'); loadMovers(); } memo.delete(CALLS_TOP); loadCallsTop(); }
   });
   const moveCls = (c) => (c == null ? '' : c > 0 ? ' is-up' : c < 0 ? ' is-down' : '');
-  function moverTip(r) {
-    const oc = r.onchain;
-    return scannable(oc) ? 'Opens ' + coinName(r) + '’s on-chain dashboard: the Scanner’s read of its token on ' + chainName(oc.chain)
-      : oc && oc.kind === 'native' ? 'Opens ' + coinName(r) + '’s card: it is ' + chainName(oc.chain) + '’s own coin, with its chain’s on-chain data a press away'
-        : 'Opens ' + coinName(r) + '’s card under the bubble map, with its figures and where it lives on-chain';
-  }
-  function moverHTML(r, copy) {   // copy: the loop's second list — out of the tab order (aria-hidden on its list), still pressable
-    const c = val(r.change24h), p = mapPrice(val(r.price));
-    return '<li><button class="mkt-mover' + moveCls(c) + '" type="button"' + (copy ? ' tabindex="-1"' : '') + ' data-mover="' + esc(r.id) + '" data-tip="' + esc(moverTip(r)) + '">' +
-      (ownLogo(r.logo) ? '<img class="mkt-logo" src="' + esc(r.logo) + '" alt="" loading="lazy" decoding="async" width="24" height="24">' : '') +
-      '<b class="mkt-mover-s">' + esc(r.symbol || coinName(r)) + '</b><span class="mkt-mover-p">' + esc(p || 'price not given') + '</span><span class="mkt-mover-c">' + esc(c == null ? 'no change given' : pct(c)) + '</span></button></li>';
-  }
-  function paintMovers() {
-    if (!mvEl.win) return;
-    const j = MV.ans, rows = j && Array.isArray(j.rows) ? j.rows.filter((r) => r && val(r.change24h) != null) : [];
-    if (!rows.length) {
-      mvEl.win.innerHTML = '<p class="mkt-movers-wait">' + esc(MV.fail ? MV.fail.text : j && j.why ? cap1(j.why).replace(/\.?$/, '.') : 'The biggest moves have not been read yet.') + '</p>';
-      if (mvEl.src) mvEl.src.innerHTML = MV.fail ? retryBtn('movers') : '';
-      return;
-    }
-    const items = rows.map((r) => moverHTML(r)).join('');
-    // the list twice, end to end, so the loop has no gap; the copy is for the eye and the pointer only (a reader and the keyboard meet
-    // each mover once). Its speed is set by its length: about 45 px a second, whatever the screen
-    // the copy is hidden from readers and out of the tab order, but not inert: a press on a mover the loop is showing from the copy opens it
-    mvEl.win.innerHTML = '<div class="mkt-movers-track"><ol class="mkt-movers-list">' + items + '</ol><ol class="mkt-movers-list mkt-movers-dup" aria-hidden="true">' + rows.map((r) => moverHTML(r, true)).join('') + '</ol></div>';
-    const tr = mvEl.win.querySelector('.mkt-movers-track'), first = tr && tr.firstElementChild;
-    if (tr && first) tr.style.setProperty('--mv-dur', Math.max(20, Math.round(first.scrollWidth / 45)) + 's');
-    wireLogos(mvEl.win);
-    const at = val(j.reads && j.reads.coins && j.reads.coins.at) || j.at;
-    if (mvEl.src) mvEl.src.innerHTML = 'Ranked by the size of the 24 h move, either way, among CoinGecko’s 100 largest coins' + (at ? ' · read ' + agoEl(at) : '') +
-      (MV.fail ? ' · <span class="mkt-err-t">a newer read failed (' + esc(MV.fail.text) + '): these are the figures read ' + (at ? agoEl(at) : 'before it') + '</span>' : '') + ' · not advice, never a tip to buy';
-  }
-  if (mvEl.sec) mvEl.sec.addEventListener('click', (e) => { const b = e.target.closest('[data-mover]'); if (b) openCoin(coinRow(b.dataset.mover), b.dataset.mover); });
 
   /* ---------- the market at a glance: one tile per headline figure, each a way into the part of the page with more ---------- */
   function glTile(kind, arg, k, v, sub, tip, cls) {
@@ -2880,6 +2851,11 @@
   // the bubble map: open unless this browser folded it away (then it is read only when it is opened)
   if (mapEl.sec) setMapOpen(mapPref.get() !== 'hidden', false);
   // the movers banner and the tiles: always (the movers answer is small and is the server's own work, no vendor asked for it)
+  /* ?coin=<CoinGecko id>: a coin pressed in the strip on another page. Taken out of the address at once (it is a press, not a place
+     to come back to), and opened as soon as the movers are read — the map's own row when the map has it (openCoin reads it) */
+  const askedCoin = (() => { try { const u = new URL(location.href), c = u.searchParams.get('coin'); if (!c) return null; u.searchParams.delete('coin'); history.replaceState(history.state, '', u.pathname + (u.search ? u.search : '') + u.hash); return /^[a-z0-9-]{1,80}$/.test(c) ? c : null; } catch { return null; } })();
+  let askedOpen = false;
+  function openAskedCoin() { if (!askedCoin || askedOpen) return; askedOpen = true; openCoin(coinRow(askedCoin), askedCoin); }
   paintGlance(); loadMovers(); loadCallsTop();
   getJSON(RH_VIEW).then((j) => { S.rhView = j; paintSoon(); }).catch(() => {});
 })();

@@ -142,7 +142,7 @@
           <tr><td><code>rwa</code></td><td>The RWA tokens on Robinhood Chain — tokenized shares, ETFs, bond, commodity and fund shares — grouped by what they stand for or one by one, each with the evidence it is counted on; or, listed apart, the tokens merely paired with them and the fiat-backed stablecoins.</td></tr>
           <tr><td><code>rwa-token</code></td><td>One RWA token in full: its evidence, figures and reference prices, what its issuer says a holder holds, the powers the issuer keeps, its corporate actions, its lookalikes and the tokens paired with it.</td></tr>
           <tr><td><code>heatmap</code></td><td>The whole crypto market, last 24 hours: the 100 largest coins on every chain by market cap — the Market Data page’s bubble map — each with its price, market cap, share of the whole market, 24 h change and volume, whether it is a stablecoin, its market cap checked against a second source, its picture, and where it is on-chain.</td></tr>
-          <tr><td><code>movers</code></td><td>The 10 coins among those 100 with the biggest 24 h move, up or down — the Market Data page’s moving banner — with the market at a glance: how many went up and down, the total market cap, the three largest coins’ dominance, and the top 5 gainers and losers.</td></tr>
+          <tr><td><code>movers</code></td><td>The 10 coins among those 100 with the biggest 24 h rise (only coins that went up) — the top-gainers strip under the nav of every page — with the market at a glance: how many went up and down, the total market cap, the three largest coins’ dominance, and the top 5 gainers and losers.</td></tr>
         </tbody>
       </table>
       </div>
@@ -419,12 +419,12 @@
       <details class="dk-res"><summary><code>movers</code> <span>the biggest 24 h moves among the 100 largest coins</span></summary><div class="dk-res-body">
 <pre class="dk-pre">curl -H "Authorization: Bearer sk_…" "https://YOUR-HOST/api/data/v1/movers"</pre>
 <pre class="dk-pre">{ data: [ { id, symbol, name, rank, logo, price: { v, src, at, label }, change24h: { v, src, at, label }, mcap: { v, src, at, label },
-    volume24h: { v, src, at, label }, stable, onchain, onchainWhy } ],   // 10 at most, the biggest move either way first
+    volume24h: { v, src, at, label }, stable, onchain, onchainWhy } ],   // 10 at most, the biggest rise first — only coins that went up
   gainers: [ …the same rows, 5 at most ], losers: [ …5 at most ],
   counts: { up, down, flat, none, of }, dominance: [ { id, symbol, fig: { v, src, at, label } } ],   // the three largest coins
-  at, ranked: "absolute 24 h move, either way", total: { v, src: "coingecko", at, label },
+  at, ranked: "biggest 24 h rise first, only coins that went up", total: { v, src: "coingecko", at, label },
   reads: { coins, global, stables, coinlore }, contracts: { at, ok, why }, definitions, notes: [ … ], sources: [ { id, name, href } ], why? }</pre>
-        <p class="dk-note">The 10 coins with the biggest 24 h price move among the 100 of <code>heatmap</code> — the moving banner on the Market Data page — ranked by the size of the move either way (<code>ranked</code>: a coin down 20% comes before one up 15%; ties keep CoinGecko’s order). It is worked out from the bubble map’s own stored read — the same coins, figures and moment, read every 10 minutes — and asks no source for itself. A coin CoinGecko gives no 24 h change for is left out of every ranking and counted under <code>counts.none</code>, never ranked as 0%. Each row has the fields of a <code>heatmap</code> row that a banner needs, <code>onchain</code> and <code>logo</code> included, with the same meaning. <code>gainers</code> are the 5 coins that rose the most and <code>losers</code> the 5 that fell the most — only coins that went up, or down, so a list can be shorter on a one-sided day; <code>counts</code> is how many of the <code>of</code> coins went up, went down, stayed exactly level (CoinGecko’s own 0%) or have no change given; <code>total</code> is CoinGecko’s total market cap of every coin it lists; <code>dominance</code> is the three largest coins’ share of it (<code>fig</code>, as in <code>heatmap</code>). Before the map’s first read, <code>data</code> is empty and <code>why</code> says so. The same answer, as the page reads it, is <code>GET /api/market/movers</code>. Not advice, never a tip to buy.</p>
+        <p class="dk-note">The 10 coins with the biggest 24 h price rise among the 100 of <code>heatmap</code> — the top-gainers strip under the nav of every page — only coins that went up, the biggest rise first (<code>ranked</code>; fewer than 10 on a day fewer rose, never a falling coin; stablecoins left out — CoinGecko’s stablecoins category, whose “rise” is noise around a peg; ties keep CoinGecko’s order). It is worked out from the bubble map’s own stored read — the same coins, figures and moment, read every 10 minutes — and asks no source for itself. A coin CoinGecko gives no 24 h change for is left out of every ranking and counted under <code>counts.none</code>, never ranked as 0%. Each row has the fields of a <code>heatmap</code> row that a banner needs, <code>onchain</code> and <code>logo</code> included, with the same meaning. <code>gainers</code> are the 5 coins that rose the most and <code>losers</code> the 5 that fell the most — only coins that went up, or down, so a list can be shorter on a one-sided day; <code>counts</code> is how many of the <code>of</code> coins went up, went down, stayed exactly level (CoinGecko’s own 0%) or have no change given; <code>total</code> is CoinGecko’s total market cap of every coin it lists; <code>dominance</code> is the three largest coins’ share of it (<code>fig</code>, as in <code>heatmap</code>). Before the map’s first read, <code>data</code> is empty and <code>why</code> says so. The same answer, as the page reads it, is <code>GET /api/market/movers</code>. Not advice, never a tip to buy.</p>
       </div></details>
     </section>
 
@@ -509,6 +509,7 @@
 <script src="livex.js"></script>
 <script src="tokentext.js"></script>
 <script src="nav.js"></script>
+<script src="movers-strip.js"></script>
 <script src="wallet.js"></script>
 <script src="auth.js"></script>
 <script src="moderation.js"></script>

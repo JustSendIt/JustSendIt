@@ -6298,3 +6298,55 @@ html.motion-off .ob-spot { transition: none; }
   .ss-bar, .ss-area { fill: CanvasText; } .ss-bar.is-today, .ss-bar.is-none { fill: GrayText; }
   .ss-line, .ss-base, .ss-top { stroke: CanvasText; } .ss-hit:hover { fill: Highlight; }
 }
+
+/* ===== The top gainers strip (movers-strip.js), under the nav on every page ===========================================
+   Owner, 2026-11-17: the market's top-10 gainers "as a sticky banner to every page on the site". It sticks right under the
+   sticky nav (--nav-bar-h, the nav alone, from nav.js); nav.js adds its height to --nav-h, so a page's own sticky bars clear
+   both. One row: a label that is a link to Market Data, then the coins running right to left (the list twice, end to end, so
+   the loop has no gap — the copy is aria-hidden and out of the tab order). It stops for a pointer or the keyboard; under ⏸ and
+   the reduced-motion setting it does not move at all and the row scrolls by hand. */
+.mv-strip { position: sticky; top: var(--nav-bar-h, 58px); z-index: 49; display: flex; align-items: stretch; min-width: 0; max-width: 100%; margin: 0; padding: 0;   /* every <section> is padded like a home-page band (styles.css section): not this one */
+ 
+  background: var(--ink-1); border-bottom: 1px solid color-mix(in srgb, var(--green) 30%, transparent); }
+.mv-strip[hidden] { display: none; }
+.mv-strip-h { flex: none; display: flex; flex-direction: row; align-items: center; gap: 0.55rem; padding: 0.2rem 0.75rem; min-height: 44px;   /* one line: the strip stays one row of coins tall */
+  text-decoration: none; background: var(--ink-2); border-right: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+  font-family: var(--font-mono, ui-monospace, Menlo, monospace); font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; line-height: 1.1; }
+.mv-strip-t { color: var(--green-bright); font-size: max(var(--text-floor), 0.78rem); white-space: nowrap; }
+.mv-strip-sub { color: var(--text-mute); font-size: max(var(--text-floor), 0.68rem); white-space: nowrap; }
+.mv-strip-h:hover .mv-strip-t { text-decoration: underline; text-underline-offset: 2px; }
+.mv-strip-h:focus-visible, .mv-mover:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
+.mv-strip-win { flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; align-items: center; }
+.mv-none { margin: 0; padding: 0.4rem 0.8rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); white-space: nowrap; }   /* one line: the strip never grows */
+.mv-strip-win:has(.mv-none) { overflow-x: auto; }   /* a narrow screen scrolls a long line by hand, never cuts it */
+.mv-track { display: flex; width: max-content; animation: mv-strip-run var(--mv-dur, 40s) linear infinite; }
+.mv-list { display: flex; gap: 0.4rem; margin: 0; padding: 0.15rem 0.2rem; list-style: none; }
+@keyframes mv-strip-run { to { transform: translateX(-50%); } }
+.mv-strip:hover .mv-track, .mv-strip:focus-within .mv-track { animation-play-state: paused; }
+/* reached with the keyboard: a row (as under ⏸), so the browser can bring the focused coin into view instead of a paused loop
+   leaving it clipped off the edge */
+.mv-strip:has(.mv-mover:focus-visible) .mv-track { animation: none; }
+.mv-strip:has(.mv-mover:focus-visible) .mv-dup { display: none; }
+.mv-strip:has(.mv-mover:focus-visible) .mv-strip-win { overflow-x: auto; overscroll-behavior-x: contain; }
+html.motion-off .mv-track { animation: none; }
+html.motion-off .mv-dup { display: none; }
+html.motion-off .mv-strip-win { overflow-x: auto; overscroll-behavior-x: contain; }
+@media (prefers-reduced-motion: reduce) {
+  .mv-track { animation: none; }
+  .mv-dup { display: none; }
+  .mv-strip-win { overflow-x: auto; overscroll-behavior-x: contain; }
+}
+.mv-mover { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 44px; padding: 0.15rem 0.7rem; border-radius: 999px;
+  border: 1px solid var(--hair); background: var(--ink-2); color: var(--text); text-decoration: none; white-space: nowrap; line-height: 1.1;
+  font-size: max(var(--text-floor), 0.85rem); }
+.mv-mover:hover { border-color: var(--g-hot); }
+.mv-logo { width: 22px; height: 22px; border-radius: 50%; flex: none; }
+.mv-logo[data-gone] { display: none; }
+.mv-s { font-weight: 800; }
+.mv-p { color: var(--text-dim); font-variant-numeric: tabular-nums; }
+.mv-c { color: var(--rh-green); font-family: var(--font-mono, ui-monospace, Menlo, monospace); font-weight: 600; font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) {
+  .mv-strip-h { padding: 0.2rem 0.5rem; }
+  .mv-strip-sub { display: none; }   /* the label's tip and the link's page say "24 h · top 100"; the phone keeps the coins in view */
+}
+@media (forced-colors: active) { .mv-mover, .mv-strip-h { border: 1px solid CanvasText; } }
