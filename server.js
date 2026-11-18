@@ -5447,7 +5447,7 @@ async function holdsToken(uid, tokenAddr, minUsd, priceUsd) {
   if (same) tokenHoldCache.set(key, { held: false, at: now() });
   return false;
 }
-function forgetHoldings(uid) { for (const k of tokenHoldCache.keys()) if (k.startsWith(uid + ':')) tokenHoldCache.delete(k); try { forgetSquadGates(uid); } catch {} } // wallet set changed → re-read on next gate (community floors and squad gates alike)
+function forgetHoldings(uid) { for (const k of tokenHoldCache.keys()) if (k.startsWith(uid + ':')) tokenHoldCache.delete(k); try { forgetSquadGates(uid); } catch {} try { if (BOUGHT) BOUGHT.touch(uid); } catch {} } // wallet set changed → re-read on next gate (community floors and squad gates alike), and "$100 bought" made again for the wallets linked now
 const RPC_DOWN_MSG = "couldn't verify your holdings right now — the chain RPC is unreachable, try again in a minute";
 // How much of a token does this user hold, and since when? (Convicted-In hover; public on-chain data of the wall owner's linked wallets.)
 const HELD_TTL = 10 * 60 * 1000;
@@ -8701,6 +8701,12 @@ BOUGHT = BOUGHT_LIB.createBought({
 const BOUGHT_TICK_MS = 60 * 1000;
 const boughtTapeTimer = setInterval(() => { if (now() < ledgerCoolUntil) return; BOUGHT.tick().catch((e) => console.warn('[bought] tick: ' + ((e && e.message) || e))); }, BOUGHT_TICK_MS);
 boughtTapeTimer.unref();
+/* The verdicts' worker, every 15 seconds: a few (member, coin) verdicts a pass — the ones a feature asked for first (a link, a
+   gate check, a community join), then rows the tape moved under, buys turning 24 hours old, unknowns retried, members with no
+   verdict yet. In the background only: no request ever waits on it. */
+const BOUGHT_WORK_MS = 15 * 1000;
+const boughtWorkTimer = setInterval(() => { BOUGHT.work().catch((e) => console.warn('[bought] worker: ' + ((e && e.message) || e))); }, BOUGHT_WORK_MS);
+boughtWorkTimer.unref();
 // a verdict was written (lib/bought.js, in the background): what it changes on the site is applied by the features that read it
 function boughtOnVerdict(uid, token, before, after) {}
 
@@ -18008,7 +18014,7 @@ const server = http.createServer(async (req, res) => {
             db.prepare('DELETE FROM squads WHERE id = ?').run(sqr.id);
           }
           const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
-          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'tracker_cache', 'wallet_hist', 'burn_proofs', 'acq_state'])
+          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'tracker_cache', 'acq_state', 'wallet_hist', 'burn_proofs'])
             try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}   // acq_state: "$100 bought" verdicts go with the account; buy_claims stay, like og_claims
           OIDC.forgetUser(uid);   // Sign in with Send: every app it allowed (consents, codes, tokens) and every app it registered, with everyone's sign-ins to them
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people

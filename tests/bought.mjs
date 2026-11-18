@@ -188,12 +188,14 @@ try {
   });
 
   await section('a coin with no tape', async () => {
-    const { bought } = setup();
+    const { db, bought } = setup();
     const OTHER = W(0x8801);
     check('a coin nobody put on the tape has no answer: null, and it is taken on (bought_tokens)', bought.verdictOf(1, OTHER) === null && bought.tokenRow(OTHER) && bought.tokenRow(OTHER).state === 'pending');
     await bought.work({ max: 20 });
-    const s = bought.stateOf(1, OTHER);
-    check('  ...the worker writes "no answer yet" for it (reason tape), never a no', s && s.floor === null && s.reason === 'tape', JSON.stringify(s && { f: s.floor, r: s.reason }));
+    check('  ...until its tape is ready the worker writes nothing for it (no row: the features keep what they had), and asking again is still null', bought.stateOf(1, OTHER) === null && bought.verdictOf(1, OTHER) === null);
+    db.prepare('UPDATE bought_tokens SET wanted_at = ? WHERE token = ?').run(clock - 31 * 864e5, OTHER);
+    await bought.tick({ maxReads: 400 });
+    check('  ...a coin nobody has asked about for 30 days leaves the tape (never $SEND or $GWC)', bought.tokenRow(OTHER) === null && bought.tokenRow(COIN) && bought.tokenRow(COIN).core === true);
   });
 
   await section('pure parts', async () => {
