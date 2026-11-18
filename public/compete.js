@@ -196,7 +196,7 @@
     // revoked under today's rule: the linked wallets were found holding no $SEND; the server never grants this account a badge again
     else if (o.mine && o.mine.revoked) me = '<b>OG status removed.</b> This account’s linked wallets were found holding no $SEND, which every badge needs, so the badge and its Send Power bonus are gone — and can’t be reclaimed, whichever window is open.';
     // paused by wallets leaving (not a sale): back on relinking the wallet that holds its $SEND
-    else if (o.mine && o.mine.paused) me = 'Your <b>OG ' + esc(o.name[o.mine.paused] || '') + '</b> is paused — it follows your wallets, and the wallets linked now don’t re-verify it on their own. Relink your $SEND wallet and it’s re-verified on-chain' + (o.mine.paused >= 3 ? ' (and it needs $GWC held without a break meanwhile).' : '.');
+    else if (o.mine && o.mine.paused) me = 'Your <b>OG ' + esc(o.name[o.mine.paused] || '') + '</b> is paused — it follows your wallets, and the wallets linked now don’t re-verify it on their own. Relink your $SEND wallet and it’s re-verified on-chain' + (o.mine.paused >= 3 ? ' (and it needs $GWC held without a break meanwhile).' : '.') + ' Sell out of $SEND while it’s paused and it ends for good.';
     else me = !o.open ? 'No badge on this account, and every window has closed.'
       : cur && needs(cur[1]).length === 1 ? 'No badge on this account. The ' + esc(o.name[cur[1]]) + ' window goes to wallets that bought <b>$SEND</b> before it closes and still hold it — $GWC isn’t needed. Link a wallet on your profile to be checked.'
       : 'No badge on this account. It goes to wallets that got into <b>both $SEND and $GWC</b> inside a window and still hold both — link a wallet on your profile to be checked.';

@@ -63,9 +63,11 @@ try {
   const OG_TIER_CLOSE = { 3: C.closes.gold, 2: C.closes.silver, 1: C.closes.bronze };
   check('the floor is $100, and Gold closes when the beta ends', OG_MIN_HOLD_USD === 100 && /const OG_MIN_HOLD_USD = MIN_HOLD_USD;/.test(SRC) && C.closes.gold === C.betaEndsAt, OG_MIN_HOLD_USD);
   const NAMES = ['ogTierForBuy', 'ogBetterScan', 'ogFloorOk', 'ogAccountTier', 'ogNeeds', 'ogSoldOut', 'ogTierNow', 'ogGrantText', 'ogRevokedText', 'ogDiamondOk', 'ogLiftable', 'ogLiftWhat', 'ogReadDecides',
-    'ogLoss', 'ogCapped', 'ogHeldThrough', 'ogDropText', 'ogRestoreText', 'ogPausedDropText',
+    'ogClaimWallets', 'ogLoss', 'ogCapped', 'ogHeldThrough', 'ogDropText', 'ogRestoreText', 'ogPausedDropText',
     // the 2026-11-18 review: the drop proven by the badge's own grant, the leave outcomes, the pause and every note it sends
-    'ogDropPick', 'ogLeaveOutcome', 'ogGoldHeldBack', 'ogPausedShown', 'ogDiamondText', 'ogPausedText', 'ogGwcPausedText', 'ogResumeText', 'ogPauseSilverText', 'ogDropOffText'];
+    'ogDropPick', 'ogLeaveOutcome', 'ogGoldHeldBack', 'ogPausedShown', 'ogDiamondText', 'ogPausedText', 'ogGwcPausedText', 'ogResumeText', 'ogPauseSilverText', 'ogDropOffText',
+    // ...and the coordinator's follow-up: a badge paused with its wallets is revoked, not re-granted, if its $SEND was sold out while paused
+    'ogPauseHeld', 'ogPauseRevokedText'];
   const missing = NAMES.filter((n) => !fnSrc(n));
   check('the rule is pure functions of server.js (' + NAMES.join(', ') + ')', !missing.length, missing.join(', '));
   const ENV = { OG_TIER, OG_TIER_CLOSE, OG_TIER_NAME, OG_TIER_MULT, OG_TIER_NEEDS, OG_LAUNCH, OG_MIN_HOLD_USD, OG_DIAMOND_MULT: val(constSrc('OG_DIAMOND_MULT')) };
@@ -207,10 +209,10 @@ try {
     check('checkOg keeps the EARLIEST of equal tiers per coin', /if \(ogBetterScan\(best\[c\.key\], s\)\) best\[c\.key\] = \{ \.\.\.s, wallet: a \};/.test(SRC) && !/s\.tier > best\[c\.key\]\.tier\) best\[c\.key\]/.test(SRC));
     check('checkOg sums each coin over every linked wallet for the floor', /held\[c\.key\] \+= BigInt\(s\.balWei \|\| '0'\)/.test(SRC)
       && /const floor = \{ SEND: ogFloorOk\(held\.SEND, sendPx\), GWC: ogFloorOk\(held\.GWC, gwcPx\) \};/.test(SRC));
-    check('  ...and so does the Diamond upgrade (no single-wallet floor is left anywhere)', /return await grantDiamondUpgrade\(userId, best, held\);/.test(SRC)
+    check('  ...and so does the Diamond upgrade (no single-wallet floor is left anywhere)', /return await grantDiamondUpgrade\(userId, best, held, \{ same, monthFrom \}\);/.test(SRC)
       && /ogFloorOk\(held && held\.SEND, sendPx\) && ogFloorOk\(held && held\.GWC, gwcPx\)/.test(SRC) && !/best\.(SEND|GWC)\.balWei/.test(SRC));
     check('the grant decides with ogAccountTier and claims only the wallets that earned it', /let pick = ogAccountTier\(\{ best, holdsAny, diamondOk, floor \}\);/.test(SRC)
-      && /const claimAddrs = \[\.\.\.new Set\(pick\.wallets\.filter\(Boolean\)\)\];/.test(SRC) && /\.run\(tier, buyMs, lift, now\(\), scanFailed \? null : now\(\), resumed \? 0 : \(u\.og_paused_tier \|\| 0\), resumed \? 0 : \(u\.og_paused_at \|\| 0\), userId\)/.test(SRC) && /const buyMs = pick\.buyMs;/.test(SRC)
+      && /another account's grant while this scan was running\. A Diamond claims every wallet it rests on \(ogClaimWallets\)\. \*\/\n\s+const claimAddrs = ogClaimWallets\(pick, monthFrom\);/.test(SRC) && /\.run\(tier, buyMs, lift, now\(\), scanFailed \? null : now\(\), resumed \? 0 : \(u\.og_paused_tier \|\| 0\), resumed \? 0 : \(u\.og_paused_at \|\| 0\), userId\)/.test(SRC) && /const buyMs = pick\.buyMs;/.test(SRC)
       && /const lift = ogLiftable\(pick, failed\.SEND, u\.og_cap\) \|\| \(heldBack && pick\.tier === OG_TIER\.SILVER\) \? 1 : 0;/.test(SRC));
     // a failed read holds up only an answer it could change (ogReadDecides; section 9 runs it): the old blanket rule stopped every $SEND-only grant
     check('  ...a failed read holds up only an answer it could change (no blanket "any read failed: no $SEND-only badge")', !/if \(scanFailed && pick\.basis !== 'both'\) return 0;/.test(SRC)
@@ -227,14 +229,25 @@ try {
       && /const need = ogNeeds\(me\.og_tier\), ws = /.test(SRC) && /try \{ return \(await erc20Balance\(TOK\[k\], w\)\) > OG_DUST_WEI; \} catch \{ return null; \}/.test(SRC)
       && /return ogLeaveOutcome\(me\.og_tier, across\(\(\) => true\), lv \? across\(\(w\) => w !== lv\) : null, !lv \|\| ws\.every\(\(w\) => w === lv\)\);/.test(SRC)
       && /ogPaused: ogV2 === 'pause-gwc' \? 'gwc' : ogV2 === 'pause' \|\| ogV2 === 'pause-capped' \? 'all' : null/.test(SRC));
+    /* every write the drop and the pause make rests on the wallets it read (Diamond-on-link's rule, 4cce098): the leave verdicts are
+       refused when a wallet came or went while they were read, and the drop written at once follows refreshHolder's own check
+       with nothing awaited in between */
+    check('  ...and both leave paths write only while the wallets they read are still the ones linked (409 otherwise — nothing changed)',
+      /const ogV = await ogLeaveVerdict\(me, wallets, null\), revokeOg = ogV === 'revoke';\n(\s*\/\/[^\n]*\n)*\s+if \(walletAddresses\(me\.id\)\.join\(\) !== wallets\.join\(\)\) return bad\(res, 'your linked wallets changed while they were being read — nothing was changed; try again', 409\);/.test(SRC)
+      && /const ogV2 = await ogLeaveVerdict\(me, linked, addr\), revokeOg = ogV2 === 'revoke';\n\s+if \(walletAddresses\(me\.id\)\.join\(\) !== linked\.join\(\)\) return bad\(res, 'your linked wallets changed while they were being read — nothing was changed; try again', 409\);/.test(SRC));
+    {
+      const a = SRC.indexOf("if (walletAddresses(userId).slice(0, MAX_LINKED_WALLETS).join() !== addrs.join()) { db.exec('ROLLBACK');"), b = SRC.indexOf('if (sendTok <= OG_DUST || gwcTok <= OG_DUST) ogAfterHolderRead(userId, sendTok, gwcTok);');
+      check('  ...and the drop written at once (ogAfterHolderRead) follows refreshHolder\'s wallet-set check with nothing awaited between', a > 0 && b > a && !/\bawait\b/.test(SRC.slice(a, b)), [a, b].join(','));
+    }
     check('the multiplier is paid while the coins the tier needs are held', /!ogSoldOut\(tier, \{ SEND: \(h\.send_tok \|\| 0\) > OG_DUST, GWC: \(h\.gwc_tok \|\| 0\) > OG_DUST \}\)\.length\) og = OG_TIER_MULT\[tier\] \|\| 1;/.test(SRC));
     check('the grant sweep re-tests "did not qualify" accounts every 6 hours (so $SEND-only buyers are picked up on their own), and a Silver that may be lifted',
       /WHERE \(u\.og_tier = 0 OR \(u\.og_tier = 3 AND u\.og_diamond_at IS NULL\) OR \(u\.og_tier = 2 AND u\.og_lift = 1\)\) AND u\.og_revoked = 0 AND u\.system = 0\s+AND u\.og_checked_at < \? AND u\.og_try_at < \?/.test(SRC) && /const OG_RESCAN_MS = 6 \* 3600 \* 1000;/.test(SRC));
     check('checkOg asks a Silver marked og_lift again (liftOgSilver), not only an un-tiered account or an un-asked Gold', /const lifting = !requal && u\.og_tier === OG_TIER\.SILVER && !!u\.og_lift;/.test(SRC)
-      && /if \(u\.og_tier > 0 && !upgrading && !lifting && !requal\) return u\.og_tier;/.test(SRC) && /if \(lifting\) return await liftOgSilver\(userId, u, \{ best, holdsAny, diamondOk, held, failed, spans \}\);/.test(SRC)
+      && /if \(u\.og_tier > 0 && !upgrading && !lifting && !requal\) return u\.og_tier;/.test(SRC) && /if \(lifting\) return await liftOgSilver\(userId, u, \{ best, holdsAny, diamondOk, held, failed, spans, same, monthFrom \}\);/.test(SRC)
       && /"ALTER TABLE users ADD COLUMN og_lift INTEGER NOT NULL DEFAULT 0",/.test(SRC));
     check('  ...a check that arrives mid-scan is not dropped: the running scan goes again as it ends, with the wallets linked then',
-      /if \(_ogScanning\.has\(userId\)\) \{ _ogRescan\.add\(userId\); return 0; \}/.test(SRC) && /if \(_ogRescan\.delete\(userId\)\) setImmediate\(\(\) => \{ checkOg\(userId\)\.catch\(\(\) => \{\}\); \}\);/.test(SRC));
+      /if \(_ogScanning\.has\(userId\)\) \{ ogAgain\(userId, opts\); return 0; \}/.test(SRC) && /function ogAgain\(userId, opts\) \{ _ogRescan\.add\(userId\); if \(opts && opts\.link\) _ogRescanLink\.add\(userId\); \}/.test(SRC)
+      && /if \(_ogRescan\.delete\(userId\)\) \{ const link = _ogRescanLink\.delete\(userId\); setImmediate\(\(\) => \{ checkOg\(userId, link \? \{ link: true \} : \{\}\)\.catch\(\(\) => \{\}\); \}\); \}/.test(SRC));
     check('  ...and a wallet claimed by another account is never the scan a tier is earned on (it hid every other wallet of that coin)',
       /const claimedElsewhere = new Set\(addrs\.filter\(/.test(SRC) && /if \(ogDisqualified\(s\) \|\| claimedElsewhere\.has\(a\)\) \{ sawDq = true; continue; \}\s*\n\s*if \(ogBetterScan\(best\[c\.key\], s\)\)/.test(SRC));
   }
@@ -275,7 +288,7 @@ try {
     const picks = [{ tier: 2, basis: 'send', capped: true }, { tier: 2, basis: 'send', capped: false }, { tier: 1, basis: 'send', capped: false }, { tier: 3, basis: 'both' }, { tier: 4, basis: 'both' }];
     for (const p of picks) { notes.push(L.ogGrantText(p)); notes.push(L.ogRestoreText(p)); }
     for (const from of [2, 1]) for (const to of [3, 4]) notes.push(L.ogGrantText({ tier: to, basis: 'both' }, from));
-    for (const t of [4, 3, 2, 1, 0]) { notes.push(L.ogRevokedText(t, ['SEND']), L.ogRevokedText(t, ['SEND', 'GWC']), L.ogPausedDropText(t), L.ogPausedText(t), L.ogGwcPausedText(t), L.ogDropOffText(t)); }
+    for (const t of [4, 3, 2, 1, 0]) { notes.push(L.ogRevokedText(t, ['SEND']), L.ogRevokedText(t, ['SEND', 'GWC']), L.ogPausedDropText(t), L.ogPausedText(t), L.ogGwcPausedText(t), L.ogDropOffText(t), L.ogPauseRevokedText(t)); }
     for (const from of [4, 3]) for (const p of [{ tier: 2, capped: true }, { tier: 2, capped: false }, { tier: 1, capped: false }]) { notes.push(L.ogDropText(from, p), L.ogPauseSilverText(from, p)); }
     for (const t of [4, 3]) notes.push(L.ogResumeText({ tier: t }));
     notes.push(L.ogDiamondText());
@@ -293,7 +306,7 @@ try {
   {
     const asyncSrc = (name) => { const m = new RegExp('\\n(async function ' + name + '\\([^)]*\\) \\{\\n[\\s\\S]*?\\n\\})\\n').exec(SRC); return m ? m[1] : null; };
     const ASYNC = ['checkOg', 'liftOgSilver', 'grantDiamondUpgrade', 'restoreOg', 'ogLeaveVerdict'];
-    const SYNC = ['ogAfterHolderRead', 'ogRequalSoon', 'ogOnLeave', 'ogRequalify', 'ogRevokedWallets', 'ogRevokedWalletRows', 'ogRestoreSettle', 'ogRestoreState'];   // the drop, the pause and the restore (section 11)
+    const SYNC = ['ogAfterHolderRead', 'ogRequalSoon', 'ogOnLeave', 'ogRequalify', 'ogRevokedWallets', 'ogRevokedWalletRows', 'ogRestoreSettle', 'ogRestoreState', 'ogAgain', 'ogOnLink'];   // the drop, the pause and the restore (section 11), and Diamond-on-link's re-run
     const missingA = ASYNC.filter((n) => !asyncSrc(n)).concat(SYNC.filter((n) => !fnSrc(n)));
     check('checkOg, liftOgSilver, grantDiamondUpgrade and the drop, pause and restore steps can be lifted out of server.js', !missingA.length, missingA.join(', '));
     const mem = new DatabaseSync(':memory:');
@@ -329,13 +342,14 @@ try {
         } finally { scanNow--; }
       },
       erc20Balance: async (token, a) => { const v = BAL.get(String(a).toLowerCase() + ':' + (token === TOKS.SEND ? 'SEND' : 'GWC')); if (v === 'fail') throw new Error('rpc: no answer'); return v || 0n; },
-      _ogScanning: new Set(), _ogRescan: new Set(),
+      _ogScanning: new Set(), _ogRescan: new Set(), _ogRescanLink: new Set(),
       OG_MONTH_MS: 30 * DAY, OG_DUST: val(constSrc('OG_DUST')), _ogRequalQueue: { tail: Promise.resolve() },
     };
     const K = new Function(...Object.keys(E9), [...NAMES.map(fnSrc), ...ASYNC.map(asyncSrc), ...SYNC.map(fnSrc)].join('\n') + '\nreturn { checkOg, liftOgSilver, ogAfterHolderRead, ogLeaveVerdict, ogOnLeave, ogRestoreSettle, ogRevokedWallets, ogRestoreState };')(...Object.values(E9));
     // a scan of one coin in one wallet: bought at `ts`, holding `tokens`; month flows only when asked (the Diamond question)
+    // ...held from that buy on (heldSpans, as ogScan reports them) — or, holding nothing now, sold out a day after it
     const sc = (coin, ts, tokens = 1_000_000, extra = {}) => ({ tier: L.ogTierForBuy(ts, OG_LAUNCH[coin]), firstBuyMs: ts, holds: tokens > 0, balWei: (BigInt(tokens) * 10n ** 18n).toString(),
-      dumped: false, notAccumulator: false, monthBoughtWei: '0', monthSoldWei: '0', ...extra });
+      dumped: false, notAccumulator: false, monthBoughtWei: '0', monthSoldWei: '0', heldSpans: tokens > 0 ? [[ts, null]] : [[ts, ts + DAY]], ...extra });
     // a wallet whose coins arrived by a plain transfer: held, but no market buy behind them (tier NONE)
     const xfer = (tokens, extra = {}) => ({ tier: 0, firstBuyMs: null, holds: tokens > 0, balWei: (BigInt(tokens) * 10n ** 18n).toString(), dumped: false, notAccumulator: false, monthBoughtWei: '0', monthSoldWei: '0', ...extra });
     const bal = (w, coin, tokens) => BAL.set(w + ':' + coin, tokens === 'fail' ? 'fail' : BigInt(tokens) * 10n ** 18n);
@@ -368,6 +382,14 @@ try {
       await K.checkOg(id); link(id, '0xb2');
       const t = await K.checkOg(id);
       check('  ...a capped Silver whose wallets show a Diamond month lifts straight to Diamond', t === 4 && row(id).og_tier === 4 && claims(id) === '0xa2=4,0xb2=4', JSON.stringify({ t, r: row(id) }));
+      // Diamond-on-link's claim rule on the lift (merged with 4cce098): every wallet whose month buys were counted is claimed too
+      SCANS.set('0xa2m:SEND', sc('SEND', GOLD_TS.SEND, 1_000_000, m)); SCANS.set('0xb2m:GWC', sc('GWC', GOLD_TS.GWC, 1_000_000, m));
+      SCANS.set('0xc2m:SEND', sc('SEND', GOLD_TS.SEND + DAY, 1_000_000, { monthBoughtWei: '3', monthSoldWei: '0' }));   // a later month buyer: earns nothing itself
+      const idm = user(['0xa2m']);
+      await K.checkOg(idm); link(idm, '0xb2m'); link(idm, '0xc2m');
+      const tm = await K.checkOg(idm);
+      check('  ...and a Silver lifted to Diamond claims every wallet the Diamond rests on — the third wallet whose month buys were counted too (ogClaimWallets)',
+        tm === 4 && claims(idm) === '0xa2m=4,0xb2m=4,0xc2m=4', JSON.stringify({ tm, r: row(idm), claims: claims(idm) }));
     }
     /* (d) both coins in the Gold window, $GWC under the floor today: Silver now, Gold once $GWC is back over it */
     {
@@ -393,8 +415,12 @@ try {
       const t1 = await first;
       delayMs = 0;
       for (let i = 0; i < 40 && row(id).og_tier !== 3; i++) await settle();
-      check('a wallet linked mid-scan: the late check is not dropped — the scan runs again as it ends, and the account is Gold',
-        second === 0 && t1 === 2 && row(id).og_tier === 3 && claims(id) === '0xa4=3,0xb4=3', JSON.stringify({ second, t1, r: row(id), claims: claims(id) }));
+      /* since Diamond-on-link (2026-11-17) the scan of the older wallets writes nothing at all — the wallet set changed under it
+         (checkOg's `same`) — where it used to write a Silver the re-run then lifted: one answer, one note, on the wallets linked now */
+      const notesA4 = notes9.filter((n) => n.uid === id);
+      check('a wallet linked mid-scan: the late check is not dropped — the scan of the older wallets writes nothing, runs again as it ends, and the account is Gold',
+        second === 0 && t1 === 0 && row(id).og_tier === 3 && claims(id) === '0xa4=3,0xb4=3' && notesA4.length === 1 && /^OG Gold unlocked! You bought BOTH/.test(notesA4[0].text),
+        JSON.stringify({ second, t1, r: row(id), claims: claims(id), notes: notesA4.length }));
     }
     /* finding 2: a failed $GWC read cannot hold up a $SEND-only badge */
     {
@@ -860,6 +886,61 @@ try {
       link(id3, '0xs3', Date.now());
       const t4 = await K.checkOg(id3);
       check('  ...one that held its $GWC without a break while paused gets Gold back on relinking, the pause cleared', t4 === 3 && row(id3).og_tier === 3 && row(id3).og_paused_tier === 0 && /^OG Gold is back! /.test(lastNote(id3)), JSON.stringify({ t4, r: row(id3) }));
+    }
+    /* the coordinator's follow-up, on finding 2's rule for $SEND: "only selling out of $SEND revokes" — a badge paused with its
+       wallets whose $SEND was sold out while paused and bought back is revoked on relink, never re-granted on the buy-back */
+    {
+      check('ogPauseHeld: held without a break → held; held at the pause and now with a gap between → sold; none at the pause, or none now → away; a $SEND wallet unread → unknown; no pause time on record → held',
+        L.ogPauseHeld([[1, null]], 5, true, false) === 'held' && L.ogPauseHeld([[1, 7], [9, null]], 5, true, false) === 'sold' && L.ogPauseHeld([[8, null]], 5, true, false) === 'away'
+        && L.ogPauseHeld([[1, 7]], 5, false, false) === 'away' && L.ogPauseHeld([], 5, false, false) === 'away' && L.ogPauseHeld([[1, 7], [9, null]], 5, true, true) === 'unknown'
+        && L.ogPauseHeld([], 0, false, false) === 'held' && L.ogPauseHeld([[1, 5], [5, null]], 5, true, false) === 'held');
+      SCANS.set('0xv1:SEND', sc('SEND', GOLD_TS.SEND)); SCANS.set('0xv1:GWC', sc('GWC', GOLD_TS.GWC));
+      const id = user(['0xv1']);
+      await K.checkOg(id);
+      bal('0xv1', 'SEND', 1_000_000); bal('0xv1', 'GWC', 1_000_000);
+      await disconnectFlow(id);
+      const P = row(id).og_paused_at;
+      SCANS.set('0xv1:SEND', sc('SEND', GOLD_TS.SEND, 1_000_000, { heldSpans: [[GOLD_TS.SEND, P + 1000], [P + 5000, null]] }));   // sold out while paused, bought back
+      link(id, '0xv1', Date.now());
+      const t = await K.checkOg(id, { link: true });
+      check('(paused $SEND) a Gold paused by a disconnect whose $SEND was sold out while paused and bought back: on relink it is revoked for good — never re-granted on the buy-back — and told why, whole',
+        P > 0 && t === 0 && row(id).og_revoked === 1 && row(id).og_tier === 0 && row(id).og_paused_tier === 0 && claims(id) === '0xv1=3'
+        && /^OG Gold removed — while it was paused, the \$SEND in your linked wallets went to zero and came back \(checked on-chain\)\. That is selling out of \$SEND, which ends an OG badge for good: it can’t be reclaimed\.$/.test(lastNote(id)),
+        JSON.stringify({ t, r: row(id), note: lastNote(id) }));
+      check('  ...and it is never asked again', await K.checkOg(id, { link: true }) === 0 && row(id).og_revoked === 1);
+      const paused = (wallets, tier = 3) => { const x = user(wallets); mem.prepare('UPDATE users SET og = 0, og_tier = 0, og_buy_ms = ?, og_paused_tier = ?, og_paused_at = ? WHERE id = ?').run(GOLD_BUY, tier, P, x); return x; };
+      // a second $SEND wallet that could not be read might fill the gap: nothing decided
+      SCANS.set('0xv2:SEND', sc('SEND', GOLD_TS.SEND, 1_000_000, { heldSpans: [[GOLD_TS.SEND, P + 1000], [P + 5000, null]] })); SCANS.set('0xv3:SEND', 'fail');
+      const id2 = paused(['0xv2', '0xv3']);
+      await K.checkOg(id2, { link: true });
+      check('  ...a $SEND wallet that could not be read (it might fill the gap) decides nothing: not revoked, nothing granted, nothing recorded',
+        row(id2).og_revoked === 0 && row(id2).og_tier === 0 && row(id2).og_paused_tier === 3 && row(id2).og_checked_at === 0, JSON.stringify(row(id2)));
+      // the $SEND moved while paused into a wallet linked alone: its coins came after the pause — nothing granted, nothing revoked
+      SCANS.set('0xv4:SEND', xfer(1_000_000, { heldSpans: [[P + 1000, null]] }));
+      SCANS.set('0xv5:SEND', sc('SEND', GOLD_TS.SEND, 0, { heldSpans: [[GOLD_TS.SEND, P + 1000]] })); SCANS.set('0xv5:GWC', sc('GWC', GOLD_TS.GWC));
+      const id3 = paused(['0xv4']);
+      const t3 = await K.checkOg(id3, { link: true });
+      check('  ...a wallet whose $SEND arrived after the pause, linked alone: not re-granted on it (the $SEND it had at the pause sits in a wallet not linked) — and not revoked',
+        t3 === 0 && row(id3).og_revoked === 0 && row(id3).og_tier === 0 && row(id3).og_paused_tier === 3 && row(id3).og_checked_at > 0, JSON.stringify(row(id3)));
+      link(id3, '0xv5', Date.now());
+      const t3b = await K.checkOg(id3, { link: true });
+      check('  ...and once the wallet it moved from is linked too (no moment without $SEND between them): Gold back, "OG Gold is back!"',
+        t3b === 3 && row(id3).og_tier === 3 && row(id3).og_paused_tier === 0 && /^OG Gold is back! /.test(lastNote(id3)), JSON.stringify({ t3b, r: row(id3), note: lastNote(id3) }));
+      // a wallet with no $SEND linked first (the $GWC one): not a sell-out — the $SEND wallet is still to come
+      SCANS.set('0xv6:GWC', sc('GWC', GOLD_TS.GWC));
+      const id4 = paused(['0xv6']);
+      await K.checkOg(id4, { link: true });
+      check('  ...a wallet holding no $SEND relinked first: not a sell-out — still paused, never revoked', row(id4).og_revoked === 0 && row(id4).og_paused_tier === 3 && row(id4).og_tier === 0, JSON.stringify(row(id4)));
+      // bought back into a fresh wallet while paused (a buy that earns a tier on its own), linked alone: never re-granted on it
+      const BACK = P + 1000;
+      SCANS.set('0xv7:SEND', sc('SEND', BACK, 1_000_000, { heldSpans: [[BACK, null]] }));
+      const id5 = paused(['0xv7']);
+      const t5 = await K.checkOg(id5, { link: true });
+      check('  ...$SEND bought into a fresh wallet while paused (a buy that would earn a badge on its own), linked alone: not re-granted on it, not revoked — the wallet that held its $SEND at the pause decides',
+        L.ogTierForBuy(BACK, OG_LAUNCH.SEND) > 0 && t5 === 0 && row(id5).og_tier === 0 && row(id5).og === 0 && row(id5).og_revoked === 0 && row(id5).og_paused_tier === 3 && claims(id5) === '',
+        JSON.stringify({ t5, r: row(id5), claims: claims(id5), tierOfBuy: L.ogTierForBuy(BACK, OG_LAUNCH.SEND) }));
+      check('  ...and the rule runs before any grant on a paused badge, after the wallet-set check (no await between)', /if \(!u\.og_tier && u\.og_paused_tier > 0\) \{\n\s+const ph = ogPauseHeld\(spans\.SEND, u\.og_paused_at, !!holdsAny\.SEND, failed\.SEND\);/.test(SRC)
+        && SRC.indexOf('const ph = ogPauseHeld(') > SRC.indexOf("if (!same()) return u.og_tier || 0;") && SRC.indexOf('const ph = ogPauseHeld(') < SRC.indexOf('const hist = ogAccountTier({ best, holdsAny, diamondOk });'));
     }
     /* (h) the restore pass: a badge revoked before the rule, re-checked once */
     {

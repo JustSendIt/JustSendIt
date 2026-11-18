@@ -523,7 +523,7 @@
       return '<div class="og-block og-block-lost"><span class="og-block-badge">⏸ OG ' + pn + '</span><div class="og-block-body"><b>Your OG ' + pn + ' is paused.</b> '
         + 'It follows your wallets, and the wallets linked now don’t re-verify it on their own. Relink your <b>$Send</b> wallet and it is re-verified on-chain'
         + (pt >= 3 ? ' — ' + pn + ' also needs $GWC held without a break since it was paused; without that it comes back as Silver.' : '.')
-        + ' No OG bonus is paid while it is paused.</div></div>';
+        + ' <b>Sell out of $Send while it is paused and it ends for good</b> — the wallets you relink must show your $Send held without a break since then. No OG bonus is paid while it is paused.</div></div>';
     }
     // ogDq is one bit for the whole account: it says at least one wallet was ruled out by the dump
     // standard, NOT that this is the only reason there is no badge (the other coin may simply never
@@ -1427,7 +1427,7 @@
         : 'Hold <b>both $Send and $GWC</b>, bought from the market, and keep holding both: you earn a permanent OG badge and a Send Power multiplier. There is <b>one standard</b>; only when you got in changes the size, and your tier is the <b>lower</b> of your two coins, because the rule is that you held both.')
       + state + '</p>' +
       '<ul>' +
-        '<li><b>💎 Diamond — 20×.</b> Bought both in the first month of $GWC' + (dm ? ' (' + dt(dm.from) + ' – ' + dt(dm.until) + ')' : '') + ' <b>and</b> bought more of each than you sold that month, across all your linked wallets. That month is over, so Diamond is already decided by what happened on-chain then; a Gold badge that qualifies is upgraded on its own.</li>' +
+        '<li><b>💎 Diamond — 20×.</b> Bought both in the first month of $GWC' + (dm ? ' (' + dt(dm.from) + ' – ' + dt(dm.until) + ')' : '') + ' <b>and</b> bought more of each than you sold that month, across all your linked wallets. That month is over, so Diamond is already decided by what happened on-chain then; a Gold badge that qualifies is upgraded on its own, and linking a wallet that qualifies replaces Gold with Diamond.</li>' +
         '<li><b>🥇 Gold — 10×.</b> Bought both before the beta ' + (c && c.closes && c.closes.gold && c.closes.gold <= Date.now() ? 'ended' : 'ends') + closes('gold') + '.</li>' +
         (sendOnly
           ? '<li><b>🥈 Silver — 5×.</b> Bought ' + what(2) + ' any time before Silver closes, 90 days after the beta ended' + closes('silver') + '. A $Send buy from during the beta counts here too: without $GWC it is Silver, never Gold.</li>' +

@@ -121,6 +121,9 @@ check('  ...and a badge paused by unlinking is said as a pause — on the dashbo
   /if \(Number\(g\.ogPausedTier\) > 0\) \{/.test(GAM) && /is paused:<\/b> the wallet holding its \$GWC was unlinked, which is not a sale/.test(GAM)
   && /else if \(o\.mine && o\.mine\.paused\) me = 'Your <b>OG '/.test(CMP) && /o\.mine\.paused > o\.mine\.tier \?/.test(CMP)
   && /j\.ogPaused === 'gwc' \? ' — it holds your \$GWC, so your OG badge is paused at Silver until you relink it'/.test(pub('profile.js')));
+check('  ...and selling out of $SEND while a badge is paused ends it for good: the dashboard, the Arcade card, About, the White Paper and README say so',
+  /<b>Sell out of \$Send while it is paused and it ends for good<\/b>/.test(GAM) && /Sell out of \$SEND while it’s paused and it ends for good\./.test(CMP)
+  && /selling out of \$SEND while a badge is paused ends it for good/.test(ABOUT) && /Selling out of \$SEND while a badge is paused is selling out/.test(WP) && /never re‑granted after its \*\*\$Send\*\* was sold out while paused \(`ogPauseHeld`\)/.test(README));
 check('  ...and none of the new copy tells anyone to buy', !/\b(buy now|you should buy|go buy|buy more|buy \$GWC again to)\b/i.test(GAM + CMP + ABOUT.slice(ABOUT.indexOf('id="og-rules"'), ABOUT.indexOf('id="og-rules"') + 9000)));
 
 /* ═══ 2. in a browser ═══ */

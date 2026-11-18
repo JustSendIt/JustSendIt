@@ -4337,21 +4337,48 @@ function ogAccountTier({ best, holdsAny, diamondOk, floor }) {
   }
   return out({ short });
 }
-async function grantDiamondUpgrade(userId, best, held) {
+/* Pure: the wallets a badge claims — the ones that earned its tier (ogAccountTier's pick.wallets) and, for a Diamond, every
+   wallet whose market buys inside $GWC's first month were counted toward it (`monthFrom`, checkOg): a Diamond rests on all of
+   them, so it claims all of them. The upgrade used to claim nothing new and check nothing, so one wallet that bought in that
+   month could make any number of Gold accounts Diamond, one after another (owner, 2026-11-17: Diamond-on-link). */
+function ogClaimWallets(pick, monthFrom) {
+  return [...new Set([...((pick && pick.wallets) || []), ...(pick && pick.tier === OG_TIER.DIAMOND && monthFrom ? [...monthFrom] : [])].filter(Boolean))];
+}
+/* Diamond supersedes Gold (owner, 2026-11-17: "If a person connects a wallet that qualifies for diamond OG have that super-seed
+   their Gold OG badge status"). A Gold is asked the Diamond question once per WALLET SET, not once ever: linking a wallet
+   re-opens it (og_diamond_at back to NULL) at once, before the link awaits anything, and the link's checkOg ({ link: true })
+   asks it with the new wallet — after the grant window has closed too, on a link only, never by the sweep (owner's Q7). A
+   scan already running on the older wallets writes nothing (checkOg's wallet-set check) and runs again with the new set. */
+function ogOnLink(userId) {
+  db.prepare('UPDATE users SET og_diamond_at = NULL WHERE id = ? AND og = 1 AND og_tier = ? AND og_revoked = 0 AND og_requal = 0').run(userId, OG_TIER.GOLD);
+}
+/* Gold → Diamond, for an account already holding Gold. The same $100-of-each floor a grant needs (a 20× badge needs a real
+   bag behind it at least as much as a 10× one does); a price that cannot be read, or a bag under the floor today, is not a
+   definitive "no" — the question stays open and the sweep asks again. Every wallet the answer rests on is claimed for this
+   account in the same transaction as the badge (ogClaimWallets: the wallets that earned each coin's Gold and every wallet
+   whose month buys were counted); one claimed by another account while this read ran is no answer — the question stays
+   open, and the next read leaves that wallet out. Nothing is written when the linked wallets changed since the read began
+   (`same`), and the badge only moves while it is still a live, unrevoked Gold. */
+async function grantDiamondUpgrade(userId, best, held, { same, monthFrom } = {}) {
   let sendPx = null, gwcPx = null;
   try { sendPx = await guardedPriceUsd(TOK.SEND); gwcPx = await guardedPriceUsd(TOK.GWC); } catch {}
+  if (same && !same()) return OG_TIER.GOLD;                                                 // a wallet came or went while the chain was read: asked again with the wallets linked now
   if (!(sendPx > 0) || !(gwcPx > 0)) return OG_TIER.GOLD;                                   // no price, no answer — asked again within the hour
   // valued the way a grant is: each coin summed over every linked wallet, at the guarded price
   if (!(ogFloorOk(held && held.SEND, sendPx) && ogFloorOk(held && held.GWC, gwcPx))) {
     db.prepare('UPDATE users SET og_checked_at = ? WHERE id = ?').run(now(), userId);        // a real answer for today: re-asked every 6 hours, as a grant is
     return OG_TIER.GOLD;
   }
-  const wallets = [best.SEND.wallet, best.GWC.wallet];
+  const claimAddrs = ogClaimWallets({ tier: OG_TIER.DIAMOND, wallets: [best.SEND.wallet, best.GWC.wallet] }, monthFrom);
+  for (const a of claimAddrs) {
+    const prior = db.prepare('SELECT user_id FROM og_claims WHERE addr_idx = ?').get(bidx(a));
+    if (prior && prior.user_id !== userId) return OG_TIER.GOLD;   // claimed by another account while this read ran: no answer, the question stays open
+  }
   let g;
   try {
     db.exec('BEGIN');
     g = db.prepare('UPDATE users SET og_tier = ?, og_diamond_at = ? WHERE id = ? AND og_tier = ? AND og = 1 AND og_revoked = 0 AND og_requal = 0').run(OG_TIER.DIAMOND, now(), userId, OG_TIER.GOLD);   // not a Gold whose $GWC was found sold meanwhile
-    if (g.changes) for (const a of [...new Set(wallets.filter(Boolean))]) db.prepare('UPDATE og_claims SET tier = ? WHERE addr_idx = ? AND user_id = ?').run(OG_TIER.DIAMOND, bidx(a), userId);
+    if (g.changes) for (const a of claimAddrs) db.prepare('INSERT INTO og_claims (addr_idx, user_id, tier, claimed_at) VALUES (?,?,?,?) ON CONFLICT(addr_idx) DO UPDATE SET tier = excluded.tier WHERE og_claims.user_id = excluded.user_id').run(bidx(a), userId, OG_TIER.DIAMOND, now());
     db.exec('COMMIT');
   } catch { try { db.exec('ROLLBACK'); } catch {} return OG_TIER.GOLD; }
   if (!g.changes) return OG_TIER.GOLD;
@@ -4434,11 +4461,12 @@ function ogReadDecides(pick, failed) {
    earning $SEND buy came after the beta (uncapped) stops the asking: no $GWC can make that Gold — except for a Gold or
    Diamond paused at Silver (og_paused_tier: its $GWC sits in a wallet that was unlinked), which stays open for that wallet
    and comes back up only on $GWC held without a break since the pause (ogGoldHeldBack); otherwise it waits at Silver. */
-async function liftOgSilver(userId, u, { best, holdsAny, diamondOk, held, failed, spans }) {
+async function liftOgSilver(userId, u, { best, holdsAny, diamondOk, held, failed, spans, same, monthFrom }) {
   const complete = !failed.SEND && !failed.GWC;
   const pausedGold = u.og_paused_tier >= OG_TIER.GOLD && !ogCapped(u.og_cap);
   let sendPx = null, gwcPx = null;
   try { sendPx = await guardedPriceUsd(TOK.SEND); gwcPx = await guardedPriceUsd(TOK.GWC); } catch {}
+  if (same && !same()) return OG_TIER.SILVER;   // a wallet came or went while the chain was read: asked again with the wallets linked now
   const pick = ogAccountTier({ best, holdsAny, diamondOk, floor: { SEND: ogFloorOk(held.SEND, sendPx), GWC: ogFloorOk(held.GWC, gwcPx) } });
   let what = ogLiftWhat(pick, u.og_buy_ms);
   // a gap in $GWC since the pause is a sale, or $GWC in a wallet not linked now — not Gold today, and never capped by it:
@@ -4450,7 +4478,7 @@ async function liftOgSilver(userId, u, { best, holdsAny, diamondOk, held, failed
       .run(now(), ogCapped(u.og_cap) ? 0 : pausedGold || !(best.SEND && best.SEND.tier < OG_TIER.GOLD) ? 1 : 0, userId, OG_TIER.SILVER);   // a real answer for today: asked again in 6 hours (never again when capped: no Gold to find)
     return OG_TIER.SILVER;
   }
-  const claimAddrs = [...new Set(pick.wallets.filter(Boolean))];
+  const claimAddrs = ogClaimWallets(pick, monthFrom);   // a Diamond claims every wallet it rests on
   for (const a of claimAddrs) {
     const prior = db.prepare('SELECT user_id FROM og_claims WHERE addr_idx = ?').get(bidx(a));
     if (prior && prior.user_id !== userId) return OG_TIER.SILVER;   // spent on another account since this read began: the Silver stays as it is
@@ -4615,13 +4643,13 @@ function ogDropText(from, pick) {
 // Pure: what a Gold or Diamond that sold out of $GWC says when it is paused with the wallets holding its $SEND (pause-capped).
 function ogPausedDropText(tier) {
   return 'OG badge paused — it follows your wallets. You no longer hold $GWC, so ' + (OG_TIER_NAME[tier] || 'Gold') + ' is gone for good; ' +
-    'relink your $SEND wallet and it is re-verified on-chain for Silver, which needs only $SEND.';
+    'relink your $SEND wallet to re-verify Silver. Sell out of $SEND meanwhile and it ends for good.';
 }
 // Pure: what a badge says when the wallets that stay do not hold its $SEND (a disconnect, the last wallet, or the $SEND wallet unlinked).
 function ogPausedText(tier) {
   const name = OG_TIER_NAME[tier] || 'Gold', gold = tier >= OG_TIER.GOLD || !tier;
-  return 'OG ' + name + ' paused — it follows your wallets, and no wallet linked now holds the $SEND it needs. Relink the one that does and it is re-verified on-chain' +
-    (gold ? '; ' + name + ' also needs $GWC held without a break meanwhile.' : '.');
+  return 'OG ' + name + ' paused — no wallet linked now holds the $SEND it needs. Relink the one that does to re-verify it; sell out of $SEND meanwhile and it ends for good' +
+    (gold ? ', and ' + name + ' also needs $GWC held without a break.' : '.');
 }
 // Pure: what a Gold or Diamond says when the wallet holding its $GWC is unlinked and the others still hold $SEND (pause-gwc).
 function ogGwcPausedText(tier) {
@@ -4665,6 +4693,28 @@ function ogHeldThrough(spans, fromMs) {
 function ogGoldHeldBack(pausedTier, pausedAt, gwcSpans) {
   return pausedTier >= OG_TIER.GOLD && pausedAt > 0 && !ogHeldThrough(gwcSpans, pausedAt);
 }
+/* Pure: what a badge PAUSED with its wallets (og_tier 0, og_paused_tier) may do when wallets are linked again, from the $SEND
+   the wallets read now held since the pause (`spans`, their heldSpans; `pausedAt`, og_paused_at; `holdsSend`, any holds some
+   now; `sendFailed`, a $SEND wallet could not be read). "Only selling out of $SEND revokes" — and selling out of it while
+   paused is selling out:
+     'held'    $SEND held without a break since the pause: re-verified as any badge is (a pause with no time on record too);
+     'sold'    the wallets show $SEND at the pause and now, and a moment between with none — sold out and bought back (coins
+               moved through a wallet that is not linked read the same way, as everywhere): revoked for good, never re-granted;
+     'away'    they show none at the pause, or none now — the $SEND it had sits in a wallet not linked yet: nothing is granted
+               on what is linked, nothing revoked; relinking that wallet decides it;
+     'unknown' a $SEND wallet could not be read, and it might fill the gap: nothing is decided, asked again. */
+function ogPauseHeld(spans, pausedAt, holdsSend, sendFailed) {
+  if (!(pausedAt > 0) || ogHeldThrough(spans, pausedAt)) return 'held';
+  if (sendFailed) return 'unknown';
+  const atPause = (spans || []).some(([a, b]) => a <= pausedAt && (b == null || b > pausedAt));
+  return atPause && holdsSend ? 'sold' : 'away';
+}
+// Pure: what a paused badge says when its wallets show its $SEND sold out while it was paused (ogPauseHeld 'sold').
+function ogPauseRevokedText(tier) {
+  const name = OG_TIER_NAME[tier] || '';
+  return 'OG' + (name ? ' ' + name : '') + ' removed — while it was paused, the $SEND in your linked wallets went to zero and came back (checked on-chain). ' +
+    'That is selling out of $SEND, which ends an OG badge for good: it can’t be reclaimed.';
+}
 /* A Gold or Diamond waiting to be re-decided on $SEND alone (og_requal: marked before the 2026-11-18 review, or one whose own
    date proves nothing — ogAfterHolderRead), decided from the linked wallets' $SEND history and what its own grant proves
    (ogDropPick), whichever is better: the read can date it earlier and claim the $SEND wallet it shows, never lower it. It is
@@ -4691,7 +4741,7 @@ function ogRequalify(userId, u, { best, holdsAny, failed }) {
     if (r.changes) notify(userId, '🔌', ogDropOffText(from), 'og');
     return 0;
   }
-  const claimAddrs = [...new Set(pick.wallets.filter(Boolean))];
+  const claimAddrs = ogClaimWallets(pick);   // the wallet the read shows earning it (a kept Silver claims nothing new: the badge's own claims stand)
   for (const a of claimAddrs) {
     const prior = db.prepare('SELECT user_id FROM og_claims WHERE addr_idx = ?').get(bidx(a));
     if (prior && prior.user_id !== userId) return 0;                  // claimed by another account while this read ran: asked again (and left out then)
@@ -4756,9 +4806,10 @@ function ogRestoreSettle() {
    change the answer, which decides nothing: the pass asks again within the hour. A Silver can be decided with a $SEND
    wallet unread (nothing it could hold lowers a Silver or opens a gap); a Bronze or a "no" cannot. Restored: og_recheck = 3,
    the claim on the $SEND wallet that earned it, and a note. */
-async function restoreOg(userId, u, { best, holdsAny, held, failed, spans }) {
+async function restoreOg(userId, u, { best, holdsAny, held, failed, spans, same }) {
   let px = null;
   try { px = await guardedPriceUsd(TOK.SEND); } catch {}
+  if (same && !same()) return 0;                                      // a wallet came or went while the chain was read: asked again with the wallets linked now
   const pick = ogAccountTier({ best: { SEND: best.SEND }, holdsAny: { SEND: !!holdsAny.SEND }, diamondOk: false, floor: { SEND: ogFloorOk(held.SEND, px) } });
   if (pick.unknown) return 0;                                         // no price, no answer — asked again
   const since = u.og_checked_at || u.og_buy_ms || (best.SEND ? best.SEND.firstBuyMs + OG_MONTH_MS : 0);
@@ -4768,7 +4819,7 @@ async function restoreOg(userId, u, { best, holdsAny, held, failed, spans }) {
     db.prepare('UPDATE users SET og_recheck = 2 WHERE id = ? AND og_recheck = 1 AND og_revoked = 1').run(userId);
     return 0;
   }
-  const claimAddrs = [...new Set(pick.wallets.filter(Boolean))];
+  const claimAddrs = ogClaimWallets(pick);   // the $SEND wallet that earned it (a restore is Silver or Bronze: no month wallets)
   for (const a of claimAddrs) {
     const prior = db.prepare('SELECT user_id FROM og_claims WHERE addr_idx = ?').get(bidx(a));
     if (prior && prior.user_id !== userId) return 0;                  // claimed by another account while this read ran: asked again (and left out then)
@@ -4848,6 +4899,11 @@ const _ogScanning = new Set(); // coalesce concurrent scans of the same user
    linked when IT began, so it runs once more as it ends, with the wallets linked then — the late check used to be dropped,
    and whatever the first scan decided on the older wallet set stood until the sweep came round. */
 const _ogRescan = new Set();
+// ...and whether one of those late checks came from a wallet link (opts.link): the re-run carries it, so a Gold is still asked
+// the Diamond question on a link after the grant window has closed (ogOnLink)
+const _ogRescanLink = new Set();
+// a check that must run once more when the running scan ends — a late check, or a read whose answer no longer fits the account
+function ogAgain(userId, opts) { _ogRescan.add(userId); if (opts && opts.link) _ogRescanLink.add(userId); }
 /* Decide (or re-decide) a user's OG tier from chain history. Returns the tier, 0 for none.
 
    Both coins are scanned across every linked wallet, and ogAccountTier() decides: bought BOTH, the
@@ -4863,7 +4919,7 @@ const _ogRescan = new Set();
    for it — the backfill at boot handles the ones granted before tiers existed, and this handles the
    rest. A tier can never improve on a re-scan (it is fixed by when you bought), so re-entry is safe —
    except where the wallets read so far could not show the whole answer: a Gold is asked the Diamond
-   question once (og_diamond_at), and a Silver that may still be lifted (og_lift, ogLiftable) is asked
+   question once per wallet set (og_diamond_at; a link re-opens it, ogOnLink), and a Silver that may still be lifted (og_lift, ogLiftable) is asked
    again until it cannot be (liftOgSilver). Since 2026-11-17 two more are asked (the drop and the restore, above
    ogRequalify): a Gold or Diamond whose $GWC was found sold while $SEND is held (og_requal), re-decided on $SEND
    alone; and, only when the restore pass asks (opts.restore), a badge revoked before that rule (og_recheck = 1).
@@ -4876,17 +4932,18 @@ async function checkOg(userId, opts = {}) {
   const restoring = !!opts.restore && !!u.og_revoked && u.og_recheck === 1 && !u.system && !u.deleted_at;
   if (u.og_revoked && !restoring) return 0;
   // A Gold or Diamond found without $GWC (og_requal) is re-decided on $SEND alone first, whatever else it was waiting for.
-  // A Gold account is asked the Diamond question once (every Diamond bought inside gold's window, so it may
+  // A Gold account is asked the Diamond question once per wallet set (every Diamond bought inside gold's window, so it may
   // already hold Gold); a Silver with og_lift is asked whether the wallets linked now lift it (liftOgSilver);
   // any other tier is final — permanent unless revoked by a sell-out of $SEND.
   const requal = !u.og_revoked && !!u.og_requal && u.og_tier > OG_TIER.SILVER;
   const upgrading = !requal && u.og_tier === OG_TIER.GOLD && !u.og_diamond_at;
   const lifting = !requal && u.og_tier === OG_TIER.SILVER && !!u.og_lift;
   if (u.og_tier > 0 && !upgrading && !lifting && !requal) return u.og_tier;
-  // past the windows AND past the grace — stop paying the explorer (a badge waiting to be re-decided, or re-checked once, still
-  // is; and a PAUSED badge, og_paused_tier, whose relink must still bring it back — only a link asks then: the sweeps have stopped)
-  if (now() > OG_GRANT_UNTIL_MS && !requal && !restoring && !(u.og_paused_tier > 0)) return u.og_tier || 0;
-  if (_ogScanning.has(userId)) { _ogRescan.add(userId); return 0; }   // the running scan goes again when it ends
+  // past the windows AND past the grace — stop paying the explorer (a badge waiting to be re-decided, or re-checked once, still is;
+  // and so is a link — on a link only, never by the sweep: a Gold that just linked a wallet, because Diamond supersedes Gold on
+  // a link (ogOnLink), and a PAUSED badge (og_paused_tier), whose relink must still bring it back, on the same continuity rules)
+  if (now() > OG_GRANT_UNTIL_MS && !requal && !restoring && !(opts.link && (upgrading || u.og_paused_tier > 0))) return u.og_tier || 0;
+  if (_ogScanning.has(userId)) { ogAgain(userId, opts); return 0; }   // the running scan goes again when it ends
   _ogScanning.add(userId);
   try {
     // Every linked wallet, the same set refreshHolder() sums for revocation. They used to differ
@@ -4894,11 +4951,20 @@ async function checkOg(userId, opts = {}) {
     // 4 and then dump everything without ever being revoked.
     // The restore pass reads ONLY the wallets that were linked when the badge was removed (ogRevokedWallets); with none of
     // them left, its one re-check is answered as it stands — a wallet linked later never counts.
-    const addrs = (restoring ? ogRevokedWallets(userId, u) : walletAddresses(userId)).slice(0, OG_MAX_WALLETS);
+    const linkedNow = walletAddresses(userId).slice(0, OG_MAX_WALLETS);
+    const addrs = restoring ? ogRevokedWallets(userId, u).slice(0, OG_MAX_WALLETS) : linkedNow;
     if (!addrs.length) {
       if (restoring) db.prepare('UPDATE users SET og_recheck = 2 WHERE id = ? AND og_recheck = 1 AND og_revoked = 1').run(userId);
       return 0;
     }
+    /* The wallets read are still the wallets linked? Asked right before every write, with nothing awaited in between (the
+       write is then atomic with the answer). A wallet linked or unlinked while the chain was read makes the answer one about
+       a wallet set the account no longer has: nothing is written — not a badge, a claim, a "did not qualify" or a "not
+       Diamond" over the question a new wallet re-opened (ogOnLink) — and the scan runs again as it ends, with the wallets
+       linked then. refreshHolder makes the same check of its own read. It is the whole linked set that must not move — the
+       restore reads only part of it (ogRevokedWallets), and a wallet linked meanwhile could change which part. */
+    const scanned = linkedNow.join();
+    const same = () => { if (walletAddresses(userId).slice(0, OG_MAX_WALLETS).join() === scanned) return true; ogAgain(userId, opts); return false; };
     // $SEND alone where $GWC cannot change the answer — a drop, a restore, an account held to Silver (og_cap): no Gold or
     // Diamond can come of it, so $GWC's history is not even read
     const sendOnly = requal || restoring || ogCapped(u.og_cap);
@@ -4915,6 +4981,7 @@ async function checkOg(userId, opts = {}) {
     const holdsAny = {};             // coin -> does ANY linked wallet still hold it
     const held = { SEND: 0n, GWC: 0n };   // coin -> balance summed over every linked wallet read: what the $100 floor values
     const month = { SEND: { in: 0n, out: 0n }, GWC: { in: 0n, out: 0n } };   // coin -> market flows in $GWC's first month, every wallet summed
+    const monthFrom = new Set();     // the wallets whose month buys were counted: a Diamond rests on them, so a Diamond claims them (ogClaimWallets)
     let sawDq = false;               // a wallet bought in a window and still holds, but failed the standard (or is claimed elsewhere)
     const failed = { SEND: false, GWC: false };   // coin -> at least one wallet's read of it could not be completed
     const spans = { SEND: [], GWC: [] };   // coin -> every linked wallet's stretches of holding it (heldSpans): "held without a break" — $SEND for the restore pass, $GWC for a paused Gold
@@ -4936,8 +5003,12 @@ async function checkOg(userId, opts = {}) {
         try { held[c.key] += BigInt(s.balWei || '0'); } catch {}   // reconciled against the chain by ogScan, so this is the wallet's real balance
         if (Array.isArray(s.heldSpans)) spans[c.key].push(...s.heldSpans);
         // summed over EVERY wallet, disqualified or not: moving tokens between your own wallets is neither a buy
-        // nor a sell, so the account's net for the month is the honest answer to "accumulated or distributed"
-        month[c.key].in += BigInt(s.monthBoughtWei || '0'); month[c.key].out += BigInt(s.monthSoldWei || '0');
+        // nor a sell, so the account's net for the month is the honest answer to "accumulated or distributed".
+        // But a wallet whose badge is spent on another account backs THAT account: its month buys are not counted here
+        // (they made one Diamond already — linked to a Gold account, they made a second), while its month sells still are.
+        const monthIn = claimedElsewhere.has(a) ? 0n : BigInt(s.monthBoughtWei || '0');
+        month[c.key].in += monthIn; month[c.key].out += BigInt(s.monthSoldWei || '0');
+        if (monthIn > 0n) monthFrom.add(a);
         if (s.tier === OG_TIER.NONE) continue;
         // this wallet bought inside a window, but fails the standard for this coin — or its badge is spent elsewhere
         if (ogDisqualified(s) || claimedElsewhere.has(a)) { sawDq = true; continue; }
@@ -4948,14 +5019,31 @@ async function checkOg(userId, opts = {}) {
     /* Diamond, decided only on a COMPLETE read — a wallet that could not be read might hold the sells that
        would make this account a net distributor. Bought both in the month, net accumulator of both. */
     const diamondOk = ogDiamondOk(!scanFailed, best, holdsAny, month);
+    if (!same()) return u.og_tier || 0;                           // the wallets changed while they were read: nothing below is written, and this runs again
     if (requal) return ogRequalify(userId, u, { best, holdsAny, failed });
-    if (restoring) return await restoreOg(userId, u, { best, holdsAny, held, failed, spans: spans.SEND });   // awaited, so the scan's lock covers the write
+    if (restoring) return await restoreOg(userId, u, { best, holdsAny, held, failed, spans: spans.SEND, same });   // awaited, so the scan's lock covers the write
     if (upgrading) {
       if (scanFailed) return OG_TIER.GOLD;                        // not an answer — asked again on the next sweep
       if (!diamondOk) { db.prepare('UPDATE users SET og_diamond_at = ? WHERE id = ?').run(now(), userId); return OG_TIER.GOLD; }
-      return await grantDiamondUpgrade(userId, best, held);   // awaited, so the scan's lock (and the rescan below) covers the write
+      return await grantDiamondUpgrade(userId, best, held, { same, monthFrom });   // awaited, so the scan's lock (and the rescan below) covers the write
     }
-    if (lifting) return await liftOgSilver(userId, u, { best, holdsAny, diamondOk, held, failed, spans });
+    if (lifting) return await liftOgSilver(userId, u, { best, holdsAny, diamondOk, held, failed, spans, same, monthFrom });
+    /* A badge PAUSED with its wallets (og_tier 0, og_paused_tier: a disconnect, the last wallet unlinked, or the wallet holding
+       its $SEND unlinked) comes back on a relink only if its $SEND was held without a break while it was paused (ogPauseHeld).
+       Sold out meanwhile and bought back, it is revoked for good, with the note — never re-granted on the buy-back. The $SEND
+       it had at the pause sitting in a wallet not linked yet decides nothing and grants nothing (a real answer for these
+       wallets: asked again in 6 hours, or on the next link); a $SEND wallet that could not be read decides nothing at all.
+       Written with nothing awaited since the wallet-set check above (`same`). */
+    if (!u.og_tier && u.og_paused_tier > 0) {
+      const ph = ogPauseHeld(spans.SEND, u.og_paused_at, !!holdsAny.SEND, failed.SEND);
+      if (ph === 'sold') {
+        const r = db.prepare('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1, og_requal = 0, og_lift = 0, og_paused_tier = 0, og_paused_at = 0 WHERE id = ? AND og_tier = 0 AND og_revoked = 0 AND og_paused_tier > 0').run(userId);
+        if (r.changes) notify(userId, '💔', ogPauseRevokedText(u.og_paused_tier), 'og');
+        return 0;
+      }
+      if (ph === 'away') { db.prepare('UPDATE users SET og_checked_at = ? WHERE id = ?').run(now(), userId); return 0; }
+      if (ph === 'unknown') return 0;
+    }
     /* Which failed reads withhold an answer: only the ones that could change it (ogReadDecides). With no $SEND buy that
        qualifies there is no badge whatever $GWC says ($GWC alone earns nothing), so only a $SEND wallet that could not be
        read can turn this into one. (A $GWC read that fails on every attempt — a long trading history, say — used to block
@@ -4977,6 +5065,7 @@ async function checkOg(userId, opts = {}) {
     // price is no answer — retried, never a "no" (ogAccountTier returns `unknown`, and nothing is written).
     let sendPx = null, gwcPx = null;
     try { sendPx = await guardedPriceUsd(TOK.SEND); gwcPx = await guardedPriceUsd(TOK.GWC); } catch {}
+    if (!same()) return 0;                                        // a wallet came or went while the prices were read: asked again
     const floor = { SEND: ogFloorOk(held.SEND, sendPx), GWC: ogFloorOk(held.GWC, gwcPx) };
     let pick = ogAccountTier({ best, holdsAny, diamondOk, floor });
     /* A Gold or Diamond PAUSED when its wallets left (og_paused_tier) comes back only on $GWC held without a break since then
@@ -5008,8 +5097,8 @@ async function checkOg(userId, opts = {}) {
        The claim survives unlinking on purpose — that is the whole point. A $SEND-only badge claims only
        the $SEND wallet that earned it (pick.wallets): a $GWC wallet it did not need is not spent on it.
        Claimed wallets are already left out of `best` above; this re-check is for a claim written by
-       another account's grant while this scan was running. */
-    const claimAddrs = [...new Set(pick.wallets.filter(Boolean))];
+       another account's grant while this scan was running. A Diamond claims every wallet it rests on (ogClaimWallets). */
+    const claimAddrs = ogClaimWallets(pick, monthFrom);
     for (const a of claimAddrs) {
       const prior = db.prepare('SELECT user_id FROM og_claims WHERE addr_idx = ?').get(bidx(a));
       if (prior && prior.user_id !== userId) {
@@ -5046,7 +5135,7 @@ async function checkOg(userId, opts = {}) {
     // at the front of the queue permanently and nobody behind it was ever scanned.
     try { db.prepare('UPDATE users SET og_try_at = ? WHERE id = ?').run(now(), userId); } catch {}
     // a check came in while this one ran: once more, with the wallets linked now (it returns at once if nothing is left to ask)
-    if (_ogRescan.delete(userId)) setImmediate(() => { checkOg(userId).catch(() => {}); });
+    if (_ogRescan.delete(userId)) { const link = _ogRescanLink.delete(userId); setImmediate(() => { checkOg(userId, link ? { link: true } : {}).catch(() => {}); }); }
   }
 }
 
@@ -15097,6 +15186,7 @@ function walletTooNew(me, addr) {
    already refused a wallet that is linked anywhere, and an account at MAX_LINKED_WALLETS. */
 async function linkWalletTo(me, address, how) {
   insertIdentity(me.id, 'wallet', address);
+  ogOnLink(me.id);   // Diamond supersedes Gold: a Gold's Diamond question re-opens with this wallet — now, before anything below awaits
   if (how === 'burn') db.prepare("UPDATE identities SET proof = 'burn' WHERE type = 'wallet' AND identifier = ?").run(bidx(address));
   // linked by its signature while a burn proof for it was still running: that hour has nothing left to prove
   else { try { db.prepare("UPDATE burn_proofs SET status = 'linked', reason = 'linked by its signature instead', done_at = ? WHERE user_id = ? AND addr_idx = ? AND status = 'open'").run(now(), me.id, bidx(address)); } catch {} }
@@ -15125,7 +15215,7 @@ async function linkWalletTo(me, address, how) {
     db.prepare('UPDATE users SET redeem_floor = redeem_floor + ? WHERE id=? AND redeem_hold_until > 0').run(sendBal, me.id);
   }
   balCache.delete(me.id); // the linked wallet set grew — recompute nav balances on next fetch
-  checkOg(me.id).catch(() => {}); // a newly linked wallet might be an early buyer → verify OG in the background
+  checkOg(me.id, { link: true }).catch(() => {}); // a newly linked wallet might be an early buyer — or make a Gold Diamond → verify OG in the background
   // A wallet is exactly what the participation check needs. Start it without being asked — the
   // person who just linked one is plainly trying to get in, and making them press a second button
   // to begin a check they cannot see would be ceremony.
@@ -17939,6 +18029,9 @@ const server = http.createServer(async (req, res) => {
         // Gold (og_cap), nor a $GWC sale while paused (og_paused_tier: Gold needs $GWC held without a break since now).
         forgetHoldings(me.id); // decide from the CHAIN, not a ≤5-min cached "held" that may predate a sell
         const ogV = await ogLeaveVerdict(me, wallets, null), revokeOg = ogV === 'revoke';
+        // the verdict is about the wallets it read — the same rule as checkOg's `same`: one linked or unlinked meanwhile (another
+        // tab) would leave without having been read, so nothing is written and the member is asked to try again
+        if (walletAddresses(me.id).join() !== wallets.join()) return bad(res, 'your linked wallets changed while they were being read — nothing was changed; try again', 409);
         try {
           db.exec('BEGIN');
           // the badge follows the WALLET: it always comes off on disconnect (relinking re-verifies on-chain via checkOg and
@@ -18156,6 +18249,7 @@ const server = http.createServer(async (req, res) => {
            meanwhile for its $GWC (back on relinking it, its $GWC held without a break). A failed read is never a sale. */
         forgetHoldings(me.id);
         const ogV2 = await ogLeaveVerdict(me, linked, addr), revokeOg = ogV2 === 'revoke';
+        if (walletAddresses(me.id).join() !== linked.join()) return bad(res, 'your linked wallets changed while they were being read — nothing was changed; try again', 409);   // as above: the verdict is only about the wallets it read
         try {
           db.exec('BEGIN');
           db.prepare("DELETE FROM identities WHERE user_id = ? AND type = 'wallet' AND identifier = ?").run(me.id, bidx(addr));
