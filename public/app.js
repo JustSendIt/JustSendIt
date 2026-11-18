@@ -69,9 +69,11 @@
   zone.setAttribute('aria-relevant', 'additions');
   document.body.appendChild(zone);
   /* Shared OG badge — rendered next to an OG's username everywhere. Hover shows a simple explanation
-     (native title). OG = verified early buyer of BOTH $Send and $GWC who still holds both, in one of
-     three entry windows: gold (until the beta ends, ×10), silver (the 90 days after that, ×5), bronze
-     (until $GWC turns one year old, ×3). Lost only on a full sell-out.
+     (native title). OG = verified early buyer who still holds what the tier needs: Diamond (×20, the first
+     month of $GWC) and Gold (×10, until the beta ended) needed BOTH $Send and $GWC; since the beta ended,
+     Silver (×5, until 90 days after it — a $Send buy from during the beta counts here, never as Gold) and
+     Bronze (×3, until $GWC turns one year old) need $Send alone. Lost only on a full sell-out of a coin the
+     tier needs (the server's ogSoldOut; /api/og/campaign serves the same rule as `needs`).
 
      The argument is the TIER (0-3), which is what every `og` field now carries from the server. It
      used to be a boolean and every label here was hardcoded to gold's "10×" — passing a silver holder
@@ -80,16 +82,18 @@
      rather than guessing a tier. 0 is falsy, so every existing `if (u.og)` call site still gates
      correctly with no change. */
   window.OG_TIERS = {
-    4: { name: 'Diamond', mult: 20, when: 'in the first month of $GWC, as a net buyer of both that month,' },
-    3: { name: 'Gold', mult: 10, when: 'before the beta ended' },
-    2: { name: 'Silver', mult: 5, when: 'in the 90 days after the beta ended' },
-    1: { name: 'Bronze', mult: 3, when: 'before $GWC turned one year old' },
+    4: { name: 'Diamond', mult: 20, both: true, when: 'in the first month of $GWC, as a net buyer of both that month,' },
+    3: { name: 'Gold', mult: 10, both: true, when: 'before the beta ended' },
+    2: { name: 'Silver', mult: 5, both: false, when: 'before Silver’s deadline, 90 days after the beta ended,' },
+    1: { name: 'Bronze', mult: 3, both: false, when: 'before $GWC turned one year old' },
   };
   window.ogTip = function (tier) {
     var t = window.OG_TIERS[tier];
     if (!t) return '';
-    return 'OG ' + t.name + ' — bought BOTH $Send and $GWC ' + t.when + ' and still holds both (checked on-chain). '
-      + 'Permanent badge + a ' + t.mult + '× Send Power bonus on everything (+' + (t.mult - 1) + '× on top of any other boosts — boosts add, they don’t multiply). Lost if they sell out of either.';
+    return 'OG ' + t.name + ' — bought ' + (t.both ? 'BOTH $Send and $GWC ' : '$Send ') + t.when + ' and still holds ' + (t.both ? 'both' : 'it') + ' (checked on-chain). '
+      + 'Permanent badge + a ' + t.mult + '× Send Power bonus on everything (+' + (t.mult - 1) + '× on top of any other boosts — boosts add, they don’t multiply). '
+      // since 2026-11-17 only selling out of $Send ends a badge; selling $GWC alone drops Gold or Diamond to what $Send alone earns
+      + (t.both ? 'Drops to Silver or Bronze if they sell out of $GWC; lost if they sell out of their $Send.' : 'Lost if they sell out of their $Send.');
   };
   // kept for anything still reading the old global; gold is the tier it always described
   window.OG_TIP = window.ogTip(3);

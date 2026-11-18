@@ -409,6 +409,47 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
   setInterval(tick, 30000);
 })();
 
+/* ---------- the OG banner: the window open now, while it needs $SEND alone ----------
+   Owner, 2026-11-17, the day the beta ended: "make a banner promoting the Silver OG like the Gold OG". Gold's strip stood at
+   the top of this page until the page went $SEND-only (that badge needed two coins); since the beta ended Silver and Bronze
+   need only $SEND, so the open window is promoted again. Everything is the server's: the closes, the names, the
+   multipliers and which coins each window needs (/api/og/campaign `needs`). The banner shows only while the window open
+   now needs exactly ['SEND']; with no answer, one that needs more, or every window closed it stays hidden, so it never
+   states a window or a deadline it was not given. It moves on by itself when a window closes with the page open. */
+(function ogBanner() {
+  const box = document.getElementById('lp-og');
+  if (!box) return;
+  const $ = (id) => document.getElementById(id);
+  const DAY = 86400000;
+  const WINDOWS = [{ k: 'gold', t: 3, medal: '🥇' }, { k: 'silver', t: 2, medal: '🥈' }, { k: 'bronze', t: 1, medal: '🥉' }];
+  let camp = null;
+  // the windows open one after another, each until the close the server gives: the one open now is the first still ahead
+  function openNow(now) {
+    if (!camp || !camp.closes || camp.open === false) return null;
+    for (const w of WINDOWS) { const to = Number(camp.closes[w.k]); if (to > now) return { ...w, to }; }
+    return null;
+  }
+  const sendAlone = (t) => { const n = camp && camp.needs && camp.needs[t]; return Array.isArray(n) && n.length === 1 && n[0] === 'SEND'; };
+  function paint() {
+    const now = Date.now(), w = openNow(now);
+    const name = w ? String((camp.name && camp.name[w.t]) || '') : '', mult = w ? Number(camp.mult && camp.mult[w.t]) || 0 : 0;
+    if (!w || !sendAlone(w.t) || !name || !mult) { box.hidden = true; return; }
+    box.setAttribute('data-og', w.k);
+    $('lp-og-medal').textContent = w.medal;
+    $('lp-og-name').textContent = name;
+    $('lp-og-mult').textContent = mult + '×';
+    $('lp-og-beta').hidden = w.t !== 2;   // on $SEND alone a buy from during the beta is Silver (never Gold): said only while Silver is the open window
+    const left = w.to - now, d = Math.floor(left / DAY), h = Math.floor((left % DAY) / 3600000), m = Math.floor((left % 3600000) / 60000);
+    $('lp-og-left').textContent = d > 0 ? d + 'd ' + h + 'h ' + m + 'm' : h > 0 ? h + 'h ' + m + 'm' : Math.max(1, m) + 'm';
+    box.hidden = false;
+  }
+  fetch('/api/og/campaign', { credentials: 'same-origin' })
+    .then((r) => (r.ok ? r.json() : null))
+    .then((c) => { if (c && c.closes) { camp = c; paint(); } })
+    .catch(() => {});
+  setInterval(() => { if (camp && !document.hidden) paint(); }, 30000);   // minutes on the clock: a 30-second tick keeps it right
+})();
+
 /* ===== The home page's sections have addresses of their own: /guide, /swap, /tokens, /beta, /rocketize =====
    Owner, 2026-10-15: "make sure every page is just their name and not the . file name or a # [symbol] in front of it". How
    to Buy, Swap, Tokens and the Beta board were /#guide, /#swap…; they are /guide, /swap, /tokens, /beta now. Owner, 2026-10-21:

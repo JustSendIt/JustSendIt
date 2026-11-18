@@ -167,24 +167,46 @@
   }
   function ogCard(d, ctx) {
     const o = d.og, now = serverNow(), tiers = [['gold', 3], ['silver', 2], ['bronze', 1]];
+    /* Which coins each tier needs, from the campaign (o.needs): since the beta ended, Gold and Diamond need both $SEND and
+       $GWC and Silver and Bronze need $SEND alone. A payload without `needs` is the older rule, where every tier needed both. */
+    const needs = (t) => { const n = o.needs && o.needs[t]; return Array.isArray(n) && n.length ? n : ['SEND', 'GWC']; };
+    const sendOnly = !!o.needs && needs(2).length === 1 && needs(1).length === 1;
+    const coins = (t) => needs(t).length > 1 ? 'both coins' : '$SEND only';
     const rowsHtml = '<ol class="cmp-og" aria-label="OG windows">' + tiers.map(([k, t], i) => {
       const closes = o.closes[k], state = closes <= now ? 'closed' : o.tierNow === t ? 'open' : 'later', opensAt = i > 0 ? o.closes[tiers[i - 1][0]] : null;
       return '<li class="cmp-og-row is-' + state + '"><span class="cmp-og-medal" aria-hidden="true">' + medal[3 - t] + '</span><b>OG ' + esc(o.name[t]) + '</b><span class="cmp-og-mult">' + o.mult[t] + '×</span>' +
-        '<span class="cmp-og-state">' + (state === 'closed' ? 'closed ' + esc(dateShort(closes)) : state === 'open' ? '<b>open now</b> · closes ' + esc(dateShort(closes)) : (t === o.tierNow - 1 ? 'opens next, ' : 'opens ') + esc(dateShort(opensAt)) + ' · until ' + esc(dateShort(closes))) + '</span></li>';
+        '<span class="cmp-og-state">' + (state === 'closed' ? 'closed ' + esc(dateShort(closes)) : state === 'open' ? '<b>open now</b> · closes ' + esc(dateShort(closes)) : (t === o.tierNow - 1 ? 'opens next, ' : 'opens ') + esc(dateShort(opensAt)) + ' · until ' + esc(dateShort(closes))) +
+        (sendOnly ? ' · ' + coins(t) : '') + '</span></li>';
     }).join('') + '</ol>';
     const cur = tiers.find(([k, t]) => o.tierNow === t);
     let me = '';
     if (!ctx.signedIn) me = 'The badge follows a wallet that got in early and still holds. ' + signInBtn('Sign in to link a wallet');
-    else if (o.mine && o.mine.og && o.mine.tier) me = 'You hold <b>OG ' + esc(o.mine.name) + ' — ' + o.mult[o.mine.tier] + '×</b> on everything you earn. It stays for as long as both coins stay in your wallet.';
-    else me = o.open ? 'No badge on this account. It goes to wallets that got into <b>both $SEND and $GWC</b> inside a window and still hold both — link a wallet on your profile to be checked.' : 'No badge on this account, and every window has closed.';
+    else if (o.mine && o.mine.og && o.mine.tier) me = 'You hold <b>OG ' + esc(o.mine.name) + ' — ' + o.mult[o.mine.tier] + '×</b> on everything you earn. ' + (needs(o.mine.tier).length > 1
+      ? (sendOnly ? 'It stays ' + esc(o.mine.name) + ' while both coins stay in your wallet; sell out of $GWC and it drops to Silver or Bronze on $SEND alone, sell out of $SEND and it’s gone.' : 'It stays for as long as both coins stay in your wallet.')
+      : 'It stays for as long as $SEND stays in your wallet; this tier doesn’t need $GWC.');
+    // removed before 2026-11-17 (a sell-out of either coin ended any tier then): re-checked once on $SEND alone (o.mine.recheck)
+    else if (o.mine && o.mine.revoked && o.mine.recheck) me = '<b>OG status removed — being re-checked once.</b> It was removed while OG needed both coins to keep; Silver and Bronze now need only <b>$SEND</b>, so if your linked wallets still hold $SEND and it earns one of them, it comes back (checked on-chain).';
+    // revoked (sold out of $SEND, or re-checked and not restored): the server never grants this account a badge again, so no window is offered
+    else if (o.mine && o.mine.revoked) me = '<b>OG status removed.</b> This account sold out of a coin its badge needed, so the badge and its Send Power bonus are gone — and can’t be reclaimed, whichever window is open.';
+    else me = !o.open ? 'No badge on this account, and every window has closed.'
+      : cur && needs(cur[1]).length === 1 ? 'No badge on this account. The ' + esc(o.name[cur[1]]) + ' window goes to wallets that bought <b>$SEND</b> before it closes and still hold it — $GWC isn’t needed. Link a wallet on your profile to be checked.'
+      : 'No badge on this account. It goes to wallets that got into <b>both $SEND and $GWC</b> inside a window and still hold both — link a wallet on your profile to be checked.';
     return card('og', {
       emoji: '🏅', title: 'OG Campaign', live: o.open ? (cur ? o.name[cur[1]] + ' window' : 'Open') : '',
       clock: o.open && cur ? { label: 'The ' + o.name[cur[1]].toLowerCase() + ' window closes in', endsAt: o.closes[cur[0]] } : null,
-      prize: 'A permanent badge and a Send Power multiplier for being early in <b>both $SEND and $GWC</b> — <b>20×</b> Diamond (the first month of $GWC, net buyers of both — already closed), <b>10×</b> Gold, 5× Silver, 3× Bronze. One standard; only <i>when</i> you got in changes the size.',
+      prize: sendOnly
+        ? 'A permanent badge and a Send Power multiplier for being early — <b>20×</b> Diamond (the first month of $GWC, net buyers of both — closed) and <b>10×</b> Gold (both coins, before the beta ended — closed), then <b>5×</b> Silver and 3× Bronze for <b>$SEND</b> alone. Only <i>when</i> you got in changes the size.'
+        : 'A permanent badge and a Send Power multiplier for being early in <b>both $SEND and $GWC</b> — <b>20×</b> Diamond (the first month of $GWC, net buyers of both — already closed), <b>10×</b> Gold, 5× Silver, 3× Bronze. One standard; only <i>when</i> you got in changes the size.',
       body: (o.diamond ? '<ol class="cmp-og" aria-label="OG Diamond"><li class="cmp-og-row is-closed"><span class="cmp-og-medal" aria-hidden="true">💎</span><b>OG Diamond</b><span class="cmp-og-mult">' + o.diamond.mult + '×</span><span class="cmp-og-state">first month of $GWC · closed ' + esc(dateShort(o.diamond.until)) + '</span></li></ol>' : '') + rowsHtml,
       me,
       cta: '<a class="btn btn-sm btn-primary" href="/about#og-rules" data-tip="Opens the OG badge rules on the About page">The OG rules</a>' + (ctx.signedIn ? '<a class="btn btn-sm btn-ghost" href="/profile" data-tip="Opens your profile, where wallets are linked">Link a wallet</a>' : ''),
-      how: '<b>Four tiers, one rule.</b> Diamond was the first month of $GWC — bought both, and bought more of each than you sold that month — and has closed. Gold closes with the beta, Silver 90 days after that, Bronze when $GWC turns one year old — the same dates for both coins — and your tier is the <b>lower</b> of your two coins, because the rule is that you held both. ' + (o.closes ? 'Gold closes ' + esc(dateShort(o.closes.gold)) + ', Silver ' + esc(dateShort(o.closes.silver)) + ', Bronze ' + esc(dateShort(o.closes.bronze)) + '; after that no badge is granted. ' : '') + 'A wallet that dumped its whole holding inside its first month <i>and</i> holds less today than it did then earns nothing. Sell out of either coin entirely, ever, and the badge is revoked. Everything is read from the chain and re-checked; a read that cannot complete is retried, never guessed.',
+      how: (sendOnly
+        ? '<b>Four tiers.</b> Diamond was the first month of $GWC — bought both, and bought more of each than you sold that month — and has closed. Gold needed both coins and closed with the beta. Since the beta ended, Silver and Bronze need only <b>$SEND</b>: Silver until 90 days after the beta (a $SEND buy from during the beta counts as Silver, never Gold), Bronze until $GWC turns one year old. '
+        : '<b>Four tiers, one rule.</b> Diamond was the first month of $GWC — bought both, and bought more of each than you sold that month — and has closed. Gold closes with the beta, Silver 90 days after that, Bronze when $GWC turns one year old — the same dates for both coins — and your tier is the <b>lower</b> of your two coins, because the rule is that you held both. ')
+        + (o.closes ? 'Gold ' + (o.closes.gold <= now ? 'closed ' : 'closes ') + esc(dateShort(o.closes.gold)) + ', Silver ' + esc(dateShort(o.closes.silver)) + ', Bronze ' + esc(dateShort(o.closes.bronze)) + '; after that no badge is granted. ' : '')
+        + 'A wallet that dumped its whole holding inside its first month <i>and</i> holds less today than it did then earns nothing. '
+        + (sendOnly ? 'Sell out entirely of $SEND, ever, and the badge is revoked; sell out of $GWC alone and a Gold or Diamond drops to Silver or Bronze on $SEND alone. ' : 'Sell out of either coin entirely, ever, and the badge is revoked. ')
+        + 'Everything is read from the chain and re-checked; a read that cannot complete is retried, never guessed.',
     });
   }
   /* the top of today's Rocket Riders board (arcade.js draws the whole of it under the game): members in colour, guests grey

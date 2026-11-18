@@ -221,7 +221,12 @@
       cells.forEach(el => { const k = el.dataset.ogClose; const at = k === 'diamond' ? dm.until : k === 'diamond-from' ? dm.from : c.closes[k]; if (at) el.textContent = fmt(at); });
       if (!state) return;
       if (!c.open) state.textContent = 'Every window has now closed; no new OG badges are granted.';
-      else if (c.tierNow && c.name) state.textContent = 'Right now the ' + String(c.name[c.tierNow] || '').toLowerCase() + ' window is open.';
+      else if (c.tierNow && c.name) {
+        // which coins the open window needs, as the campaign says (Silver and Bronze: $SEND alone since the beta ended)
+        const need = c.needs && c.needs[c.tierNow];
+        state.textContent = 'Right now the ' + String(c.name[c.tierNow] || '').toLowerCase() + ' window is open'
+          + (Array.isArray(need) && need.length === 1 && need[0] === 'SEND' ? ', and it needs only $SEND.' : '.');
+      }
     })
     .catch(() => {});
 })();

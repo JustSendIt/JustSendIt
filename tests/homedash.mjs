@@ -36,8 +36,18 @@ try {
   check('  ...nor in the tour that walks this page, nor in Sendy\'s how-to-buy answer (the swap is $SEND\'s)', !gwc.test(TOUR) && /swap it into \$SEND on the swap \(\/swap\)/.test(SENDY) && !/\$SEND or \$GWC on the swap/.test(SENDY));
   check('  ...the page\'s one coin entity is $SEND (SEND IT), with the address the page shows; the page is about the site and $SEND',
     /"@id": "https:\/\/sendrh\.com\/#send"/.test(I) && !/#gwc/.test(I) && /"about": \[\{ "@id": "https:\/\/sendrh\.com\/#organization" \}, \{ "@id": "https:\/\/sendrh\.com\/#send" \}\]/.test(I));
-  check('  ...and the parts that only made sense with both coins are gone: the OG strip and tile (a badge for holding both), the $GWC card, the "Powered by" section and its Telegram link, the coin picker',
+  check('  ...and the parts that only made sense with both coins are gone: the old OG strip and tile (they promoted Gold, a badge for holding both), the $GWC card, the "Powered by" section and its Telegram link, the coin picker',
     !/og-banner|og-confetti|data-og-deadline|id="dash-og"|id="dash-gwc"|id="dash-origin"|id="origin"|origin-pair|gwc-hero|t\.me\/|choice-GWC|choice-SEND|swap-choice/.test(I));
+  /* Owner, the day the beta ended (2026-11-17): "make a banner promoting the Silver OG like the Gold OG". Silver and Bronze need
+     only $SEND since then, so the page has an OG banner again — about $SEND alone, shown only while the open window needs
+     nothing else (tests/ogbanner.mjs walks it in a browser, tests/chrome.mjs pins where it stands). */
+  const og = I.slice(I.indexOf('<aside class="lp-og"'), I.indexOf('</aside>') + 8);
+  check('the $SEND-only OG banner: medal, words, countdown and the rules link, no other coin, and nothing it says tells anyone to buy',
+    !!og && /<aside class="lp-og" id="lp-og" aria-label="OG badge window" hidden>/.test(og) && ['lp-og-medal', 'lp-og-name', 'lp-og-mult', 'lp-og-beta', 'lp-og-left'].every((id) => (I.match(new RegExp('id="' + id + '"', 'g')) || []).length === 1 && og.includes('id="' + id + '"'))
+    && /OG badge · on \$SEND alone/.test(og) && /Not a reason to buy\./.test(og) && !/\b(buy now|should buy|go buy|buy more)\b/i.test(text(og)) && !gwc.test(og));
+  check('  ...home.js fills it from the campaign alone (its windows, names, multipliers and needs), and keeps it hidden unless the window open now needs $SEND alone',
+    /fetch\('\/api\/og\/campaign', \{ credentials: 'same-origin' \}\)/.test(HOME) && /\$\('lp-og-name'\)\.textContent = name;/.test(HOME) && /\$\('lp-og-mult'\)\.textContent = mult \+ '×';/.test(HOME)
+    && /if \(!w \|\| !sendAlone\(w\.t\) \|\| !name \|\| !mult\) \{ box\.hidden = true; return; \}/.test(HOME) && /\$\('lp-og-beta'\)\.hidden = w\.t !== 2;/.test(HOME));
 
   /* ═══ 2. Mission Control: the $SEND reading, then nine tiles ═══ */
   const ORDER = ['dash-send', 'dash-swap', 'dash-guide', 'dash-beta', 'dash-rocketize', 'dash-watch', 'dash-wall', 'dash-tracker', 'dash-scanner', 'dash-communities'];
@@ -169,7 +179,7 @@ try {
     !/\.og-banner|\.og-confetti|\.gwc-hero|\.origin-pair|\.dash-more|\.swap-row|\.swap-choice \{/.test(CSS + RESP) && !/#origin/.test(RESP));
 
   /* ═══ 7. the docs say the same ═══ */
-  check('Sendy\'s site map says the home page is about $SEND and opens with Mission Control, without the $GWC links', /\/ — home, about \$SEND: Mission Control at the top \(a dashboard:/.test(SERVER) && !/the \$GWC and JustSendItCoin\.com links/.test(SERVER));
+  check('Sendy\'s site map says the home page is about $SEND and opens with Mission Control (under the $SEND-only OG banner while one shows), without the $GWC links', /\/ — home, about \$SEND: an OG banner over the top while the open OG window needs only \$SEND \(its name, what it pays, its countdown, a link to the OG rules\), then Mission Control \(a dashboard:/.test(SERVER) && !/the \$GWC and JustSendItCoin\.com links/.test(SERVER));
   check('  ...and the README row says the same: the $SEND reading, one tile per section or page, no drop-downs, the landing.css layer', /\| \*\*🛸 Mission Control \(the hero\)\*\* \| The top of the home page is a dashboard of everything on it, and the home page is about \$SEND/.test(README)
     && /`public\/landing\.css`, scoped to `body\.lp`/.test(README) && !/the OG badge with the countdown to its window's close/.test(README));
 } catch (e) {

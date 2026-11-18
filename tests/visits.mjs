@@ -22,6 +22,10 @@ const today = () => new Date().toISOString().slice(0, 10);
 const row = () => db.prepare('SELECT visitors, members, views, bots FROM visits_daily WHERE day = ?').get(today()) || { visitors: 0, members: 0, views: 0, bots: 0 };
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0 Safari/537.36';
 const ip = () => '203.0.113.' + (1 + (randomBytes(1)[0] % 250));   // TEST-NET-3: never a real visitor
+/* a device of its own: the server knows a visitor by address and browser together, and in a full run the suites before this one
+   have opened pages from these 250 addresses with this browser the same day — so a "new device" is given a browser name no one
+   else has used (a full run on 2026-11-17 counted a "new device" as no new visitor) */
+const devUA = () => UA + ' T' + randomBytes(5).toString('hex');
 const open = async (p, o) => { const r = await fetch(BASE + p, { method: (o && o.method) || 'GET', headers: { 'User-Agent': (o && o.ua) || UA, 'X-Forwarded-For': (o && o.ip) || ip(), ...((o && o.headers) || {}) } }); await r.text(); return r.status; };
 const diff = (a, b) => ({ visitors: b.visitors - a.visitors, members: b.members - a.members, views: b.views - a.views, bots: b.bots - a.bots });
 const same = (d, want) => Object.keys(want).every((k) => d[k] === want[k]);
@@ -38,12 +42,12 @@ function mkUser(name, id) {
 
 try {
   // a page opened by a new device counts once; the same device again is a view, not a visitor
-  const me = ip();
-  let a = row(); await open('/arcade', { ip: me }); let b = row();
+  const me = ip(), meUA = devUA();
+  let a = row(); await open('/arcade', { ip: me, ua: meUA }); let b = row();
   check('a page opened by a new device counts one visitor and one view', same(diff(a, b), { visitors: 1, views: 1, bots: 0 }), JSON.stringify(diff(a, b)));
-  a = row(); await open('/wall', { ip: me }); b = row();
+  a = row(); await open('/wall', { ip: me, ua: meUA }); b = row();
   check('  ...the same device again is one more view, not another visitor', same(diff(a, b), { visitors: 0, views: 1 }), JSON.stringify(diff(a, b)));
-  a = row(); await open('/wall', { ip: ip() === me ? '198.51.100.7' : ip() }); b = row();
+  a = row(); await open('/wall', { ip: me, ua: devUA() }); b = row();
   check('  ...another device is another visitor', diff(a, b).visitors === 1, JSON.stringify(diff(a, b)));
 
   // what is not a person opening a page
