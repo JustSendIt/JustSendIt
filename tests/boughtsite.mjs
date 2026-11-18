@@ -123,6 +123,67 @@ try {
     const r = g.j && g.j.rules;
     check('/api/gate/state says the floor is $100 BOUGHT, $10 of it still held, a buy counting after 24 hours', r && r.holdMinUsd === 100 && r.basis === 'bought' && r.heldMinUsd === 10 && r.buyCountsAfterHours === 24, JSON.stringify(r));
   }
+
+  /* ═══ 4. the switch (owner: "Switch on at once"): logged, counted, and every member who loses a status told why ═══ */
+  {
+    const NAMES = ['holdLog', 'boughtLossText', 'boughtOnVerdict'];
+    const missing = NAMES.filter((n) => !fnSrc(n));
+    check('holdLog, boughtLossText and boughtOnVerdict can be lifted out of server.js', !missing.length, missing.join(', '));
+    const mem = new DatabaseSync(':memory:');
+    mem.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, og_tier INTEGER NOT NULL DEFAULT 0, og_rule_v2_at INTEGER);
+      CREATE TABLE holder_state (user_id INTEGER PRIMARY KEY, send_qual INTEGER, gwc_qual INTEGER);
+      CREATE TABLE size_topups (id INTEGER PRIMARY KEY, user_id INTEGER, token TEXT, done_at INTEGER);
+      CREATE TABLE hold_migration_log (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, feature TEXT NOT NULL, was TEXT, became TEXT, reason TEXT, at INTEGER NOT NULL, UNIQUE (user_id, feature));`);
+    const SEND = '0xsend', GWC = '0xgwc', notes = [], STATES = new Map();
+    let raiseTo = null;
+    const E = {
+      db: mem, now: () => 1800000000000, MIN_HOLD_USD: 100, BOUGHT_LIB: { LIMITS: { HELD_MIN_USD: 10 } }, TOK: { SEND, GWC }, DH_COINS: { [SEND]: 'SEND', [GWC]: 'GWC' },
+      notify: (uid, icon, text) => notes.push({ uid, text }), sizeTopupApply: () => 0,
+      BOUGHT: { stateOf: (uid, t) => STATES.get(uid + ':' + t) || null },
+      checkOg: async (uid) => { if (raiseTo != null) mem.prepare('UPDATE users SET og_tier = ? WHERE id = ?').run(raiseTo, uid); return 0; },
+    };
+    const K = new Function(...Object.keys(E), NAMES.map(fnSrc).join('\n') + '\nreturn { holdLog, boughtLossText, boughtOnVerdict };')(...Object.values(E));
+    const fresh = (o) => ({ fresh: true, complete: true, floor: false, reason: 'short-spent', spentUsd: 63.2, heldCostUsd: 63.2, pendingUsd: 0, ...o });
+    mem.prepare('INSERT INTO users (id, og_tier) VALUES (1, 2)').run(); mem.prepare('INSERT INTO holder_state (user_id, send_qual, gwc_qual) VALUES (1, 1, 0)').run();
+    const lost = fresh();
+    STATES.set('1:' + SEND, lost);
+    K.boughtOnVerdict(1, SEND, null, lost, {});
+    const row = mem.prepare("SELECT * FROM hold_migration_log WHERE user_id = 1 AND feature = 'holder:SEND'").get();
+    const note = (notes.find((n) => n.uid === 1) || {}).text || '';
+    check('a member whose $SEND qualified under the old rule and not under "$100 bought": logged (was 1, became 0, its reason) — no wallet, no figure', row && row.was === '1' && row.became === '0' && row.reason === 'short-spent', JSON.stringify(row));
+    check('  ...and told, with their own figure and what is missing', /Your \$SEND boost now needs \$100 of \$SEND bought \(a buy counts once held 24 h\), \$10 of it still held at cost\. Your wallets show \$63\.20 bought: \$36\.80 short\. The streak pauses; it does not reset\.$/.test(note), note);
+    check('  ...within a notification\'s 240 characters, and never "buy"', note.length <= 240 && !/\b(buy (more|now|back|in)|go buy|you should buy|buy at least)\b/i.test(note), note.length);
+    K.boughtOnVerdict(1, SEND, lost, fresh({ spentUsd: 70 }), {});
+    check('  ...once: a later verdict is the ordinary rule, not the switch', notes.filter((n) => n.uid === 1).length === 1 && mem.prepare("SELECT COUNT(*) n FROM hold_migration_log WHERE user_id = 1").get().n === 1);
+    const gain = fresh({ floor: true, reason: 'ok', spentUsd: 400, heldCostUsd: 400 });
+    STATES.set('1:' + GWC, gain);
+    raiseTo = 3;
+    K.boughtOnVerdict(1, GWC, null, gain, {});
+    await new Promise((ok) => setTimeout(ok, 20));
+    const g = mem.prepare("SELECT * FROM hold_migration_log WHERE user_id = 1 AND feature = 'holder:GWC'").get();
+    check('a gain is logged and applies at once, with no note', g && g.was === '0' && g.became === '1' && notes.filter((n) => n.uid === 1).length === 1, JSON.stringify(g));
+    const og = mem.prepare("SELECT * FROM hold_migration_log WHERE user_id = 1 AND feature = 'og'").get();
+    check('OG, once both coins have a verdict: logged raised (Silver → Gold), and marked decided under the new rule (og_rule_v2_at)', og && og.was === '2' && og.became === '3' && og.reason === 'raised' && mem.prepare('SELECT og_rule_v2_at FROM users WHERE id = 1').get().og_rule_v2_at > 0, JSON.stringify(og));
+    const held = K.boughtLossText('$ZQB', fresh({ reason: 'short-held', spentUsd: 250, heldCostUsd: 4 }), 'community');
+    check('a community slot lost on the $10-held rule says so, with the figures, within 240 characters', /Your \$ZQB community slot now needs/.test(held) && /\$250\.00 bought, \$4\.00 still held: \$6\.00 short\. The slot is paused\.$/.test(held) && held.length <= 240, held);
+    check('the community sweep and the go-live re-check log a slot\'s first decision and tell a loser', (SRC.match(/boughtLossText\('\$' \+ (r|c)\.symbol, st, 'community'\)/g) || []).length === 2);
+    check('old refusals are re-asked under the new rule once $SEND\'s tape is read, leaving twenty places for members pressing the button (who go first)',
+      /function requeueBoughtRuleProofs\(\) \{/.test(SRC) && /const room = PROOF_QUEUE_MAX - 20 - proofQueue\.length;/.test(SRC) && /AND u\.holder_reason_code IS NULL/.test(SRC)
+      && /if \(front\) proofQueue\.unshift\(userId\); else proofQueue\.push\(userId\);/.test(SRC) && /if \(!queueHolderProof\(me\.id, true\)\) return send\(res, 503, \{ error: 'busy/.test(SRC));
+    // the overview, through the API (the throwaway server names 987654 its admin: run.mjs ADMIN_USER_IDS)
+    db.prepare('DELETE FROM users WHERE id = ?').run(987654);
+    db.prepare('INSERT INTO users (id, username, created_at, avatar, holder_verified_at, holder_state) VALUES (?,?,?,?,?,?)').run(987654, '__bs_admin__', Date.now(), '🧪', Date.now(), 'ok');
+    made.users.push(987654);
+    const raw = 'tok___bs_admin__' + randomBytes(6).toString('hex');
+    db.prepare('INSERT INTO sessions (token, user_id, created_at, expires_at, hashed) VALUES (?,?,?,?,1)').run(createHash('sha256').update(raw).digest('hex'), 987654, Date.now(), Date.now() + 864e5);
+    const ov = await api('/api/admin/overview', { sid: raw });
+    const b = ov.j && ov.j.bought;
+    check('/admin counts it: each coin\'s tape, the switch per feature, unknowns, claims and conflicts, the sizes to settle', ov.status === 200 && b && Array.isArray(b.coins) && b.coins.some((c) => c.label === '$SEND' && c.core) && b.coins.some((c) => c.label === '$GWC')
+      && b.migration && Array.isArray(b.unknown) && Number.isFinite(b.claims) && Number.isFinite(b.conflicts) && b.sizeTopups, JSON.stringify(b).slice(0, 300));
+    check('  ...naming nobody and no address', !/0x[0-9a-f]{40}/i.test(JSON.stringify(b)) && !/user_?id|username/i.test(JSON.stringify(b)));
+    check('  ...and the admin page shows it (boughtPanel)', /boughtPanel\(o\.bought\)/.test(readFileSync(new URL('../public/admin.js', import.meta.url), 'utf8')));
+    check('the switch\'s log, the verdicts and the sizes still to settle go with a deleted account (claims stay)', /'uploads', 'acq_state', 'hold_migration_log', 'size_topups', 'tracker_cache', 'wallet_hist', 'burn_proofs'\]\)/.test(SRC) && !/DELETE FROM buy_claims/.test(SRC));
+  }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);
   check('the suite ran to the end', false, e.message);

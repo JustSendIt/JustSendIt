@@ -1509,7 +1509,7 @@ db.exec(`CREATE TABLE IF NOT EXISTS size_topups (
   id INTEGER PRIMARY KEY, kind TEXT NOT NULL, call_id INTEGER NOT NULL, user_id INTEGER NOT NULL, token TEXT NOT NULL, at INTEGER NOT NULL,
   liq REAL, paid_spend REAL NOT NULL DEFAULT 0, due_at INTEGER NOT NULL, tries INTEGER NOT NULL DEFAULT 0, done_at INTEGER, UNIQUE (kind, call_id, user_id));
 CREATE INDEX IF NOT EXISTS idx_size_topups_open ON size_topups(done_at, user_id, token);`);
-try { for (const t of ['dh_follow', 'dh_moves', 'acq_state']) db.prepare('DELETE FROM ' + t + ' WHERE user_id IN (SELECT id FROM users WHERE deleted_at IS NOT NULL)').run(); } catch {}
+try { for (const t of ['dh_follow', 'dh_moves', 'acq_state', 'hold_migration_log']) db.prepare('DELETE FROM ' + t + ' WHERE user_id IN (SELECT id FROM users WHERE deleted_at IS NOT NULL)').run(); } catch {}
 
 /* ===== Data history: a member's data is kept, so a mistake can be undone (owner, 2026-10-17) ========================
    "make sure all data is always cached so errors like this never happen and we can restore user's data if we need to
@@ -5544,6 +5544,44 @@ function sizeTopupApply(r) {
   db.prepare('UPDATE size_topups SET done_at = ?, paid_spend = ? WHERE id = ?').run(now(), Math.max(spend, r.paid_spend), r.id);
   return paid;
 }
+/* ===== The switch to "$100 bought" (owner, 2026-11-17: "Switch on at once") ====================================
+   No shadow period and no grace: each feature reads the new verdict as soon as it exists (until then, a member's status
+   stands). What the switch changed is still written down — hold_migration_log, one row per member and feature, the old
+   rule's status beside the new one's (no wallet, no figure) — counted on /admin, and every member who loses a status is
+   told, with their own figure and what is missing (never "buy"). Gains apply at once and need no note. */
+function holdLog(uid, feature, was, became, reason) {
+  try { return db.prepare('INSERT OR IGNORE INTO hold_migration_log (user_id, feature, was, became, reason, at) VALUES (?,?,?,?,?,?)').run(uid, feature, was == null ? null : String(was), became == null ? null : String(became), reason || null, now()).changes > 0; } catch { return false; }
+}
+// a lost status's note: the rule, the member's own figure and what is missing — within a notification's 240 characters
+function boughtLossText(sym, st, what) {
+  const HELD = BOUGHT_LIB.LIMITS.HELD_MIN_USD, $ = (x) => '$' + (Math.round((x || 0) * 100) / 100).toFixed(2);
+  const head = (what === 'boost' ? 'Your ' + sym + ' boost' : 'Your ' + sym + ' community slot') + ' now needs $' + MIN_HOLD_USD + ' of ' + sym + ' bought (a buy counts once held 24 h), $' + HELD + ' of it still held at cost. ';
+  const tail = what === 'boost' ? ' The streak pauses; it does not reset.' : ' The slot is paused.';
+  if (st.reason === 'none-held') return head + 'Your linked wallets hold none.' + tail;
+  if (st.reason === 'short-held') return head + 'Your wallets show ' + $(st.spentUsd) + ' bought, ' + $(st.heldCostUsd) + ' still held: ' + $(HELD - (st.heldCostUsd || 0)) + ' short.' + tail;
+  return head + 'Your wallets show ' + $(st.spentUsd) + ' bought: ' + $(MIN_HOLD_USD - (st.spentUsd || 0)) + ' short.' + tail;
+}
+// what /admin shows of it: the tapes, the verdicts, the switch's gains and losses per feature, unknowns, claim conflicts
+function boughtAdmin() {
+  const b = BOUGHT ? BOUGHT.stats() : null;
+  const rows = db.prepare("SELECT CASE WHEN feature LIKE 'community:%' THEN 'community' ELSE feature END f, was, became, COUNT(*) n FROM hold_migration_log GROUP BY 1, 2, 3").all();
+  const by = {};
+  for (const r of rows) {
+    const x = by[r.f] || (by[r.f] = { gained: 0, lost: 0, same: 0, raised: 0 });
+    const w = r.was == null ? null : r.was, a = r.became;
+    if (r.f === 'og') { if (Number(a) > Number(w || 0)) { x.raised += r.n; if (Number(a) >= 3) x.raisedGoldDiamond = (x.raisedGoldDiamond || 0) + r.n; } else x.same += r.n; continue; }
+    if (r.f === 'gate') { if (a === 'ok' && w !== 'ok') x.gained += r.n; else x.same += r.n; continue; }
+    if (w === '1' && a === '0') x.lost += r.n; else if (w !== '1' && a === '1') x.gained += r.n; else x.same += r.n;
+  }
+  const unknown = db.prepare('SELECT reason_code reason, why, COUNT(*) n FROM acq_state WHERE verdict IS NULL GROUP BY 1, 2 ORDER BY n DESC').all();
+  const topups = db.prepare('SELECT SUM(done_at IS NULL) open, SUM(done_at IS NOT NULL) done FROM size_topups').get() || {};
+  // coins by name (a coin's own address shortened: the overview carries no full address of any kind)
+  const short = (x) => String(x || '').replace(/0x([0-9a-f]{4})[0-9a-f]{36}/gi, '0x$1…');
+  const label = (t) => (DH_COINS[t] ? '$' + DH_COINS[t] : (() => { const c = db.prepare('SELECT symbol FROM communities WHERE token_addr = ?').get(t); return c ? '$' + c.symbol : short(t); })());
+  const coins = b ? (b.tokens || []).map((x) => ({ label: label(x.token), core: x.core, state: x.state, why: x.why ? short(x.why) : null, head: x.head, headWhy: x.headWhy ? short(x.headWhy) : null, yes: x.yes, no: x.no, unknown: x.unknown })) : [];
+  return { ruleV: b ? b.ruleV : null, coins, queue: b ? b.queue : 0, ethUsd: b ? b.ethUsd : null, claims: b ? b.claims : 0, conflicts: b ? b.conflicts : 0,
+           migration: by, unknown, sizeTopups: { open: topups.open || 0, done: topups.done || 0 } };
+}
 // what "no answer yet" says, wherever it has to (a join, a community start)
 function boughtCheckingText(sym) {
   return 'We are reading ' + sym + '’s trades from the chain to see what your linked wallets bought — the first time takes a few minutes. Nothing has been decided; try again shortly.';
@@ -6283,10 +6321,12 @@ async function joinCommunity(me, cid, ip, holds) {
     let confirmed = 0;
     for (const m of db.prepare('SELECT user_id FROM community_members WHERE community_id=? AND qualified=1 AND user_id<>?').all(cid, me.id)) {
       const ok = boughtVerdict(m.user_id, c.token_addr, 1);
-      if (ok === true) confirmed++;
+      if (ok === true) { confirmed++; holdLog(m.user_id, 'community:' + cid, 1, 1, 'ok'); }
       else if (ok === false) {
         db.prepare('UPDATE community_members SET qualified=0, qual_check_at=? WHERE community_id=? AND user_id=?').run(now(), cid, m.user_id);
         db.prepare('UPDATE communities SET qual_count = MAX(qual_count-1,0) WHERE id=?').run(cid);
+        const st = BOUGHT && BOUGHT.stateOf(m.user_id, c.token_addr);
+        if (holdLog(m.user_id, 'community:' + cid, 1, 0, st && st.reason) && st) notify(m.user_id, '📉', boughtLossText('$' + c.symbol, st, 'community'), 'points', null, '/community?id=' + cid);
       }
     }
     c.qual_count = confirmed;   // only members the chain confirmed right now count toward tipping live
@@ -6481,13 +6521,16 @@ async function sweepCommunityHolders() {
        each in turn, and the community went live permanently on holdings that no longer existed by the
        time it did. Proposals inherit the same rows, so the same bag could also cast N votes. Re-verifying
        before go-live is the only point at which the threshold means anything. */
-    const rows = db.prepare("SELECT cm.community_id, cm.user_id, c.token_addr, c.c_price, c.status FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.qualified = 1 AND c.status IN ('live','pending') AND c.demo = 0 ORDER BY COALESCE(cm.qual_check_at, 0) ASC LIMIT 40").all();
+    const rows = db.prepare("SELECT cm.community_id, cm.user_id, c.token_addr, c.c_price, c.status, c.symbol FROM community_members cm JOIN communities c ON c.id = cm.community_id WHERE cm.qualified = 1 AND c.status IN ('live','pending') AND c.demo = 0 ORDER BY COALESCE(cm.qual_check_at, 0) ASC LIMIT 40").all();
     for (const r of rows) {
       const holds = boughtVerdict(r.user_id, r.token_addr);   // "$100 bought", from the verdict the worker keeps (no chain read here)
       const t = now();
       // no answer yet (no verdict, one for another wallet set, the coin's trades not read): never revoke on an answer we do not have.
       // The row's turn is stamped all the same, so forty unanswered members can never hold the sweep in place.
       if (holds === null) { db.prepare('UPDATE community_members SET qual_check_at=? WHERE community_id=? AND user_id=?').run(t, r.community_id, r.user_id); continue; }
+      // the switch: this slot's first decision under "$100 bought", beside the old rule's (it was qualified); a loss is told, once
+      const firstUnderBought = holdLog(r.user_id, 'community:' + r.community_id, 1, holds ? 1 : 0, holds ? 'ok' : ((BOUGHT && BOUGHT.stateOf(r.user_id, r.token_addr)) || {}).reason);
+      if (!holds && firstUnderBought) { const st = BOUGHT && BOUGHT.stateOf(r.user_id, r.token_addr); if (st) notify(r.user_id, '📉', boughtLossText('$' + r.symbol, st, 'community'), 'points', null, '/community?id=' + r.community_id); }
       if (holds) { db.prepare('UPDATE community_members SET qual_check_at=? WHERE community_id=? AND user_id=?').run(t, r.community_id, r.user_id); continue; }
       try { // no longer holds → revoke qualification, the go-live count, and the 10× flag
         db.exec('BEGIN');
@@ -8766,7 +8809,25 @@ boughtWorkTimer.unref();
    no chain read), carrying a link's right to be asked after the grant window; the holder boost, the gate and the communities
    read it on their own next turn. */
 function boughtOnVerdict(uid, token, before, after, opts) {
-  if (DH_COINS[token] && after && after.fresh) checkOg(uid, { link: !!(opts && opts.link) }).catch(() => {});
+  const coin = DH_COINS[token];
+  if (coin && after && after.fresh) {
+    // the switch: a member's first answer under "$100 bought" is logged beside what the old rule said (holder_state's qualification)
+    if (after.floor !== null) {
+      const h = db.prepare('SELECT send_qual, gwc_qual FROM holder_state WHERE user_id = ?').get(uid);
+      const was = h ? (coin === 'SEND' ? h.send_qual : h.gwc_qual) : null, became = after.floor ? 1 : 0;
+      if (holdLog(uid, 'holder:' + coin, was, became, after.reason) && was === 1 && became === 0) notify(uid, '📉', boughtLossText('$' + coin, after, 'boost'), 'points');
+    }
+    const ogWas = db.prepare('SELECT og_tier, og_rule_v2_at FROM users WHERE id = ?').get(uid) || {};
+    checkOg(uid, { link: !!(opts && opts.link) }).then(() => {
+      if (ogWas.og_rule_v2_at) return;
+      // OG is decided under the new rule once both coins have a verdict for the wallets linked now: logged once, raised or not
+      const sv = BOUGHT.stateOf(uid, TOK.SEND), gv = BOUGHT.stateOf(uid, TOK.GWC);
+      if (!sv || !sv.fresh || sv.floor === null || !gv || !gv.fresh) return;
+      const t2 = (db.prepare('SELECT og_tier FROM users WHERE id = ?').get(uid) || {}).og_tier || 0;
+      holdLog(uid, 'og', ogWas.og_tier || 0, t2, t2 > (ogWas.og_tier || 0) ? 'raised' : null);
+      db.prepare('UPDATE users SET og_rule_v2_at = ? WHERE id = ? AND og_rule_v2_at IS NULL').run(now(), uid);
+    }).catch(() => {});
+  }
   // a Send Call's or a Send It's size waiting on this verdict
   try { for (const r of db.prepare('SELECT * FROM size_topups WHERE done_at IS NULL AND user_id = ? AND token = ?').all(uid, token)) sizeTopupApply(r); } catch (e) { console.warn('[bought] size top-up: ' + e.message); }
 }
@@ -15212,6 +15273,7 @@ function adminOverview() {
     invites: { memberUnused: count('member', 'unused'), memberPending: count('member', 'pending'), memberUsed: count('member', 'used'), seedCodes: count('seed', 'unused') + count('seed', 'pending') + count('seed', 'used'), seedCodesOpen: seedCodesOpen(), perMember: INVITE_GRANT, adminUnused: count('admin', 'unused'), adminPending: count('admin', 'pending'), adminUsed: count('admin', 'used') },
     reports: { open: one('SELECT COUNT(*) n FROM reports WHERE resolved_at IS NULL').n },
     server: { node: process.version, commit: BOOT_COMMIT, checkoutCommit: gitCommit(), startedAt: BOOT_AT, uptimeSeconds: Math.round((Date.now() - BOOT_AT) / 1000), health: healthCheck() },
+    bought: (() => { try { return boughtAdmin(); } catch (e) { return { error: e.message }; } })(),   // "$100 bought": the tapes, the verdicts, the switch's counts (no member named)
     storage: { dbBytes, keySource: DATA_KEY_SOURCE, keyBesideDatabase: DATA_KEY_SOURCE === 'data-dir' || DATA_KEY_SOURCE === 'file-same-volume', backupDir: BACKUP_DIR, backupsOutsideDataDir: BACKUP_OFF_VOLUME, backupsKept: BACKUP_KEEP, backups, keys: keyStatus() },
   };
 }
@@ -16270,10 +16332,10 @@ try {
   if (n) console.log('holder proofs: re-opened ' + n + ' interrupted by the last shutdown');
 } catch {}
 
-function queueHolderProof(userId) {
+function queueHolderProof(userId, front) {
   if (proofQueue.includes(userId) || proofQueue.length >= PROOF_QUEUE_MAX) return false;
   db.prepare("UPDATE users SET holder_state = 'pending', holder_proof_at = ? WHERE id = ?").run(now(), userId);
-  proofQueue.push(userId);
+  if (front) proofQueue.unshift(userId); else proofQueue.push(userId);   // a member pressing the button goes before the re-asks
   return true;
 }
 async function runProofQueue() {
@@ -16297,6 +16359,8 @@ async function runProofQueue() {
     if (BOUGHT && (!st || !st.fresh)) { try { st = await BOUGHT.evaluate(userId, TOK.SEND); } catch { st = null; } }
     const unreadable = false;
     let v = holderProofVerdict(st && st.fresh ? st : null, now());
+    // the switch: the first decision under "$100 bought" beside the old one (its state), and the reason as a code (re-asked by rule, not by copy)
+    if (!v.unknown) { holdLog(userId, 'gate', u.holder_state || 'none', v.ok ? 'ok' : 'failed', st && st.reason); try { db.prepare('UPDATE users SET holder_reason_code = ? WHERE id = ?').run(v.ok ? 'ok' : (st && st.reason) || 'refused', userId); } catch {} }
     const t = now();
     if (v.ok) {
       /* F021: one wallet, one account. A wallet that already admitted somebody else cannot admit this
@@ -16365,6 +16429,25 @@ function requeueRuleChangedProofs() {
     if (rows.length) console.log('holder proofs: re-asking ' + rows.length + ' refusal(s) made before routed buys were counted');
   } catch (e) { console.error('proof rule requeue', e && e.message); }
 }
+/* "$100 bought": every refusal the old rule made (a priced floor, "no market buy", "sold back more") is asked once more under the
+   new one — oldest first, at most what the queue has room for (twenty places are always left for members pressing the button
+   themselves), and only once $SEND's tape is read (else every answer would be "still reading"). holder_reason_code is the
+   cursor: a refusal decided under the new rule has one, and is not asked again by this. */
+function requeueBoughtRuleProofs() {
+  try {
+    const row = BOUGHT && BOUGHT.tokenRow(TOK.SEND);
+    if (!row || row.state !== 'ok' || TAPE_LIB.tapeHead(db, TOK.SEND, Object.keys(row.pools || {})).block == null) return;
+    const room = PROOF_QUEUE_MAX - 20 - proofQueue.length;
+    if (room <= 0) return;
+    const rows = db.prepare(`SELECT u.id FROM users u WHERE u.holder_verified_at IS NULL AND u.system = 0 AND u.deleted_at IS NULL
+                               AND u.holder_state = 'failed' AND u.holder_reason_code IS NULL
+                               AND EXISTS (SELECT 1 FROM identities i WHERE i.user_id = u.id AND i.type = 'wallet')
+                             ORDER BY u.holder_proof_at ASC LIMIT ?`).all(Math.min(room, 50));
+    for (const r of rows) if (!proofQueue.includes(r.id)) queueHolderProof(r.id);
+    if (rows.length) console.log('holder proofs: re-asking ' + rows.length + ' refusal(s) the old rule made, under "$100 bought"');
+  } catch (e) { console.error('proof bought requeue', e && e.message); }
+}
+setInterval(() => requeueBoughtRuleProofs(), PROOF_RETRY_MS).unref();
 setTimeout(() => requeueUnreadProofs('boot'), 20000).unref();
 setTimeout(() => requeueRuleChangedProofs(), 25000).unref();
 setInterval(() => requeueUnreadProofs(), PROOF_RETRY_MS).unref();
@@ -17172,7 +17255,7 @@ const server = http.createServer(async (req, res) => {
            PROOF_STALE_MS is treated as abandoned, which is the lesson the block-0 scanner taught. */
         const stale = me.holder_state === 'pending' && (now() - (me.holder_proof_at || 0)) > PROOF_STALE_MS;
         if (me.holder_state === 'pending' && !stale && proofQueue.includes(me.id)) return send(res, 200, { queued: true, state: 'pending' });
-        queueHolderProof(me.id);
+        if (!queueHolderProof(me.id, true)) return send(res, 503, { error: 'busy — many checks are waiting; try in a minute', code: 'busy' });
         return send(res, 200, { queued: true, state: 'pending', proof: holderProofState(db.prepare('SELECT * FROM users WHERE id = ?').get(me.id)) });
       }
 
@@ -18061,8 +18144,8 @@ const server = http.createServer(async (req, res) => {
             db.prepare('DELETE FROM squads WHERE id = ?').run(sqr.id);
           }
           const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
-          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'acq_state', 'tracker_cache', 'wallet_hist', 'burn_proofs'])
-            try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}   // acq_state: "$100 bought" verdicts go with the account; buy_claims stay, like og_claims
+          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'acq_state', 'hold_migration_log', 'size_topups', 'tracker_cache', 'wallet_hist', 'burn_proofs'])
+            try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}   // "$100 bought": the verdicts, the switch's log and sizes still to settle go with the account; buy_claims stay, like og_claims
           OIDC.forgetUser(uid);   // Sign in with Send: every app it allowed (consents, codes, tokens) and every app it registered, with everyone's sign-ins to them
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
              in, and its unused codes would be a supply of tickets nobody answers for — make an account, delete it,
