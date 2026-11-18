@@ -37,7 +37,9 @@
   }
 
   let root = null, state = { access: false, redeemed: false, tosAccepted: false, signedIn: false, ticket: null };
-  let goldEndsAt = null, goldStartedAt = null, raf = 0, onResize = null, lastFocus = null, releaseTrap = null, afterJoin = null, prevOverflow = '';
+  /* The rail on the ticket promotes the OG window that is open NOW, read from /api/og/campaign (camp). goldEndsAt is the
+     Gold deadline /api/gate/state hands a member's ticket, kept only for the moment before the campaign has come back. */
+  let camp = null, goldEndsAt = null, railSay = '', raf = 0, onResize = null, lastFocus = null, releaseTrap = null, afterJoin = null, prevOverflow = '';
   const $ = (id) => root && root.querySelector('#' + id);
   const reduced = () => matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.classList.contains('motion-off');   // the ⏸ switch counts too
 
@@ -263,9 +265,9 @@
             '<span class="tk-cell"><span class="tk-k">Send ID</span><span class="tk-v" id="' + p + 'tk-num">—</span></span>' +
             '<span class="tk-cell"><span class="tk-k">Invites left</span><span class="tk-v" id="' + p + 'tk-inv">—</span></span>' +
           '</span>' +
-          '<span class="tk-launch">' +
+          '<span class="tk-launch" id="' + p + 'tk-launch">' +
             '<span class="tk-launch-top">' +
-              '<span class="tk-launch-k" id="' + p + 'tk-launch-k">🥇 Gold OG closes in</span>' +
+              '<span class="tk-launch-k" id="' + p + 'tk-launch-k">🏅 OG window</span>' +
               '<span class="tk-launch-v" id="' + p + 'tk-launch-v">—</span>' +
             '</span>' +
             '<span class="tk-rail" aria-hidden="true"><span class="tk-rail-line"></span><span class="tk-rocket" id="' + p + 'tk-rocket" style="left:0%">🚀</span></span>' +
@@ -347,18 +349,53 @@
     const d = Math.floor(ms / DAY), h = Math.floor((ms % DAY) / 3600000), m = Math.floor((ms % 3600000) / 60000);
     return d > 0 ? d + 'd ' + h + 'h' : h > 0 ? h + 'h ' + m + 'm' : m + 'm';
   }
+  /* Which OG window the rail shows at `now`. The windows open one after another and each closes on a date the server
+     serves (campaign.closes), so the one on show is the first whose close is still ahead: Gold until the beta ended, then
+     Silver (from the beta's end to closes.silver), then Bronze (from Silver's close to closes.bronze). The rocket flies
+     across the window on show — Gold's rail was its last thirty days, as it always was. A campaign that says it is over
+     (open: false) is believed over this page's clock. Names come from the campaign; the medals are the site's. */
+  const RAIL = [{ k: 'gold', t: 3, medal: '🥇', name: 'Gold' }, { k: 'silver', t: 2, medal: '🥈', name: 'Silver' }, { k: 'bronze', t: 1, medal: '🥉', name: 'Bronze' }];
+  function railWindow(now) {
+    const c = camp;
+    if (c && c.closes) {
+      if (c.open === false) return { closed: true };
+      let prev = null;
+      for (let i = 0; i < RAIL.length; i++) {
+        const w = RAIL[i], to = Number(c.closes[w.k]);
+        if (!(to > 0)) { prev = null; continue; }
+        if (now < to) {
+          // Silver's rail starts at the beta's end (which is also Gold's close); Bronze's where Silver's stopped
+          const from = i === 0 ? to - 30 * DAY : (i === 1 && Number(c.betaEndsAt) > 0 ? Number(c.betaEndsAt) : prev != null ? prev : to - 30 * DAY);
+          return { key: w.k, medal: w.medal, name: String((c.name && c.name[w.t]) || w.name), from, to };
+        }
+        prev = to;
+      }
+      return { closed: true };
+    }
+    // no campaign yet: the member's ticket knows Gold's deadline, and nothing past it
+    if (goldEndsAt != null) return goldEndsAt > now ? { key: 'gold', medal: '🥇', name: 'Gold', from: goldEndsAt - 30 * DAY, to: goldEndsAt } : { key: 'gold', medal: '🥇', name: 'Gold', shut: true };
+    return null;
+  }
   function paintCountdown() {
     if (!root) return;
+    const now = Date.now(), w = railWindow(now);
+    railSay = !w ? '' : w.closed ? ' Every OG window has closed.' : w.shut ? ' ' + w.name + ' OG has closed.' : ' ' + w.name + ' OG closes in ' + fmtLeft(w.to - now) + '.';
     for (const p of ['', 'inv-ticket2-']) {
       const v = $(p + 'tk-launch-v'); if (!v) continue;
-      if (goldEndsAt == null) { v.textContent = '—'; continue; }
-      const left = goldEndsAt - Date.now();
-      v.textContent = fmtLeft(left);
-      if (left <= 0) { const k = $(p + 'tk-launch-k'); if (k) k.textContent = '🥇 Gold OG has closed'; }
-      const rocket = $(p + 'tk-rocket');
-      if (rocket && goldStartedAt) {
-        const gone = Math.min(1, Math.max(0, (Date.now() - goldStartedAt) / (goldEndsAt - goldStartedAt)));
-        rocket.style.left = (gone * 100).toFixed(1) + '%';
+      const k = $(p + 'tk-launch-k'), box = $(p + 'tk-launch'), rocket = $(p + 'tk-rocket');
+      if (!w) { v.textContent = '—'; continue; }
+      if (box) box.setAttribute('data-og', w.closed ? 'closed' : w.key);
+      if (w.closed || w.shut) {
+        if (k) k.textContent = w.closed ? '🏅 Every OG window has closed' : w.medal + ' ' + w.name + ' OG has closed';
+        v.textContent = w.closed ? '' : 'closed';
+        if (rocket) rocket.style.left = '100%';
+        continue;
+      }
+      if (k) k.textContent = w.medal + ' ' + w.name + ' OG closes in';
+      v.textContent = fmtLeft(w.to - now);
+      if (rocket) {
+        const gone = Math.min(1, Math.max(0, (now - w.from) / (w.to - w.from)));
+        rocket.style.left = (gone * 100).toFixed(2) + '%';
       }
     }
     for (const p of ['', 'inv-ticket2-']) labelTicket(p);
@@ -368,9 +405,7 @@
      from the paint (and the 30s tick), so it tracks what a sighted reader sees. */
   function labelTicket(p) {
     const b = $(p + 'ticket'); if (!b) return;
-    const t = state.ticket, v = $(p + 'tk-launch-v');
-    const left = v ? v.textContent : '';
-    const when = (!left || left === '—') ? '' : left === 'closed' ? ' Gold OG has closed.' : ' Gold OG closes in ' + left + '.';
+    const t = state.ticket, when = railSay;   // what the rail says, as the paint worded it: the open window and its time, or that it has closed
     b.setAttribute('aria-label', t
       ? 'Your ticket to Send: @' + t.username + ', Send ID #' + t.sendId + ', ' + t.codesLeft + ' of ' + t.codesTotal + ' invites left.' + when
       : 'Your ticket to Send, unclaimed.' + when);
@@ -399,7 +434,7 @@
             : '<img src="' + esc(t.avatarImg) + '" alt="">';
       } else face.textContent = t.avatar || '🚀';
     }
-    if (t && t.goldEndsAt != null) { goldEndsAt = t.goldEndsAt; goldStartedAt = goldEndsAt - 30 * DAY; }
+    if (t && t.goldEndsAt != null) goldEndsAt = t.goldEndsAt;
     paintCountdown();
   }
 
@@ -496,10 +531,12 @@
       paintRules();
       paintTicket();
     } catch { paintTicket(); }
-    if (goldEndsAt == null) {
+    // the campaign clock, once a page: every window's close and the beta's end, so the rail can move on to the next
+    // window by itself when one closes while the ticket is open (the 30-second tick repaints it)
+    if (!camp) {
       try {
         const c = await api('/api/og/campaign');
-        if (c && c.closes && c.closes.gold) { goldEndsAt = c.closes.gold; goldStartedAt = goldEndsAt - 30 * DAY; paintCountdown(); }
+        if (c && c.closes) { camp = c; paintCountdown(); }
       } catch {}
     }
   }

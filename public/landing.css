@@ -15,6 +15,41 @@ body.lp .ticker {
 }
 body.lp .ticker-track span::before { content: '// '; color: var(--text-mute); }
 
+/* ---------- the OG banner: the window open now, on $SEND alone (home.js shows it from /api/og/campaign) ----------
+   A strip in the open window's medal colour (the site's own --silver and --bronze), at the top of the page where Gold's
+   stood: the medal and the name, the countdown, one sentence, and the one way on. On a phone the sentence runs the full
+   width under the name; from 760px the name and the countdown share the top row, and the sentence and then the link run
+   the width under the name. */
+body.lp .lp-og {
+  --og: var(--silver);
+  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr);
+  grid-template-areas: "medal head" "line line" "clock clock" "go go";
+  align-items: center; gap: 0.5rem 0.8rem;
+  width: min(var(--page-max, 1040px), calc(100% - 2.5rem)); margin: 1rem auto 0; padding: 0.8rem 1rem;   /* the hero's own column: its 1.25rem sides, the page's width */
+  border: 1px solid color-mix(in srgb, var(--og) 45%, var(--hair)); border-radius: var(--r-1);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--og) 14%, var(--ink-2)), var(--ink-2) 75%);
+  box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent), 0 0 var(--glow-2) color-mix(in srgb, var(--og) 16%, transparent);
+}
+body.lp .lp-og[hidden] { display: none; }
+body.lp .lp-og[data-og="bronze"] { --og: var(--bronze); }
+body.lp .lp-og-medal { grid-area: medal; font-size: max(var(--text-floor), 2.1rem); line-height: 1; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--og) 60%, transparent)); }
+body.lp .lp-og-head { grid-area: head; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
+body.lp .lp-og-k { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--og); font-size: max(var(--text-floor), 0.75rem); }
+body.lp .lp-og-title { font-family: var(--font-body); font-weight: 800; color: var(--text); font-size: max(var(--text-floor), 1.15rem); line-height: 1.25; overflow-wrap: anywhere; }
+body.lp .lp-og-line { grid-area: line; margin: 0; min-width: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.9rem); line-height: 1.45; }
+body.lp .lp-og-clock { grid-area: clock; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.5rem; min-width: 0; }
+body.lp .lp-og-clock-k { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-mute); font-size: max(var(--text-floor), 0.72rem); }
+body.lp .lp-og-left {
+  font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums slashed-zero; white-space: nowrap;
+  color: var(--og); font-size: max(var(--text-floor), 1.3rem); text-shadow: 0 0 var(--glow-2) color-mix(in srgb, var(--og) 40%, transparent);
+}
+body.lp .lp-og-go { grid-area: go; justify-self: start; min-height: 44px; max-width: 100%; }
+@media (min-width: 760px) {
+  body.lp .lp-og { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "medal head clock" ". line line" ". go go"; gap: 0.45rem 1.2rem; padding: 0.85rem 1.2rem; }
+  body.lp .lp-og-clock { flex-direction: column; align-items: flex-end; text-align: right; gap: 0; }
+}
+@media (forced-colors: active) { body.lp .lp-og { border-color: CanvasText; } }
+
 /* ---------- the hero: a blueprint grid under a soft top light ---------- */
 body.lp .hero.hero-dash {
   background:

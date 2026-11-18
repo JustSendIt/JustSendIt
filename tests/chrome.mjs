@@ -1,7 +1,7 @@
-/* The site's chrome: the nav bar and the OG strip on the home page, checked from the source. No server.
+/* The site's chrome: the nav bar and the OG banner on the home page, checked from the source. No server.
    The bar has one row to spend, so its text rides its own two tokens and the menu collapses into the pop-down
-   whenever the row would not fit — measured by nav.js, not guessed by width. The OG banner is a strip whose
-   head is always shown and whose rest pops down on a tap. */
+   whenever the row would not fit — measured by nav.js, not guessed by width. The OG banner promotes the window
+   open now, and shows only while that window needs $SEND alone (the home page is about $SEND). */
 import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { ROOT } from './_paths.mjs';
@@ -56,10 +56,18 @@ try {
   check('  ...its buttons are at least 36px, 44px under a finger', /\.notif-x \{[^}]*min-width: max\(36px, 1\.9em\); min-height: max\(36px, 1\.9em\);/.test(CSS) && /@media \(pointer: coarse\) \{ \.notif-x \{ min-width: max\(44px, 1\.9em\); min-height: max\(44px, 1\.9em\); \}/.test(CSS));
   check('  ...and while it is open the bar rises above Sendy, the compose button and the player, so no row is ever hidden under one', /\.nav:has\(#notif-panel\.open\) \{ z-index: 300; \}/.test(CSS));
 
-  /* ═══ the OG strip: gone from the home page (2026-11-17) ═══
-     OG is a badge for holding both $SEND and $GWC, and the home page is about $SEND alone now (the owner: "remove anything
-     mentioning GWC on the landing page"). The rules stay on the About page (#og-rules), where every OG badge leads. */
-  check('the home page has no OG strip, and its styles and its script are gone with it', !/og-banner|og-confetti|data-og-deadline/.test(INDEX) && !/\.og-banner|\.og-confetti|ogGradient/.test(CSS) && !/og-banner|og-open/.test(HOME));
+  /* ═══ the OG banner on the home page: Gold's both-coins strip gone, a $SEND-only one in its place (2026-11-17) ═══
+     The home page is about $SEND alone (the owner: "remove anything mentioning GWC on the landing page"), so the strip that
+     promoted Gold — a badge for holding both coins — went with the redo. The same day the beta ended, and Silver and Bronze
+     need only $SEND; the owner: "make a banner promoting the Silver OG like the Gold OG". So the page has a banner again,
+     for the window open now, shown only while that window needs $SEND alone (tests/ogbanner.mjs walks it in a browser).
+     The rules stay on the About page (#og-rules), where every OG badge leads. */
+  check('the old both-coins OG strip is gone from the home page, with its styles and its script', !/og-banner|og-confetti|data-og-deadline/.test(INDEX) && !/\.og-banner|\.og-confetti|ogGradient/.test(CSS) && !/og-banner|og-open/.test(HOME));
+  check('  ...and the $SEND-only OG banner stands where it stood: hidden until home.js has the campaign, its one way on the OG rules (with a tip), "Not a reason to buy"',
+    /<main id="main" tabindex="-1">\n<!-- ===== The OG banner[\s\S]*?-->\n<aside class="lp-og" id="lp-og" aria-label="OG badge window" hidden>[\s\S]*?<\/aside>\n<header class="hero hero-dash">/.test(INDEX)
+    && /<a class="btn btn-ghost btn-sm lp-og-go" href="\/about#og-rules" data-tip="[^"]{8,}">How OG works&nbsp;→<\/a>/.test(INDEX) && /Not a reason to buy\.<\/p>/.test(INDEX.slice(INDEX.indexOf('<aside class="lp-og"'), INDEX.indexOf('</aside>')))
+    && /const sendAlone = \(t\) => \{ const n = camp && camp\.needs && camp\.needs\[t\]; return Array\.isArray\(n\) && n\.length === 1 && n\[0\] === 'SEND'; \};/.test(HOME)
+    && /if \(!w \|\| !sendAlone\(w\.t\) \|\| !name \|\| !mult\) \{ box\.hidden = true; return; \}/.test(HOME));
   /* ═══ the OG badge opens the About page's OG section ═══ */
   const APP = read('app.js'), ABOUT = read('about.html');
   check('every OG badge goes to the About page\'s OG section, and that section exists', /window\.OG_RULES_HREF = '\/about#og-rules';/.test(APP) && /id="og-rules"/.test(ABOUT));

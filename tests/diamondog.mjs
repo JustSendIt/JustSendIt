@@ -38,11 +38,16 @@ try {
     && /const buyAmt = to === w \? \(isAcquisition\(from\) \? v : routed\.take\(r, 'out', v\)\) : 0n;/.test(SRC));   // a routed buy counts too, capped at what the pool sent
   check('  ...summed across EVERY linked wallet, disqualified or not', /month\[c\.key\]\.in \+= BigInt\(s\.monthBoughtWei \|\| '0'\); month\[c\.key\]\.out \+= BigInt\(s\.monthSoldWei \|\| '0'\);\n\s+if \(s\.tier === OG_TIER\.NONE\) continue;/.test(SRC));
   check('Diamond keeps every Gold perk (a free data key)', /const DATA_TIER_DISCOUNT = \{ 4: 1, 3: 1,/.test(SRC) && /row\.og_tier >= OG_TIER\.GOLD/.test(SRC));
-  check('a live Gold account is asked the Diamond question by the sweep, once', /WHERE \(u\.og_tier = 0 OR \(u\.og_tier = 3 AND u\.og_diamond_at IS NULL\)\) AND u\.og_revoked = 0/.test(SRC)
+  // the sweep also asks a Silver left open to be lifted since 2026-11-17 (og_lift; tests/ogsilver.mjs) — the Gold clause is unchanged
+  check('a live Gold account is asked the Diamond question by the sweep, once', /WHERE \(u\.og_tier = 0 OR \(u\.og_tier = 3 AND u\.og_diamond_at IS NULL\) OR \(u\.og_tier = 2 AND u\.og_lift = 1\)\) AND u\.og_revoked = 0/.test(SRC)
     && /const upgrading = u\.og_tier === OG_TIER\.GOLD && !u\.og_diamond_at;/.test(SRC));
-  check('  ...an upgrade needs the same $100 of each a grant does, and a failed read is never an answer', /if \(scanFailed\) return OG_TIER\.GOLD;/.test(SRC)
-    && /Number\(best\.SEND\.balWei \|\| 0\) \/ 1e18 \* sendPx >= OG_MIN_HOLD_USD && Number\(best\.GWC\.balWei \|\| 0\) \/ 1e18 \* gwcPx >= OG_MIN_HOLD_USD/.test(SRC));
-  check('selling out of either coin still loses it for good (the revocation is tier-agnostic)', /if \(sendTok <= OG_DUST \|\| gwcTok <= OG_DUST\) \{[\s\S]{0,200}UPDATE users SET og = 0, og_tier = 0, og_revoked = 1/.test(SRC));
+  // the floor is each coin SUMMED over every linked wallet (2026-11-17) — it used to value only the one wallet that earned the tier
+  check('  ...an upgrade needs the same $100 of each a grant does, summed over the wallets, and a failed read is never an answer', /if \(scanFailed\) return OG_TIER\.GOLD;/.test(SRC)
+    && /return await grantDiamondUpgrade\(userId, best, held\);/.test(SRC)
+    && /if \(!\(ogFloorOk\(held && held\.SEND, sendPx\) && ogFloorOk\(held && held\.GWC, gwcPx\)\)\) \{/.test(SRC) && !/best\.(SEND|GWC)\.balWei/.test(SRC));
+  // revocation is by tier since 2026-11-17 (tests/ogsilver.mjs covers Silver and Bronze): Diamond and Gold still go on a sell-out of EITHER coin
+  check('selling out of either coin still loses Diamond (and Gold) for good', /const OG_TIER_NEEDS = \{ 4: \['SEND', 'GWC'\], 3: \['SEND', 'GWC'\],/.test(SRC)
+    && /if \(sendTok <= OG_DUST \|\| gwcTok <= OG_DUST\) \{[\s\S]{0,300}ogSoldOut\(cur\.og_tier, \{ SEND: sendTok > OG_DUST, GWC: gwcTok > OG_DUST \}\)[\s\S]{0,200}UPDATE users SET og = 0, og_tier = 0, og_revoked = 1/.test(SRC));
 
   /* ═══ 2. the decision, on fixed inputs ═══ */
   const m = /\nfunction ogDiamondOk\(complete, best, holdsAny, month\) \{[\s\S]*?\n\}\n/.exec(SRC);
@@ -68,6 +73,14 @@ try {
   db.prepare('UPDATE holder_state SET gwc_tok = 0 WHERE user_id = ?').run(d.id);
   const sold = await api('/api/me', d.sid);
   check('  ...and pays nothing while one coin reads empty', sold.j && sold.j.user && sold.j.user.boost && sold.j.user.boost.og === 1, JSON.stringify(sold.j && sold.j.user && sold.j.user.boost));
+  db.prepare('UPDATE holder_state SET gwc_tok = 20000000, send_tok = 0 WHERE user_id = ?').run(d.id);
+  const soldS = await api('/api/me', d.sid);
+  check('  ...whichever coin it is', soldS.j && soldS.j.user && soldS.j.user.boost && soldS.j.user.boost.og === 1, JSON.stringify(soldS.j && soldS.j.user && soldS.j.user.boost));
+  // a Silver needs only $SEND since 2026-11-17: the same empty $GWC that stops Diamond's pay leaves Silver's 5×
+  db.prepare('UPDATE users SET og_tier = 2 WHERE id = ?').run(d.id);
+  db.prepare('UPDATE holder_state SET gwc_tok = 0, send_tok = 5000000 WHERE user_id = ?').run(d.id);
+  const silver = await api('/api/me', d.sid);
+  check('a Silver with no $GWC is still paid its 5× (Silver needs $SEND alone)', silver.j && silver.j.user && silver.j.user.boost && silver.j.user.boost.og === 5, JSON.stringify(silver.j && silver.j.user && silver.j.user.boost));
   const camp = await api('/api/og/campaign');
   check('/api/og/campaign states the Diamond month, its 20×, and that it has closed', camp.j && camp.j.diamond && camp.j.diamond.mult === 20 && camp.j.diamond.until - camp.j.diamond.from === 30 * 864e5 && camp.j.diamond.closed === true && camp.j.name[4] === 'Diamond' && camp.j.mult[4] === 20, JSON.stringify(camp.j && camp.j.diamond));
 
@@ -75,11 +88,14 @@ try {
   const APP = pub('app.js'), GAM = pub('gamify.js'), IDX = pub('index.html'), ABOUT = pub('about.html'), WP = pub('whitepaper.html'), README = readFileSync(path.join(ROOT, 'README.md'), 'utf8');
   check('the badge knows tier 4 (name, 20×, tooltip)', /4: \{ name: 'Diamond', mult: 20,/.test(APP));
   check('  ...and wears its own colour, not Gold’s or the Diamond Hands cyan', /\.og-badge--diamond \{/.test(pub('styles.css')) && /--og-diamond:/.test(pub('styles.css')));
-  check('the home page carries no OG banner since 2026-11-17 (it is about $SEND alone, and OG means holding both coins): the pages below explain Diamond', !/og-banner|Diamond 20×/.test(IDX));
+  // the home page is about $SEND alone (2026-11-17): its OG banner promotes only a window open on $SEND alone, so it never names
+  // Diamond (a both-coins tier, long closed) — the pages below explain it
+  check('the home page\'s OG banner promotes a $SEND-only window and never Diamond: the pages below explain Diamond', !/og-banner|Diamond 20×|Diamond/.test(IDX) && /<aside class="lp-og" id="lp-og"/.test(IDX));
   check('the dashboard block and its rules card explain it', /tier === 4 \? 'in the first month of \$GWC and bought more of each than you sold that month'/.test(GAM) && /💎 Diamond — 20×\.<\/b> Bought both in the first month of \$GWC/.test(GAM));
   check('the About page OG rules list it', /💎 Diamond — 20×\.<\/b> The first believers: bought both in the <b>first month of \$GWC<\/b>/.test(ABOUT));
   check('the whitepaper lists it', /Diamond &mdash; 20&times;\.<\/strong> You bought both in the <strong>first month of \$GWC<\/strong>/.test(WP));
-  check('the README table and rules list it', /\| 💎 Diamond \| \*\*20×\*\* \| the \*\*first month of \$GWC\*\*/.test(README) && /\*\*💎 Diamond — the first believers\.\*\*/.test(README));
+  // the table has said which coins each tier needs since 2026-11-17 (Diamond: both), so the row is read through that column
+  check('the README table and rules list it', /\| 💎 Diamond \| \*\*20×\*\* \| both coins \| the \*\*first month of \$GWC\*\*/.test(README) && /\*\*💎 Diamond — the first believers\.\*\*/.test(README));
   check('no OG copy tells anyone to buy', !/'Buy <b>both \$Send and \$GWC<\/b>/.test(GAM));
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n')[1]);

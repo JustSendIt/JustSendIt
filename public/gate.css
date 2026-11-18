@@ -28,6 +28,10 @@
   --g-green-hi: var(--green-bright, #c6f000);
   --g-green-lo: var(--green-dark, var(--g-green)); /* ghost / spent fill (and the disabled fallback when styles.css is absent) — black type clears it at 6.3:1 */
   --g-gold:     #ffb340;
+  /* the OG medals after Gold: the site's own silver and bronze (styles.css --silver / --bronze), so the ticket's rail
+     wears the colour the badge it promotes wears. The literals carry the share page, which loads this file alone. */
+  --g-silver:   var(--silver, #cfd6e4);
+  --g-bronze:   var(--bronze, #e2a465);
   --g-text:     var(--text, #f2f6ec);
   --g-dim:      var(--text-dim, #b6beac);
   --g-paper:    var(--ink-2, #0c0e09);
@@ -173,17 +177,21 @@ body.gate {
 .tk-v { display: block; font-weight: 800; font-size: max(var(--text-floor), 0.95rem); color: var(--g-text); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .tk-v.gold { color: var(--g-gold); }
 
-/* the rocket countdown rail */
-.tk-launch { display: block; margin-top: 0.9rem; background: rgba(0,0,0,0.34); border: 1px solid rgba(255,179,64,0.35);
+/* the rocket countdown rail — it promotes the OG window that is open now (invite.js sets data-og), in that medal's colour:
+   gold while Gold was open, silver after the beta, bronze after Silver, and the dim text colour once every window has shut */
+.tk-launch { --tk-c: var(--g-gold); display: block; margin-top: 0.9rem; background: rgba(0,0,0,0.34); border: 1px solid color-mix(in srgb, var(--tk-c) 35%, transparent);
   border-radius: 10px; padding: 0.5rem 0.65rem; }
+.tk-launch[data-og="silver"] { --tk-c: var(--g-silver); }
+.tk-launch[data-og="bronze"] { --tk-c: var(--g-bronze); }
+.tk-launch[data-og="closed"] { --tk-c: var(--g-dim); }
 .tk-launch-top { display: flex; align-items: baseline; gap: 0.4rem; flex-wrap: wrap; }
-.tk-launch-k { font-size: max(var(--text-floor), 0.7rem); letter-spacing: 0.13em; text-transform: uppercase; color: var(--g-gold); font-weight: 800; }
-.tk-launch-v { font-weight: 800; font-size: max(var(--text-floor), 0.92rem); color: var(--g-gold); font-variant-numeric: tabular-nums; margin-left: auto; }
+.tk-launch-k { font-size: max(var(--text-floor), 0.7rem); letter-spacing: 0.13em; text-transform: uppercase; color: var(--tk-c); font-weight: 800; }
+.tk-launch-v { font-weight: 800; font-size: max(var(--text-floor), 0.92rem); color: var(--tk-c); font-variant-numeric: tabular-nums; margin-left: auto; }
 .tk-rail { display: block; position: relative; height: 16px; margin-top: 0.35rem; }
 .tk-rail-line { position: absolute; left: 0; right: 0; top: 50%; height: 2px; transform: translateY(-50%);
-  background: linear-gradient(90deg, rgba(255,179,64,0.15), rgba(255,179,64,0.55)); border-radius: 2px; }
+  background: linear-gradient(90deg, color-mix(in srgb, var(--tk-c) 15%, transparent), color-mix(in srgb, var(--tk-c) 55%, transparent)); border-radius: 2px; }
 .tk-rocket { position: absolute; top: 50%; transform: translate(-50%, -50%); font-size: max(var(--text-floor), 0.95rem);
-  filter: drop-shadow(0 0 6px rgba(255,179,64,0.8)); transition: left 600ms ease; }
+  filter: drop-shadow(0 0 6px color-mix(in srgb, var(--tk-c) 80%, transparent)); transition: left 600ms ease; }
 
 .tk-stub-n { display: block; font-family: 'Luckiest Guy', cursive; font-size: max(var(--text-floor), 1.7rem); color: var(--g-green-hi); line-height: 1; }
 .tk-stub-k { display: block; font-size: max(var(--text-floor), 0.7rem); letter-spacing: 0.16em; text-transform: uppercase; color: var(--g-dim); font-weight: 800; }
