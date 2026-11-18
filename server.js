@@ -110,6 +110,12 @@ const KEYLIB = require('./lib/keys.js');
 const ROUTES = require('./lib/routes.js');   // page routes: /about, not /about.html (lib/routes.js)
 const CF = require('./lib/contractfacts.js');   // a contract's powers, the dead addresses, and whether a renounce has neutralised a power
 const BUNDLES = require('./lib/bundles.js');   // who bought and moved tokens in the same block (lib/bundles.js)
+/* "$100 bought" (owner, 2026-11-17): the coin tape (lib/tape.js) and the verdicts made from it (lib/bought.js, which joins the
+   tape, the ETH/USD history and the acquisition engine to this server). Both are made once the readers they use exist
+   (beside the holder ledger, below); until then — and in the ledger's hook — they are null. */
+const TAPE_LIB = require('./lib/tape.js');
+const BOUGHT_LIB = require('./lib/bought.js');
+let TAPE = null, BOUGHT = null;
 const RWA = require('./lib/rwa.js');          // what counts as a real-world asset on evidence: no health score, no swap for one (lib/rwa.js counted)
 const GA4 = require('./lib/ga.js');           // Google Analytics: the admin page's reports (lib/ga.js)
 const PAGE_NAMES = ROUTES.pageNames(PUBLIC_DIR);   // read once at boot: a page added to public/ is served after a restart
@@ -1492,7 +1498,8 @@ CREATE INDEX IF NOT EXISTS idx_dh_moves_pending ON dh_moves(status, id);
 CREATE INDEX IF NOT EXISTS idx_dh_moves_user ON dh_moves(user_id, status, applied);
 `);
 
-try { for (const t of ['dh_follow', 'dh_moves']) db.prepare('DELETE FROM ' + t + ' WHERE user_id IN (SELECT id FROM users WHERE deleted_at IS NOT NULL)').run(); } catch {}
+BOUGHT_LIB.migrate(db);   // the tape's tables and the verdicts' (acq_state, buy_claims, hold_migration_log, ethusd_cells, bought_tokens)
+try { for (const t of ['dh_follow', 'dh_moves', 'acq_state']) db.prepare('DELETE FROM ' + t + ' WHERE user_id IN (SELECT id FROM users WHERE deleted_at IS NOT NULL)').run(); } catch {}
 
 /* ===== Data history: a member's data is kept, so a mistake can be undone (owner, 2026-10-17) ========================
    "make sure all data is always cached so errors like this never happen and we can restore user's data if we need to
@@ -8520,7 +8527,7 @@ const dhTimer = setInterval(() => {
   dhResolve().catch(() => {});
 }, 60 * 1000);
 dhTimer.unref();
-function ledgerApply(tok, logs, upTo, firstSeen, watch) {
+function ledgerApply(tok, logs, upTo, firstSeen, watch, from) {
   const delta = new Map();
   let firstBlock = firstSeen;
   for (const l of logs) {
@@ -8536,6 +8543,10 @@ function ledgerApply(tok, logs, upTo, firstSeen, watch) {
   try {
     for (const [w, d] of delta) { if (d === 0n) continue; const cur = get.get(tok, w); const nb = (cur ? BigInt(cur.balance) : 0n) + d; put.run(tok, w, nb.toString(), nb > 0n ? 1 : 0); }
     if (watch) { db.exec('SAVEPOINT dh_hook'); try { dhLedgerHook(tok, logs); db.exec('RELEASE dh_hook'); } catch (e) { try { db.exec('ROLLBACK TO dh_hook'); db.exec('RELEASE dh_hook'); } catch {} console.warn('[diamond] the ledger hook failed on a batch (the ledger itself went on): ' + ((e && e.message) || e)); } }
+    /* "$100 bought": a taped coin's Transfers go on its tape in the same transaction as the balances they move — the first build
+       too (watch false): the tape reads nothing the ledger already did. Its own savepoint: a batch the tape refuses costs the
+       ledger nothing (the tape's next append starts a new stretch there, and its walker back-fills the gap). */
+    if (TAPE && BOUGHT && BOUGHT.taped(tok)) { db.exec('SAVEPOINT tape_hook'); try { TAPE.appendTransfers(tok, logs, { from, upTo }); db.exec('RELEASE tape_hook'); } catch (e) { try { db.exec('ROLLBACK TO tape_hook'); db.exec('RELEASE tape_hook'); } catch {} console.warn('[bought] the tape hook failed on a batch (the ledger itself went on): ' + ((e && e.message) || e)); } }
     db.prepare(`INSERT INTO holder_index (token_addr, last_block, first_block, logs, status, updated_at) VALUES (?,?,?,?,'building',?)
       ON CONFLICT(token_addr) DO UPDATE SET last_block=excluded.last_block, first_block=COALESCE(holder_index.first_block, excluded.first_block), logs=holder_index.logs + ?,
         status=CASE WHEN holder_index.status='ok' THEN 'ok' ELSE 'building' END`).run(tok, upTo, firstBlock, logs.length, now(), logs.length);
@@ -8574,7 +8585,7 @@ async function indexHolders(tokenAddr) {        // single-flight, incremental, r
         if (!Array.isArray(out)) throw new Error('the chain did not answer');
         total += out.length; reads++;
         if (total > LEDGER_MAX_LOGS) throw new Error('ledger too large');
-        firstBlock = ledgerApply(tok, out, to, firstBlock, watch);
+        firstBlock = ledgerApply(tok, out, to, firstBlock, watch, from);
         from = to + 1;
         if (out.length < 2500) window = Math.min(window * 2, Math.max(1, latest - from + 1));
         if (from <= latest) await new Promise((r) => setTimeout(r, LEDGER_PAUSE_MS));
@@ -8634,6 +8645,64 @@ async function ensureLedger(tok, opts = {}) {
   if (!v && !holderLedger(tok) && deadline - now() > 1500) v = await until(indexHolders(tok).catch(() => null));
   return v || holderLedger(tok) || cur;
 }
+
+/* ===== "$100 bought": the coin tape and the verdicts (owner, 2026-11-17; lib/tape.js, lib/bought.js) ====================
+   The tape reads through the same pace every whole-wallet read shares (paceTake, at the tape's weights: a log window over
+   200,000 blocks weighs 5) and the ledger's slow lane: the node's first refusal stands every ledger-class read down for
+   LEDGER_COOL_MS, and the next tick carries on from the cursors. Never the server's pacedBatchAll (it waits a throttle out
+   for ten minutes): the tape gives way at once, as the ledger does. Every request carries HONEST_UA (rpc / rpcBatch). */
+TAPE = TAPE_LIB.createTape({
+  db, now,
+  rpc: (m, p, w) => _rpcSlow(async () => { await paceTake(w || 1); return rpc(m, p, true); }),
+  pacedBatch: (calls, w) => _rpcSlow(async () => { await paceTake(w || calls.length); return rpcBatch(calls); }),
+  coolUntil: () => ledgerCoolUntil,
+  cool: () => { ledgerCoolUntil = now() + LEDGER_COOL_MS; },
+  crypto: { enc: encField, dec: decField, idx: bidx },
+  factories: { [FACTORY]: 'v2' },   // the chain's Uniswap-v2 factory; a v3 factory joins once one is confirmed here
+});
+// a member's linked wallets as the verdicts key them: identities ids (wallets_sig) and the addresses, oldest first
+function boughtWallets(uid) {
+  return db.prepare("SELECT id, identifier_enc FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY id").all(uid)
+    .map((r) => ({ id: r.id, addr: String(decField(r.identifier_enc) || '').toLowerCase() })).filter((w) => /^0x[0-9a-f]{40}$/.test(w.addr)).slice(0, MAX_LINKED_WALLETS);
+}
+// a coin's v2 pools against WETH and USDG (the factory's pairs), and which side the coin is on
+async function boughtPoolsFor(token) {
+  const t = String(token).toLowerCase(), out = [];
+  const known = Object.entries(TOK).find(([, a]) => a === t);
+  const cands = new Set(known ? [OG_PAIR[known[0]]] : []);
+  for (const q of [WETH_ADDR, USDG_ADDR]) { const p = await _rpcSlow(() => factoryGetPair(t, q, true)); if (p) cands.add(String(p).toLowerCase()); }
+  for (const pool of cands) {
+    const lay = await _rpcSlow(() => pairLayoutStrict(pool));
+    if (!lay || !lay.token0 || !lay.token1) continue;
+    const zero = lay.token0 === t, other = zero ? lay.token1 : lay.token0;
+    if (!zero && lay.token1 !== t) continue;
+    out.push({ pool, tokenIsZero: zero, quote: other === WETH_ADDR ? 'WETH' : other === USDG_ADDR ? 'USDG' : other });
+  }
+  return out;
+}
+BOUGHT = BOUGHT_LIB.createBought({
+  db, now, tape: TAPE, enc: encField, dec: decField, idx: bidx,
+  coins: { SEND: TOK.SEND, GWC: TOK.GWC },
+  diamond: { from: OG_DIAMOND_START, until: OG_DIAMOND_END },
+  sys: [SWAP_ROUTER, FACTORY, WETH_ADDR],
+  wallets: boughtWallets,
+  followed: (uid, token) => { const coin = DH_COINS[String(token).toLowerCase()]; if (!coin) return []; return db.prepare('SELECT addr_enc FROM dh_follow WHERE user_id = ? AND token = ?').all(uid, coin).map((r) => String(decField(r.addr_enc) || '').toLowerCase()).filter((a) => /^0x[0-9a-f]{40}$/.test(a)); },
+  refreshLedger: (t) => (DH_COINS[t] ? indexHolders(t) : ensureLedger(t, { wait: true, waitMs: 60000 })),
+  ledger: (t) => { const r = db.prepare('SELECT status, first_block, last_block, logs, consistent, decimals FROM holder_index WHERE token_addr = ?').get(t); return r ? { status: r.status, firstBlock: r.first_block, lastBlock: r.last_block, logs: r.logs || 0, consistent: r.consistent !== 0, decimals: r.decimals } : null; },
+  poolsFor: boughtPoolsFor,
+  plumbing: () => { const k = { fees: new Set(), routers: new Set() }; try { for (const r of db.prepare('SELECT addr, kind FROM bundle_plumbing').all()) (r.kind === 'router' ? k.routers : k.fees).add(r.addr); } catch {} return k; },
+  claimedElsewhere: (uid, wallet) => { const i = bidx(String(wallet).toLowerCase()); return !!(db.prepare('SELECT 1 FROM og_claims WHERE addr_idx = ? AND user_id <> ?').get(i, uid) || db.prepare('SELECT 1 FROM gate_claims WHERE addr_idx = ? AND user_id <> ?').get(i, uid)); },
+  onVerdict: (uid, token, before, after) => boughtOnVerdict(uid, token, before, after),
+  log: (m) => console.warn('[bought] ' + m),
+});
+/* The tape's tick, once a minute: $SEND's and $GWC's ledgers forward (their batches land on the tape in ledgerApply), every
+   stream walked from its cursor (TICK_READS requests at most — the one-time back-fill is many ticks of this), Swap blocks dated,
+   the ETH/USD grid folded. One at a time; the node's refusal ends a tick early and the next one carries on. */
+const BOUGHT_TICK_MS = 60 * 1000;
+const boughtTapeTimer = setInterval(() => { if (now() < ledgerCoolUntil) return; BOUGHT.tick().catch((e) => console.warn('[bought] tick: ' + ((e && e.message) || e))); }, BOUGHT_TICK_MS);
+boughtTapeTimer.unref();
+// a verdict was written (lib/bought.js, in the background): what it changes on the site is applied by the features that read it
+function boughtOnVerdict(uid, token, before, after) {}
 
 let pairsRaw = [];          // [{pair, token0, token1, block}] newest last
 let pairsScanBlock = 0;
@@ -17939,8 +18008,8 @@ const server = http.createServer(async (req, res) => {
             db.prepare('DELETE FROM squads WHERE id = ?').run(sqr.id);
           }
           const memberOf = db.prepare('SELECT DISTINCT squad_id FROM squad_members WHERE user_id = ?').all(uid).map(r => r.squad_id);   // recounted below, once the rows are gone
-          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'tracker_cache', 'wallet_hist', 'burn_proofs'])
-            try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}
+          for (const t of ['identities', 'sessions', 'tracked_wallets', 'holder_state', 'dh_follow', 'dh_moves', 'notifications', 'follows', 'points_events', 'easter_eggs', 'watchlist', 'pinned_tokens', 'reactions', 'post_votes', 'comments', 'hop_reactions', 'hop_comments', 'community_members', 'squad_members', 'squad_pin_state', 'proposal_votes', 'alerts', 'api_keys', 'arcade_rounds', 'arcade_guest_rounds', 'uploads', 'tracker_cache', 'wallet_hist', 'burn_proofs', 'acq_state'])
+            try { db.prepare('DELETE FROM ' + t + ' WHERE user_id = ?').run(uid); } catch {}   // acq_state: "$100 bought" verdicts go with the account; buy_claims stay, like og_claims
           OIDC.forgetUser(uid);   // Sign in with Send: every app it allowed (consents, codes, tokens) and every app it registered, with everyone's sign-ins to them
           /* The invite codes they had not given out stop working: an account that is gone cannot keep letting people
              in, and its unused codes would be a supply of tickets nobody answers for — make an account, delete it,
@@ -22022,7 +22091,8 @@ const BACKUP_SCRUB = [
   'DELETE FROM arcade_guest_rounds WHERE user_id IS NULL', 'UPDATE arcade_guest_rounds SET ip = NULL, net = NULL',
   'DELETE FROM email_misses', 'DELETE FROM visit_keys', 'DELETE FROM visit_seen', 'DELETE FROM dh_moves',
   'DELETE FROM sessions', 'DELETE FROM wallet_challenges', 'DELETE FROM nonces', 'DELETE FROM burn_proofs',
-  'DELETE FROM oauth_codes', 'DELETE FROM oauth_tokens',   // Sign in with Send: live codes and tokens are not kept in a copy (an app signs its members in again after a restore)
+  'DELETE FROM oauth_codes', 'DELETE FROM oauth_tokens',
+  'DELETE FROM tape_receipts',   // "$100 bought": receipts of members' own transactions, a cache read again from the chain; buy_claims and acq_state are kept   // Sign in with Send: live codes and tokens are not kept in a copy (an app signs its members in again after a restore)
   // Sendy's questions he could not answer and his answers nobody rated go after 90 days on the live site (lib/sendybrain.js prune)
   'DELETE FROM sendy_misses', 'DELETE FROM sendy_qa WHERE up = 0 AND down = 0',
   /* Market Data's bulk public history (lib/marketdata.js) is read again from its sources after a restore, so a copy does not carry it —
