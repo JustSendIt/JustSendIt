@@ -219,6 +219,9 @@
 
   /* ---------- reading the site's own API ---------- */
   const memo = new Map();   // url → { at, j }: a tab switch or a Back does not ask again within a minute
+  const memoGen = new Map();   // url → how many times it was dropped: an answer read before the latest drop is not kept (it may be stale)
+  const memoDrop = memo.delete.bind(memo);
+  memo.delete = (url) => { memoGen.set(url, (memoGen.get(url) || 0) + 1); return memoDrop(url); };
   const seq = { list: 0, view: 0, scan: 0, search: 0, rwa: 0 };
   // an answer that says some of it could not be read is not kept: Try again, a reload or a Back asks the site again rather
   // than showing the same failure for a minute (the server keeps only its successes too)
@@ -226,13 +229,15 @@
   async function getJSON(url) {
     const m = memo.get(url);
     if (m && Date.now() - m.at < 60e3) return m.j;
+    const gen = memoGen.get(url) || 0;
     let r;
     try { r = await fetch(url, { credentials: 'same-origin', headers: { Accept: 'application/json' } }); }
     catch { const e = new Error('offline'); e.status = 0; throw e; }
     let j = null; try { j = await r.json(); } catch {}
     if (!r.ok) { const e = new Error('status ' + r.status); e.status = r.status; e.body = j; throw e; }
     if (incomplete(j)) { memo.delete(url); return j; }
-    if (memo.size > 60) memo.delete(memo.keys().next().value);
+    if ((memoGen.get(url) || 0) !== gen) return j;
+    if (memo.size > 60) memoDrop(memo.keys().next().value);
     memo.set(url, { at: Date.now(), j });
     return j;
   }
@@ -665,7 +670,6 @@
         S.chainRows.forEach((r) => { if (r && r.key && r.name) names.set(r.key, r.name); });
         paintChains();
         syncControls();
-        paintGlance();
       } catch (e) {
         if (my !== seq.list) return;
         cap.innerHTML = '<span class="mkt-err-t">⏳ ' + esc(errText(e, 'the chains')) + '</span> ' + failActs(e, 'list', 'chains');
@@ -757,7 +761,8 @@
   const moveHTML = (price, ch) => (price != null ? '<b>' + esc(usd(price)) + '</b>' : '<b class="mkt-na">Not available</b>') + '<small>' + (ch != null ? esc(pct(ch)) + ' in 24 h' : '24 h move not given') + '</small>';
   function paintWatch() {
     const items = (S.watchAns && Array.isArray(S.watchAns.items) ? S.watchAns.items : []).filter((p) => p && p.token && p.token.address && p.pair);
-    cap.innerHTML = 'Your watchlist · <b>' + items.length + ' token' + (items.length === 1 ? '' : 's') + '</b> on Robinhood Chain · private to you';
+    const nTok = new Set(items.map((p) => String(p.token.address).toLowerCase())).size, nPool = items.length;
+    cap.innerHTML = 'Your watchlist · <b>' + nTok + ' token' + (nTok === 1 ? '' : 's') + '</b>' + (nPool !== nTok ? ' (' + nPool + ' pools saved)' : '') + ' on Robinhood Chain · private to you';
     if (!items.length) { list.innerHTML = '<li class="mkt-empty">Nothing saved yet. Press ☆ on a token’s on-chain dashboard to keep it here.</li>'; more.innerHTML = ''; return; }
     list.innerHTML = items.slice(0, S.shown).map((p, i) => {
       const t = p.token, m = p.market || {}, saved = p._wl && p._wl.source === 'saved';
@@ -1102,15 +1107,18 @@
     S.calls.win = b.dataset.cwin; S.shown = pageSize(); syncControls(); writeURL(true); loadList();
   });
   // the member's lists move with them: a star pressed anywhere on the page, a sign-in or a sign-out
+  let wlSoon = 0;
   document.addEventListener('watchlist:changed', () => {
     memo.delete('/api/watchlist');
-    if (S.tab === 'watch' && window.AUTH && AUTH.user) loadList(); else if (S.tab === 'tokens' && S.tokenAns) paintTokens();
-    if (typeof paintGlance === 'function') paintGlance();
+    if (S.tab === 'tokens' && S.tokenAns) paintTokens(); else if (S.tab === 'calls' && S.callsAns) paintCalls();   // its ★ marks
+    // a burst (the optimistic star, then the server's own list) is one re-read, after the burst
+    clearTimeout(wlSoon); wlSoon = setTimeout(() => { if (S.tab === 'watch' && window.AUTH && AUTH.user) { memo.delete('/api/watchlist'); loadList(); } }, 300);
+    paintSoon();
   });
   document.addEventListener('auth:change', () => {
     memo.delete('/api/watchlist'); memo.delete('/api/calls/mine/ids');
     if (S.tab === 'watch' || S.tab === 'calls') loadList();
-    if (typeof paintGlance === 'function') paintGlance();
+    paintSoon();
   });
   document.addEventListener('click', (e) => {
     const w = e.target.closest('[data-reset-win]');
@@ -2331,6 +2339,7 @@
       MAP.ans = j; MAP.at = Date.now(); MAP.fail = null;
       if (MAP.pick && !j.rows.some((r) => r.id === MAP.pick)) MAP.pick = null;
       paintMap();
+      if (MAP.pickFocus) { MAP.pickFocus = false; if (MAP.pick) openMapCard(MAP.pick, true); }   // a coin pressed before the map was read
     } catch (e) {
       if (my !== MAP.seq) return;
       // a refresh that failed keeps the map it had, painted again so every age says how old it is now, and the caption says the read failed
@@ -2651,11 +2660,18 @@
     TokenModal.open(oc.address, { chain: oc.chain, symbol: r.symbol, name: coinName(r), note: coinNote(r, oc) });
     return true;
   }
-  function openCoin(r) {
-    if (!r) return;
-    if (scannable(r.onchain) && openCoinScan(r)) return;
-    if (!MAP.shown) setMapOpen(true, false);   // its card is under the map: opened for it (not remembered — the reader did not unfold it)
-    openMapCard(r, true);
+  /* r: the coin's row where one is known (the map's, else the banner's); id: its CoinGecko id. A card is drawn from the MAP's row only
+     (its dominance and its cross-check come with that read, not with the banner's): with the map not read yet, or folded away, the map
+     is opened (not remembered — the reader did not unfold it), read when it needs to be, and the card opens when the read arrives */
+  function openCoin(r, id) {
+    if (r && scannable(r.onchain) && openCoinScan(r)) return;
+    const cid = (r && r.id) || id; if (!cid) return;
+    const wasShown = MAP.shown;
+    if (!MAP.shown) setMapOpen(true, false);
+    if (MAP.ans && MAP.ans.rows.some((x) => x.id === cid)) { openMapCard(cid, true); return; }
+    MAP.pick = cid; MAP.pickFocus = true;
+    if (wasShown && !mapEl.fig.hasAttribute('aria-busy')) loadMap(false);   // not on its way (a read that failed, or none yet): asked now
+    if (mapEl.sec) { try { mapEl.sec.scrollIntoView({ block: 'start', behavior: reduced() ? 'auto' : 'smooth' }); } catch { mapEl.sec.scrollIntoView(); } }
   }
   function coinOnchainHTML(r) {
     const oc = r.onchain, nm = coinName(r);
@@ -2730,7 +2746,8 @@
      and under the reduced-motion setting, where it is a row that scrolls by hand. */
   const mvEl = { sec: $('mkt-movers'), win: $('mkt-movers-win'), src: $('mkt-movers-src'), grid: $('mkt-glance-grid') };
   const MV = { ans: null, at: 0, seq: 0, timer: 0, fail: null, calls: null };
-  const MV_EVERY = 5 * 60e3;
+  const RH_VIEW = '/api/market/chain?key=robinhood';   // the page's first view: the same read, kept a minute
+  const MV_EVERY = 5 * 60e3, CALLS_TOP = '/api/calls/top-tokens?window=24h';
   async function loadMovers() {
     if (!mvEl.sec) return;
     const my = ++MV.seq;
@@ -2742,14 +2759,20 @@
       if (my !== MV.seq) return;
       MV.fail = { at: Date.now(), text: errText(e, 'the biggest moves') };   // a banner it had stays, saying how old it is
     }
-    paintMovers(); paintGlance(); planMovers();
+    paintSoon(); planMovers();
   }
+  /* the banner and the tiles are drawn again only when nobody is on them: a refresh while a mover or a tile has the focus, or while a
+     coin's popup (opened from one, and giving its focus back to it on closing) is up, waits until the focus has left them */
+  const mvBusy = () => { const a = document.activeElement, tm = document.getElementById('token-modal');
+    return !!(a && ((mvEl.sec && mvEl.sec.contains(a)) || (mvEl.grid && mvEl.grid.contains(a)))) || !!(tm && !tm.hidden); };
+  function paintSoon() { if (mvBusy()) { MV.dirty = true; return; } MV.dirty = false; paintMovers(); paintGlance(); }
+  document.addEventListener('focusout', () => { if (MV.dirty) setTimeout(() => { if (MV.dirty && !mvBusy()) paintSoon(); }, 0); });
   function planMovers() {
     clearTimeout(MV.timer);
-    MV.timer = setTimeout(() => { if (document.visibilityState === 'visible') { memo.delete('/api/market/movers'); loadMovers(); } else planMovers(); }, MV_EVERY);
+    MV.timer = setTimeout(() => { if (document.visibilityState === 'visible') { memo.delete('/api/market/movers'); loadMovers(); memo.delete(CALLS_TOP); loadCallsTop(); } else planMovers(); }, MV_EVERY);
   }
   document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && mvEl.sec && MV.at && Date.now() - MV.at >= MV_EVERY) { memo.delete('/api/market/movers'); loadMovers(); }
+    if (document.visibilityState === 'visible' && mvEl.sec && MV.at && Date.now() - MV.at >= MV_EVERY) { memo.delete('/api/market/movers'); loadMovers(); memo.delete(CALLS_TOP); loadCallsTop(); }
   });
   const moveCls = (c) => (c == null ? '' : c > 0 ? ' is-up' : c < 0 ? ' is-down' : '');
   function moverTip(r) {
@@ -2758,9 +2781,9 @@
       : oc && oc.kind === 'native' ? 'Opens ' + coinName(r) + '’s card: it is ' + chainName(oc.chain) + '’s own coin, with its chain’s on-chain data a press away'
         : 'Opens ' + coinName(r) + '’s card under the bubble map, with its figures and where it lives on-chain';
   }
-  function moverHTML(r) {
+  function moverHTML(r, copy) {   // copy: the loop's second list — out of the tab order (aria-hidden on its list), still pressable
     const c = val(r.change24h), p = mapPrice(val(r.price));
-    return '<li><button class="mkt-mover' + moveCls(c) + '" type="button" data-mover="' + esc(r.id) + '" data-tip="' + esc(moverTip(r)) + '">' +
+    return '<li><button class="mkt-mover' + moveCls(c) + '" type="button"' + (copy ? ' tabindex="-1"' : '') + ' data-mover="' + esc(r.id) + '" data-tip="' + esc(moverTip(r)) + '">' +
       (ownLogo(r.logo) ? '<img class="mkt-logo" src="' + esc(r.logo) + '" alt="" loading="lazy" decoding="async" width="24" height="24">' : '') +
       '<b class="mkt-mover-s">' + esc(r.symbol || coinName(r)) + '</b><span class="mkt-mover-p">' + esc(p || 'price not given') + '</span><span class="mkt-mover-c">' + esc(c == null ? 'no change given' : pct(c)) + '</span></button></li>';
   }
@@ -2772,18 +2795,19 @@
       if (mvEl.src) mvEl.src.innerHTML = MV.fail ? retryBtn('movers') : '';
       return;
     }
-    const items = rows.map(moverHTML).join('');
-    // the list twice, end to end, so the loop has no gap; the copy is for the eye only (aria-hidden and inert: a reader and the
-    // keyboard meet each mover once). Its speed is set by its length: about 45 px a second, whatever the screen
-    mvEl.win.innerHTML = '<div class="mkt-movers-track"><ol class="mkt-movers-list">' + items + '</ol><ol class="mkt-movers-list mkt-movers-dup" aria-hidden="true" inert>' + items + '</ol></div>';
+    const items = rows.map((r) => moverHTML(r)).join('');
+    // the list twice, end to end, so the loop has no gap; the copy is for the eye and the pointer only (a reader and the keyboard meet
+    // each mover once). Its speed is set by its length: about 45 px a second, whatever the screen
+    // the copy is hidden from readers and out of the tab order, but not inert: a press on a mover the loop is showing from the copy opens it
+    mvEl.win.innerHTML = '<div class="mkt-movers-track"><ol class="mkt-movers-list">' + items + '</ol><ol class="mkt-movers-list mkt-movers-dup" aria-hidden="true">' + rows.map((r) => moverHTML(r, true)).join('') + '</ol></div>';
     const tr = mvEl.win.querySelector('.mkt-movers-track'), first = tr && tr.firstElementChild;
     if (tr && first) tr.style.setProperty('--mv-dur', Math.max(20, Math.round(first.scrollWidth / 45)) + 's');
     wireLogos(mvEl.win);
     const at = val(j.reads && j.reads.coins && j.reads.coins.at) || j.at;
     if (mvEl.src) mvEl.src.innerHTML = 'Ranked by the size of the 24 h move, either way, among CoinGecko’s 100 largest coins' + (at ? ' · read ' + agoEl(at) : '') +
-      (MV.fail ? ' · <span class="mkt-err-t">the newest read failed (' + esc(MV.fail.text) + '), so these are from ' + agoEl(MV.at) + '</span>' : '') + ' · not advice, never a tip to buy';
+      (MV.fail ? ' · <span class="mkt-err-t">a newer read failed (' + esc(MV.fail.text) + '): these are the figures read ' + (at ? agoEl(at) : 'before it') + '</span>' : '') + ' · not advice, never a tip to buy';
   }
-  if (mvEl.sec) mvEl.sec.addEventListener('click', (e) => { const b = e.target.closest('[data-mover]'); if (b) openCoin(coinRow(b.dataset.mover)); });
+  if (mvEl.sec) mvEl.sec.addEventListener('click', (e) => { const b = e.target.closest('[data-mover]'); if (b) openCoin(coinRow(b.dataset.mover), b.dataset.mover); });
 
   /* ---------- the market at a glance: one tile per headline figure, each a way into the part of the page with more ---------- */
   function glTile(kind, arg, k, v, sub, tip, cls) {
@@ -2793,8 +2817,10 @@
   function paintGlance() {
     const g = mvEl.grid; if (!g) return;
     const j = MV.ans || {}, nr = '<span class="mkt-na">Not read yet</span>';
-    const total = fig(j.total), counts = j.counts || null, up = (j.gainers || [])[0], dn = (j.losers || [])[0], dom = (j.dominance || [])[0];
-    const rh = chainRow('robinhood'), mine = window.AUTH && AUTH.user, wl = window.Watchlist && Watchlist.isLoaded && Watchlist.isLoaded() ? Watchlist.ids.size : null;
+    // counts of 0 coins are no counts (the 100 not read yet): never "▼ 0 ▲ 0"
+    const total = fig(j.total), counts = j.counts && j.counts.of > 0 ? j.counts : null, up = (j.gainers || [])[0], dn = (j.losers || [])[0], dom = (j.dominance || [])[0];
+    // Robinhood Chain's tile: its 24 h chain view (the page's first view, kept a minute), never the side list's current sort or window
+    const rh = S.rhView && S.rhView.stats ? S.rhView.stats : null, mine = window.AUTH && AUTH.user, wl = window.Watchlist && Watchlist.isLoaded && Watchlist.isLoaded() ? Watchlist.tokens.size : null;
     const ct = MV.calls && Array.isArray(MV.calls.rows) ? MV.calls.rows[0] : null;
     const coinTile = (r, k, tip) => (r && val(r.change24h) != null
       ? glTile('coin', r.id, k, esc(r.symbol || coinName(r)) + ' <span class="mkt-gl-c' + moveCls(val(r.change24h)) + '">' + esc(pct(val(r.change24h))) + '</span>', esc(mapPrice(val(r.price)) || 'price not given') + ' · ' + esc(coinName(r)), tip.replace('{n}', coinName(r)))
@@ -2802,26 +2828,28 @@
     g.innerHTML = [
       glTile('map', '', '🌐 Crypto market cap', total.v != null ? esc(usd(total.v)) : nr, total.v != null ? srcLine(total) : esc(j.why || 'CoinGecko’s total, read every 30 minutes'), 'Opens the bubble map of the 100 largest coins, sized by market cap'),
       glTile('map', '', '📊 Top 100, last 24 h', counts ? '<span class="mkt-gl-c is-down">▼ ' + (counts.down | 0) + '</span> <span class="mkt-gl-c is-up">▲ ' + (counts.up | 0) + '</span>' : nr,
-        counts ? 'down · up' + (counts.flat ? ' · ' + counts.flat + ' unchanged' : '') + (counts.none ? ' · ' + counts.none + ' with no change given' : '') : 'how many of the 100 largest moved each way', 'Opens the bubble map, coloured by each coin’s 24 h move'),
+        counts ? 'down · up' + (counts.flat ? ' · ' + counts.flat + ' unchanged' : '') + (counts.none ? ' · ' + counts.none + ' with no change given' : '') : esc(j.why ? cap1(j.why) : 'how many of the 100 largest moved each way'), 'Opens the bubble map, coloured by each coin’s 24 h move'),
       coinTile(up, '🚀 Biggest gainer, 24 h', 'Opens {n}’s on-chain data'),
       coinTile(dn, '🩸 Biggest faller, 24 h', 'Opens {n}’s on-chain data'),
       dom && val(dom.fig) != null
         ? glTile('coin', dom.id, '👑 ' + (dom.symbol || 'Largest coin') + ' dominance', esc(domText(val(dom.fig))), 'its share of the whole market · ' + srcLine(fig(dom.fig)), 'Opens ' + coinName(coinRow(dom.id) || dom) + '’s card and its on-chain data')
+        : dom ? glTile('coin', dom.id, '👑 ' + (dom.symbol || 'Largest coin') + ' dominance', NA, esc(cap1(fig(dom.fig).why || 'its share is not worked out')), 'Opens ' + coinName(coinRow(dom.id) || dom) + '’s card and its on-chain data')
         : glTile('map', '', '👑 Dominance', nr, 'the largest coin’s share of the market', 'Opens the bubble map, where the three largest show their dominance'),
-      glTile('chain', 'robinhood', '⛓️ Robinhood Chain', rh && val(rh.tvl) != null ? esc(usd(val(rh.tvl))) + ' <small>TVL</small>' : nr,
-        rh ? (val(rh.volume) != null ? 'DEX volume ' + esc(usd(val(rh.volume))) + ' · ' : '') + srcLine(fig(rh.tvl)) : 'its TVL and DEX volume (DefiLlama)', 'Opens Robinhood Chain in the main view: its TVL, volume, fees, activity, top tokens and new pools'),
+      glTile('chain', 'robinhood', '⛓️ Robinhood Chain', rh && val(rh.tvl) != null ? esc(usd(val(rh.tvl))) + ' <small>TVL</small>' : rh ? NA : nr,
+        rh ? (val(rh.tvl) != null ? srcLine(fig(rh.tvl)) : esc(cap1(fig(rh.tvl).why || 'the source gave no figure for this'))) + (val(rh.volume24h) != null ? ' · ' + esc(fig(rh.volume24h).label || 'DEX volume') + ' ' + esc(usd(val(rh.volume24h))) : '') : 'its TVL and DEX volume (DefiLlama)',
+        'Opens Robinhood Chain in the main view: its TVL, volume, fees, activity, top tokens and new pools'),
       glTile('tab', 'watch', '⭐ Your watchlist', mine ? (wl != null ? wl + ' token' + (wl === 1 ? '' : 's') : '<span class="mkt-na">Reading…</span>') : 'Sign in', mine ? 'saved with ☆ on Robinhood Chain · private to you' : 'to keep the tokens you save', 'Opens the Watchlist tab: the tokens you saved, with their price and 24 h move'),
-      glTile('tab', 'calls', '📣 Most called today', ct ? esc(ct.symbol ? '$' + ct.symbol : ct.name || short(ct.token)) : MV.calls ? '<span class="mkt-na">None yet</span>' : nr,
-        ct ? (Number(ct.callers) || 0) + ' member' + ((Number(ct.callers) || 0) === 1 ? '' : 's') + ' called it · calls are picks, not advice' : 'Send Calls on Robinhood Chain tokens, last 24 h', 'Opens the Calls tab: the tokens members called most, by how many called each'),
+      glTile('tab', 'calls', '📣 Most called, last 24 h', ct ? esc(ct.symbol ? '$' + ct.symbol : ct.name || short(ct.token)) : MV.calls ? '<span class="mkt-na">None yet</span>' : nr,
+        ct ? (Number(ct.callers) || 0) + ' member' + ((Number(ct.callers) || 0) === 1 ? '' : 's') + ' called it' + (MV.calls.at ? ' · read ' + agoEl(MV.calls.at) : '') + ' · calls are picks, not advice' : 'Send Calls on Robinhood Chain tokens', 'Opens the Calls tab: the tokens members called most, by how many called each'),
     ].join('');
     wireLogos(g);
   }
   // the most-called token for its tile (the Calls tab reads the same answer, kept a minute)
-  async function loadCallsTop() { try { MV.calls = await getJSON('/api/calls/top-tokens?window=24h'); } catch { MV.calls = null; } paintGlance(); }
+  async function loadCallsTop() { try { MV.calls = await getJSON(CALLS_TOP); } catch { MV.calls = null; } paintSoon(); }
   if (mvEl.grid) mvEl.grid.addEventListener('click', (e) => {
     const b = e.target.closest('[data-glance]'); if (!b) return;
     const k = b.dataset.glance, arg = b.dataset.arg || '';
-    if (k === 'coin') { openCoin(coinRow(arg)); return; }
+    if (k === 'coin') { openCoin(coinRow(arg), arg); return; }
     if (k === 'chain') { open({ chain: arg, token: null }, true); return; }
     if (k === 'tab') { if (S.tab !== arg) pickTab(arg, true); else { const t = $('mkt-tab-' + arg); if (t) t.focus(); } const side = $('mkt-side'); if (side) { try { side.scrollIntoView({ block: 'start', behavior: reduced() ? 'auto' : 'smooth' }); } catch { side.scrollIntoView(); } } return; }
     // the map: opened if it was folded (not remembered), and brought into view
@@ -2853,5 +2881,5 @@
   if (mapEl.sec) setMapOpen(mapPref.get() !== 'hidden', false);
   // the movers banner and the tiles: always (the movers answer is small and is the server's own work, no vendor asked for it)
   paintGlance(); loadMovers(); loadCallsTop();
-  if (S.tab !== 'chains') getJSON('/api/market/chains').then((j) => { if (!S.chainRows && j && Array.isArray(j.rows)) { S.chainRows = j.rows; j.rows.forEach((r) => { if (r && r.key && r.name) names.set(r.key, r.name); }); } paintGlance(); }).catch(() => {});
+  getJSON(RH_VIEW).then((j) => { S.rhView = j; paintSoon(); }).catch(() => {});
 })();

@@ -9,15 +9,22 @@
      even when the pool they saved is not the one that list shows (/api/watchlist/ids sends both since 2026-11-17) */
   const tokens = new Set();
   let loaded = false;
+  /* the server's list read again (after a removal, a sign-in) must not undo a save still on its way: the saves in flight are laid back
+     over it (pending: pair → its token). gen: a sign-out, or a newer read, makes an older read's answer stale — it is dropped. */
+  const pending = new Map();
+  let gen = 0;
 
   async function load() {
+    const my = ++gen;
     try {
       const r = await fetch('/api/watchlist/ids', { credentials: 'same-origin' });
-      if (!r.ok) return;
+      if (!r.ok || my !== gen) return;
       const j = await r.json();
+      if (my !== gen) return;
       ids.clear(); tokens.clear();
       (j.ids || []).forEach(a => ids.add(String(a).toLowerCase()));
       (j.tokens || []).forEach(a => tokens.add(String(a).toLowerCase()));
+      pending.forEach((tok, pair) => { ids.add(pair); if (tok) tokens.add(tok); });
       loaded = true;
       document.dispatchEvent(new CustomEvent('watchlist:changed'));
     } catch {}
@@ -31,6 +38,8 @@
     ids.add(pair.toLowerCase());                 // optimistic
     const tok = p.token && p.token.address ? String(p.token.address).toLowerCase() : null, hadTok = tok ? tokens.has(tok) : true;
     if (tok) tokens.add(tok);
+    pending.set(pair.toLowerCase(), tok);
+    const settled = () => pending.delete(pair.toLowerCase());
     document.dispatchEvent(new CustomEvent('watchlist:changed'));
     try {
       const r = await fetch('/api/watchlist', {
@@ -41,13 +50,17 @@
           snapshot: p,
         }),
       });
+      settled();
       if (!r.ok) { ids.delete(pair.toLowerCase()); if (!hadTok) tokens.delete(tok); document.dispatchEvent(new CustomEvent('watchlist:changed')); if (r.status === 401 && window.AUTH) AUTH.open(); else if (window.SFX) SFX.play('error'); return false; }   // refused: the star goes hollow again, with no toast to say so
       const j = await r.json().catch(() => ({}));
       if (window.SFX) SFX.play('success');   // the server kept it
       if (window.sendToast) sendToast('⭐ Saved to your watchlist');
       if (window.showPoints && j.pointsEarned > 0) showPoints(j.pointsEarned);  // +N pop, nav badge, notif refresh
+      // kept by the server now: a list read while it was on its way may have dropped it — it is put back, and the page told
+      if (!ids.has(pair.toLowerCase()) || (tok && !tokens.has(tok))) { ids.add(pair.toLowerCase()); if (tok) tokens.add(tok); }
+      document.dispatchEvent(new CustomEvent('watchlist:changed'));
       return true;
-    } catch { ids.delete(pair.toLowerCase()); if (!hadTok) tokens.delete(tok); document.dispatchEvent(new CustomEvent('watchlist:changed')); if (window.SFX) SFX.play('error'); return false; }
+    } catch { settled(); ids.delete(pair.toLowerCase()); if (!hadTok) tokens.delete(tok); document.dispatchEvent(new CustomEvent('watchlist:changed')); if (window.SFX) SFX.play('error'); return false; }
   }
   async function remove(pair) {
     pair = String(pair || ''); if (!pair) return false;
@@ -97,5 +110,5 @@
 
   // load once we know who the user is
   if (window.AUTH && AUTH.ready) AUTH.ready.then(() => { if (AUTH.user) load(); });
-  document.addEventListener('auth:change', e => { if (e && e.detail) load(); else { ids.clear(); tokens.clear(); loaded = false; document.dispatchEvent(new CustomEvent('watchlist:changed')); } });
+  document.addEventListener('auth:change', e => { if (e && e.detail) load(); else { gen++; pending.clear(); ids.clear(); tokens.clear(); loaded = false; document.dispatchEvent(new CustomEvent('watchlist:changed')); } });
 })();

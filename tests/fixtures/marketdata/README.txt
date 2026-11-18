@@ -102,3 +102,6 @@ rwa-cg-lookalikes.json above), and says nothing about what CoinGecko lists beyon
   The suite builds the rest of the answer it serves and says so where it is built: the measured lookalike rows appended, and
   18,000 filler rows ("zz-filler-N", addresses counted up from 1) so the body is the size of CoinGecko's real list (some 15 to
   20 thousand coins), never written here as if read.
+  Most of the top 100 are not in this sample, so the answers built from it (tests/fixtures/market/heatmap.json and movers.json)
+  give those coins onchain null with "not in CoinGecko's coin list as read at …" — what the server says of a coin the last good
+  read did not hold — never "none", which only a coin the list holds with no address on the three chains gets.

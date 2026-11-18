@@ -617,14 +617,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F68480%2Flarge%2Ffigure.png%3F1755863954",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $FIGR_HELOC on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$FIGR_HELOC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "hyperliquid",
@@ -687,15 +681,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F50882%2Flarge%2Fhyperliquid.jpg%3F1729431300",
-   "onchain": {
-    "kind": "native",
-    "chain": "hyperliquid",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$HYPE is Hyperliquid L1’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$HYPE is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "zcash",
@@ -756,14 +743,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F486%2Flarge%2FBrandmark-Yellow_%25281%2529.png%3F1785810558",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $ZEC on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$ZEC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "dogecoin",
@@ -824,14 +805,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F5%2Flarge%2Fdogecoin.png%3F1696501409",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $DOGE on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$DOGE is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "monero",
@@ -953,14 +928,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F39926%2Flarge%2Fusds.webp%3F1726666683",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $USDS on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$USDS is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "whitebit",
@@ -1014,14 +983,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F27045%2Flarge%2Fwbt_token.png%3F1696526096",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $WBT on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$WBT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "leo-token",
@@ -1075,14 +1038,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F8418%2Flarge%2Fleo-token.png%3F1696508607",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $LEO on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$LEO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "chainlink",
@@ -1214,15 +1171,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F975%2Flarge%2Fcardano.png%3F1696502090",
-   "onchain": {
-    "kind": "native",
-    "chain": "cardano",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$ADA is Cardano’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$ADA is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "stellar",
@@ -1283,15 +1233,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F100%2Flarge%2FfmpFRHHQ_400x400.jpg%3F1735231350",
-   "onchain": {
-    "kind": "native",
-    "chain": "stellar",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$XLM is Stellar’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$XLM is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "bitcoin-cash",
@@ -1352,14 +1295,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F780%2Flarge%2Fbitcoin-cash-circle.png%3F1696501932",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $BCH on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$BCH is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "near",
@@ -1420,15 +1357,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F10365%2Flarge%2Fnear.jpg%3F1696510367",
-   "onchain": {
-    "kind": "native",
-    "chain": "near",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$NEAR is Near’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$NEAR is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "rain",
@@ -1482,14 +1412,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F69134%2Flarge%2FRain_logo_1_.png%3F1762952191",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $RAIN on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$RAIN is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "dai",
@@ -1624,14 +1548,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F33613%2Flarge%2Fusde.png%3F1733810059",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $USDE on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$USDE is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "litecoin",
@@ -1815,14 +1733,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F54977%2Flarge%2FUSD1_1000x1000_transparent.png%3F1749297002",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $USD1 on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$USD1 is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "canton-network",
@@ -1876,14 +1788,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F70468%2Flarge%2FCanton-Ticker_%25281%2529.png%3F1762826299",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $CC on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$CC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "avalanche-2",
@@ -1944,15 +1850,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12559%2Flarge%2FAvalanche_Circle_RedWhite_Trans.png%3F1696512369",
-   "onchain": {
-    "kind": "native",
-    "chain": "avalanche",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$AVAX is Avalanche’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$AVAX is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "sui",
@@ -2015,15 +1914,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F26375%2Flarge%2Fsui-ocean-square.png%3F1727791290",
-   "onchain": {
-    "kind": "native",
-    "chain": "sui",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$SUI is Sui’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$SUI is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "tether-gold",
@@ -2086,14 +1978,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F10481%2Flarge%2Flogo.png%3F1774627372",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $XAUT on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$XAUT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "the-open-network",
@@ -2147,15 +2033,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F17980%2Flarge%2FGram_Circular_Badge.png%3F1781524778",
-   "onchain": {
-    "kind": "native",
-    "chain": "ton",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$GRAM is TON’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$GRAM is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "global-dollar",
@@ -2288,14 +2167,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F3688%2Flarge%2Fhbar.png%3F1696504364",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $HBAR on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$HBAR is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "paypal-usd",
@@ -2358,14 +2231,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F31212%2Flarge%2FPYUSD_Token_Logo_2x.png%3F1765987788",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $PYUSD on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$PYUSD is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "shiba-inu",
@@ -2497,14 +2364,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F39651%2Flarge%2FRLUSD_200x200_%25281%2529.png%3F1727376633",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $RLUSD on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$RLUSD is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "bittensor",
@@ -2567,14 +2428,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F28452%2Flarge%2FARUsPeNQ_400x400.jpeg%3F1696527447",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $TAO on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$TAO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "quant-network",
@@ -2637,14 +2492,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F3370%2Flarge%2F5ZOu7brX_400x400.jpg%3F1696504070",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $QNT on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$QNT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "crypto-com-chain",
@@ -2708,15 +2557,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F7310%2Flarge%2Fcro_token_logo.png%3F1696507599",
-   "onchain": {
-    "kind": "native",
-    "chain": "cronos",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$CRO is Cronos’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$CRO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "ondo-us-dollar-yield",
@@ -2770,14 +2612,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F31700%2Flarge%2Fusdy_%25281%2529.png%3F1696530524",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $USDY on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$USDY is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "hashnote-usyc",
@@ -2831,14 +2667,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F51054%2Flarge%2FHashnote_SDYC_200x200.png%3F1730370965",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $USYC on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$USYC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "bitway",
@@ -2892,14 +2722,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F71205%2Flarge%2FBTW_Token_200x200.png%3F1786291907",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $BTW on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$BTW is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "memecore",
@@ -2953,14 +2777,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F53247%2Flarge%2Fsquare-bg-transparent.png%3F1752637478",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $M on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$M is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "okb",
@@ -3021,15 +2839,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F4463%2Flarge%2FWeChat_Image_20220118095654.png%3F1696505053",
-   "onchain": {
-    "kind": "native",
-    "chain": "xlayer",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$OKB is X Layer’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$OKB is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "ethena",
@@ -3154,14 +2965,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F36291%2Flarge%2Fblackrock.png%3F1711013223",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $BUIDL on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$BUIDL is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "pepe",
@@ -3291,14 +3096,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F54558%2Flarge%2Fff_200_X_200.png%3F1740741076",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $USDF on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$USDF is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "spiko-amundi-overnight-swap-fund-eur",
@@ -3352,14 +3151,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102172591%2Flarge%2FFund_eurSAF0.png%3F1774104814",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $EURSAFO on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$EURSAFO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "aave",
@@ -3491,14 +3284,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F9519%2Flarge%2Fasset-paxg.png%3F1785284785",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $PAXG on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$PAXG is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "ondo-finance",
@@ -3561,14 +3348,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F26580%2Flarge%2FONDO.png%3F1696525656",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $ONDO on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$ONDO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "pump-fun",
@@ -3622,14 +3403,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F67164%2Flarge%2Fpump.jpg%3F1751949376",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $PUMP on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$PUMP is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "aster-2",
@@ -3692,14 +3467,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F69040%2Flarge%2F_ASTER.png%3F1757326782",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $ASTER on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$ASTER is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "world-liberty-financial",
@@ -3762,14 +3531,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F50767%2Flarge%2Fwlfi.png%3F1756438915",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $WLFI on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$WLFI is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "united-stables",
@@ -3823,14 +3586,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F71157%2Flarge%2Funited-stables-logo.jpg%3F1766061640",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $U on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$U is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "htx-dao",
@@ -3884,14 +3641,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F35491%2Flarge%2FFrame_1321318576.png%3F1708908626",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $HTX on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$HTX is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "mantle",
@@ -3952,15 +3703,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F30980%2Flarge%2FMNT_Token_Logo.png%3F1765516974",
-   "onchain": {
-    "kind": "native",
-    "chain": "mantle",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$MNT is Mantle’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$MNT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "sky",
@@ -4014,14 +3758,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F39925%2Flarge%2Fsky.jpg%3F1724827980",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $SKY on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$SKY is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "polkadot",
@@ -4084,14 +3822,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12171%2Flarge%2Fpolkadot.jpg%3F1766533446",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $DOT on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$DOT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "usdd",
@@ -4154,14 +3886,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F25380%2Flarge%2FUUSD.jpg%3F1696524513",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $USDD on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$USDD is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "morpho",
@@ -4224,14 +3950,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F29837%2Flarge%2FMorpho-token-icon.png%3F1726771230",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $MORPHO on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$MORPHO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "worldcoin-wld",
@@ -4365,14 +4085,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F68227%2Flarge%2Fbfusd.png%3F1755132827",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $BFUSD on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$BFUSD is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "internet-computer",
@@ -4433,14 +4147,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F14495%2Flarge%2FInternet_Computer_logo.png%3F1696514180",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $ICP on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$ICP is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "usdgo",
@@ -4494,14 +4202,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102172077%2Flarge%2FUSDGO_Primary_Icon.png%3F1789694084",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $USDGO on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$USDGO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "bitget-token",
@@ -4562,15 +4264,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F11610%2Flarge%2FBitget_logo.png%3F1736925727",
-   "onchain": {
-    "kind": "native",
-    "chain": "morph",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$BGB is Morph’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$BGB is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "just",
@@ -4633,14 +4328,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F11095%2Flarge%2FJUST.jpg%3F1696511035",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $JST on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$JST is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "ethereum-classic",
@@ -4701,14 +4390,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F453%2Flarge%2Fethereum-classic-logo.png%3F1696501717",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $ETC on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$ETC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "venice-token",
@@ -4771,14 +4454,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F54023%2Flarge%2FVVV_Token_Transparent.png%3F1741856877",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $VVV on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$VVV is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "arbitrum",
@@ -4841,15 +4518,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F16547%2Flarge%2Farb.jpg%3F1721358242",
-   "onchain": {
-    "kind": "native",
-    "chain": "arbitrum",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$ARB is Arbitrum’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$ARB is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "kucoin-shares",
@@ -4912,14 +4582,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F1047%2Flarge%2Fsa9z79.png%3F1696502152",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $KCS on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$KCS is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "gatechain-token",
@@ -4973,14 +4637,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F8183%2Flarge%2F200X200.png%3F1735246724",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $GT on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$GT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "kaspa",
@@ -5041,14 +4699,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F25751%2Flarge%2Fkaspa-icon-exchanges.png%3F1696524837",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $KAS on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$KAS is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "polygon-ecosystem-token",
@@ -5102,15 +4754,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F32440%2Flarge%2Fpol.png%3F1759114181",
-   "onchain": {
-    "kind": "native",
-    "chain": "polygon",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$POL is Polygon’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$POL is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "open-usd",
@@ -5164,14 +4809,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174264%2Flarge%2Fopen_standard.png%3F1782864430",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $OUSD on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$OUSD is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "pi-network",
@@ -5235,14 +4874,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F54342%2Flarge%2Fpi_network.jpg%3F1739347576",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $PI on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$PI is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "algorand",
@@ -5303,14 +4936,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F4380%2Flarge%2Fdownload.png%3F1696504978",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $ALGO on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$ALGO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "jupiter-exchange-solana",
@@ -5435,14 +5062,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F1481%2Flarge%2Fcosmos_hub.png%3F1696502525",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $ATOM on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$ATOM is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "nexo",
@@ -5505,14 +5126,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F3695%2Flarge%2FCG-nexo-token-200x200_2x.png%3F1730414360",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $NEXO on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$NEXO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "render-token",
@@ -5573,14 +5188,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F11636%2Flarge%2Frndr.png%3F1696511529",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $RENDER on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$RENDER is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "injective-protocol",
@@ -5641,14 +5250,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12882%2Flarge%2FOther_200x200.png%3F1738782212",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $INJ on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$INJ is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "gho",
@@ -5711,14 +5314,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F30663%2Flarge%2Fgho-token-logo.png%3F1720517092",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $GHO on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$GHO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "superstate-short-duration-us-government-securities-fund-ustb",
@@ -5772,14 +5369,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F35012%2Flarge%2FInvesco_icon_lg.png%3F1780816895",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $USTB on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$USTB is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "filecoin",
@@ -5842,14 +5433,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12817%2Flarge%2Ffilecoin.png%3F1696512609",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $FIL on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$FIL is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "lighter",
@@ -5903,14 +5488,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F71121%2Flarge%2Flighter.png%3F1765888098",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $LIT on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$LIT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "pancakeswap-token",
@@ -6032,14 +5611,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F2912%2Flarge%2Fxdc-icon.png%3F1696503661",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $XDC on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$XDC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "dash",
@@ -6100,14 +5673,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F19%2Flarge%2Fdash-logo.png%3F1696501423",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $DASH on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$DASH is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "midnight-3",
@@ -6161,14 +5728,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F71015%2Flarge%2Fmidnight.png%3F1765193080",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $NIGHT on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$NIGHT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "layerzero",
@@ -6231,14 +5792,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F28206%2Flarge%2FftxG9_TJ_400x400.jpeg%3F1696527208",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $ZRO on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$ZRO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "ether-fi",
@@ -6354,14 +5909,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F70446%2Flarge%2Fjaaa.png%3F1762078666",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $JAAA on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$JAAA is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "pearl-2",
@@ -6415,14 +5964,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102173580%2Flarge%2Fpearl.png%3F1780324634",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $PEARL on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$PEARL is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "beldex",
@@ -6483,14 +6026,8 @@
     "notes": []
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F5111%2Flarge%2FBeldex.png%3F1696505631",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $BDX on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$BDX is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "usual-usd",
@@ -6544,14 +6081,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F38272%2Flarge%2FUSD0LOGO.png%3F1716962811",
-   "onchain": {
-    "kind": "none",
-    "scannable": false,
-    "src": "coingecko",
-    "at": 1793320560000,
-    "why": "CoinGecko lists no contract for $USD0 on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$USD0 is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "aptos",
@@ -6614,15 +6145,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F26455%2Flarge%2FAptos-Network-Profile-Picture_%25281%2529.png%3F1788259511",
-   "onchain": {
-    "kind": "native",
-    "chain": "aptos",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$APT is Aptos’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$APT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "flare-networks",
@@ -6685,15 +6209,8 @@
     ]
    },
    "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F28624%2Flarge%2FFLR-icon200x200.png%3F1696527609",
-   "onchain": {
-    "kind": "native",
-    "chain": "flare",
-    "scannable": false,
-    "src": "defillama",
-    "at": 1793037600000,
-    "why": "$FLR is Flare’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
-   },
-   "onchainWhy": null
+   "onchain": null,
+   "onchainWhy": "$FLR is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   }
  ],
  "counts": {

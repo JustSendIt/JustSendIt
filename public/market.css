@@ -492,6 +492,11 @@ html.motion-off .mkt-caret { transition: none; }   /* the nav's ⏸ stops motion
 @keyframes mkt-mv { to { transform: translateX(-50%); } }
 /* a pointer on it or the keyboard in it stops it, so a mover can be read and pressed */
 .mkt-movers:hover .mkt-movers-track, .mkt-movers:focus-within .mkt-movers-track { animation-play-state: paused; }
+/* a mover reached with the keyboard: the strip stops where it is a row (as under ⏸), so the browser can bring the focused one into view —
+   paused mid-loop, it sat clipped off the edge with its focus ring unseen */
+.mkt-movers:has(.mkt-mover:focus-visible) .mkt-movers-track { animation: none; }
+.mkt-movers:has(.mkt-mover:focus-visible) .mkt-movers-dup { display: none; }
+.mkt-movers:has(.mkt-mover:focus-visible) .mkt-movers-win { overflow-x: auto; overscroll-behavior-x: contain; }
 /* ⏸ and the reduced-motion setting: it does not move at all — the copy goes, and the row scrolls by hand */
 html.motion-off .mkt-movers-track { animation: none; }
 html.motion-off .mkt-movers-dup { display: none; }

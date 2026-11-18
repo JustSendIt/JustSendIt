@@ -1796,10 +1796,10 @@ async function browserWalk() {
     await step('the movers banner: the ten biggest moves, in order, moving where motion is wanted', async () => {
       await go('/market', 1280); await moversReady();
       const b = await ev('(() => { const w = document.getElementById("mkt-movers-win"), tr = w.querySelector(".mkt-movers-track"), lists = w.querySelectorAll(".mkt-movers-list"), first = [...lists[0].querySelectorAll("[data-mover]")];'
-        + ' return { ids: first.map((x) => x.dataset.mover), texts: first.map((x) => x.textContent), dup: lists.length === 2 && lists[1].getAttribute("aria-hidden") === "true" && lists[1].inert === true && lists[1].querySelectorAll("[data-mover]").length === 10,'
+        + ' return { ids: first.map((x) => x.dataset.mover), texts: first.map((x) => x.textContent), dup: lists.length === 2 && lists[1].getAttribute("aria-hidden") === "true" && lists[1].inert === false && [...lists[1].querySelectorAll("[data-mover]")].filter((b) => b.tabIndex === -1).length === 10,'
         + ' anim: getComputedStyle(tr).animationName, state: getComputedStyle(tr).animationPlayState, dur: tr.style.getPropertyValue("--mv-dur"), src: document.getElementById("mkt-movers-src").textContent, tips: first.every((x) => (x.dataset.tip || "").length >= 8) }; })()');
       const want = MVF.rows.map((r) => r.id), t0 = b.texts[0] || '';
-      check('the banner runs the ten coins of /api/market/movers in its order (the biggest 24 h move either way first), each with its ticker, price and move, a description on every one; the copy that closes the loop is hidden from readers and the keyboard',
+      check('the banner runs the ten coins of /api/market/movers in its order (the biggest 24 h move either way first), each with its ticker, price and move, a description on every one; the copy that closes the loop is hidden from readers and the keyboard (but can be pressed)',
         JSON.stringify(b.ids) === JSON.stringify(want) && /^ENA\$0\.1665▼ −20\.1%$/.test(t0) && /^HYPE/.test(b.texts.join('|')) === false && b.dup && b.tips, JSON.stringify(b).slice(0, 600));
       check('  ...it moves (one loop, its length setting its speed) and says what it ranks, when it was read, and that it is not advice',
         b.anim === 'mkt-mv' && b.state === 'running' && /^\d+s$/.test(b.dur) && /Ranked by the size of the 24 h move, either way, among CoinGecko’s 100 largest coins/.test(b.src) && /not advice, never a tip to buy/.test(b.src), JSON.stringify({ anim: b.anim, state: b.state, dur: b.dur, src: b.src }));
@@ -1808,18 +1808,27 @@ async function browserWalk() {
       const hov = await ev('getComputedStyle(document.querySelector(".mkt-movers-track")).animationPlayState');
       await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 5, y: 880, button: 'none' }); await sleep(150);
       await ev('document.querySelector("#mkt-movers-win [data-mover]").focus({ preventScroll: true }), true'); await sleep(80);
-      const foc = await ev('getComputedStyle(document.querySelector(".mkt-movers-track")).animationPlayState');
+      const foc = await ev('(() => { const cs = getComputedStyle(document.querySelector(".mkt-movers-track")); return cs.animationName === "none" ? "stopped" : cs.animationPlayState; })()');
+      await ev('document.activeElement.blur(), true');
+      await ev('document.querySelector("#mkt-movers-win [data-mover]").focus(), true'); await key('Tab', 'Tab', 9); await sleep(120);
+      const kb = await ev('(() => { const a = document.activeElement, w = document.getElementById("mkt-movers-win"), tr = w.querySelector(".mkt-movers-track"), r = a.getBoundingClientRect(), wr = w.getBoundingClientRect(); return { id: a.dataset.mover, fv: a.matches(":focus-visible"), anim: getComputedStyle(tr).animationName, dup: getComputedStyle(w.querySelector(".mkt-movers-dup")).display, inView: r.left >= wr.left - 1 && r.right <= wr.right + 1 }; })()');
       await ev('document.activeElement.blur(), true');
       const still = '(() => { const w = document.getElementById("mkt-movers-win"), tr = w.querySelector(".mkt-movers-track"); return { anim: getComputedStyle(tr).animationName, dup: getComputedStyle(w.querySelector(".mkt-movers-dup")).display, ox: getComputedStyle(w).overflowX }; })()';
       await ev('document.documentElement.classList.add("motion-off"), true'); const off = await ev(still); await ev('document.documentElement.classList.remove("motion-off"), true');
       await cdp('Emulation.setEmulatedMedia', { features: [{ name: 'prefers-reduced-motion', value: 'reduce' }] }); const rm = await ev(still); await cdp('Emulation.setEmulatedMedia', { features: [] });
       const stillOK = (x) => x.anim === 'none' && x.dup === 'none' && x.ox === 'auto';
-      check('  ...it stops under a pointer and while a mover has the keyboard; under ⏸ (html.motion-off) and the reduced-motion setting it does not move at all: the copy goes and the row scrolls by hand',
-        hov === 'paused' && foc === 'paused' && stillOK(off) && stillOK(rm), JSON.stringify({ hov, foc, off, rm }));
+      check('  ...it stops under a pointer and while a mover has the focus; reached with the keyboard (Tab) it stops as a row, the copy gone, the focused mover inside the strip; under ⏸ (html.motion-off) and the reduced-motion setting it does not move at all: the copy goes and the row scrolls by hand',
+        hov === 'paused' && (foc === 'paused' || foc === 'stopped') && kb.id === MVF.rows[1].id && kb.fv && kb.anim === 'none' && kb.dup === 'none' && kb.inView && stillOK(off) && stillOK(rm), JSON.stringify({ hov, foc, kb, off, rm }));
       const lay = {};
       for (const w of [320, 390]) { await go('/market', w); await moversReady(); lay[w] = await ev(LAYOUT); }
       check('  ...at 320 and 390 px the banner and the glance fit: no sideways scroll, nothing outside the column, no text under the floor',
         [320, 390].every((w) => lay[w].sw <= lay[w].iw && !lay[w].out.length && !lay[w].small.length), JSON.stringify(lay).slice(0, 600));
+      FAKE.moversPatch = (j) => Object.assign(j, { rows: [], gainers: [], losers: [], dominance: [], counts: { up: 0, down: 0, flat: 0, none: 0, of: 0 }, why: 'CoinGecko\'s top 100 coins has not been read yet — the server reads them every 10 minutes' });
+      await go('/market', 1280); await until('/not been read yet/.test(document.getElementById("mkt-movers-win").textContent)');
+      const unread = await ev('[...document.querySelectorAll("#mkt-glance-grid .mkt-gl")].map((t) => t.textContent).find((x) => /Top 100/.test(x)) || ""');
+      FAKE.moversPatch = null;
+      check('  ...before the 100 are read, the banner says why and the breadth tile says "Not read yet" with the server\'s reason — never ▼ 0 ▲ 0',
+        /Not read yet/.test(unread) && /has not been read yet/.test(unread) && !/▼ 0|▲ 0/.test(unread), unread);
       FAKE.moversDown = true; await go('/market', 1280);
       await until('!!document.querySelector("#mkt-movers-src [data-retry=movers]")');
       const down = { t: await textOf('#mkt-movers-win'), retry: await ev('!!document.querySelector("#mkt-movers-src [data-retry=movers]")') };
@@ -1870,18 +1879,38 @@ async function browserWalk() {
       const tile = await modal(); await closeModal();
       check('  ...the same coin\'s bubble on the map and its glance tile open the same popup',
         /Ethena \$ENA/.test(bub.title) && bub.dash && /Ethena \$ENA/.test(tile.title) && tile.dash, JSON.stringify({ bub, tile }));
-      await ev('document.querySelector("#mkt-glance-grid [data-glance=coin][data-arg=hyperliquid]").click(), true');
+      // a press on the loop's copy (a real one, hit-tested): the strip held where the copy fills the window (no mover focused: a focused
+      // one stops the strip as a row, the copy put away)
+      await ev('document.activeElement && document.activeElement.blur && document.activeElement.blur(), true');
+      await ev('(() => { const tr = document.querySelector("#mkt-movers-win .mkt-movers-track"); tr.style.animation = "none"; tr.style.transform = "translateX(-50%)"; })(), true'); await sleep(100);
+      const dupTarget = await ev('(() => { const b = document.querySelector("#mkt-movers-win .mkt-movers-dup [data-mover]"), r = b.getBoundingClientRect(), x = r.left + r.width / 2, y = r.top + r.height / 2, top = document.elementFromPoint(x, y); return { id: b.dataset.mover, x, y, hit: !!top && (top === b || b.contains(top)) }; })()');
+      for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased']) await cdp('Input.dispatchMouseEvent', { type, x: dupTarget.x, y: dupTarget.y, button: type === 'mouseMoved' ? 'none' : 'left', clickCount: type === 'mouseMoved' ? 0 : 1 });
+      await modalReady(); const dupM = await modal(); await closeModal();
+      check('  ...a press on a mover the loop is showing from its copy opens it too (the copy is not inert: hit-tested, it is the button)', dupTarget.hit && dupTarget.id === 'ethena' && /Ethena \$ENA/.test(dupM.title) && dupM.dash, JSON.stringify({ dupTarget, dupM }));
+      await ev('document.querySelector("#mkt-glance-grid [data-glance=coin][data-arg=bitcoin]").click(), true');
       await until('!document.getElementById("mkt-map-card").hidden && /On-chain/.test(document.getElementById("mkt-map-card").textContent)');
-      const hype = await ev('(() => { const c = document.getElementById("mkt-map-card"), b = c.querySelector("[data-coin-chain]"); return { t: c.textContent, chain: b ? b.dataset.coinChain : null, tip: b ? (b.dataset.tip || "").length : 0, modal: !document.getElementById("token-modal").hasAttribute("hidden") }; })()');
+      const btc = await ev('(() => { const c = document.getElementById("mkt-map-card"), b = c.querySelector("[data-coin-chain]"); return { t: c.textContent, chain: b ? b.dataset.coinChain : null, tip: b ? (b.dataset.tip || "").length : 0, modal: !document.getElementById("token-modal").hasAttribute("hidden") }; })()');
       await ev('document.querySelector("#mkt-map-card [data-coin-chain]").click(), true');
-      await until('location.search === "?chain=hyperliquid"'); await viewReady();
-      const hv = await textOf('#mkt-vh');
+      await until('location.search === "?chain=bitcoin"'); await viewReady();
+      const bv = await textOf('#mkt-vh');
       await ev('document.querySelector("#mkt-movers-win [data-mover=\\"pearl-2\\"]").click(), true');
       await until('!document.getElementById("mkt-map-card").hidden && /^PEARL/.test(document.getElementById("mkt-map-card").textContent)');
       const pearl = await textOf('#mkt-map-card .mkt-coin-oc');
-      check('  ...a chain\'s own coin (Hyperliquid, from its glance tile) opens its card, whose ⛓️ On-chain box opens its chain\'s data in the main view; a coin with no contract the site reads (Pearl, from the banner) opens its card saying so',
-        !hype.modal && hype.chain === 'hyperliquid' && hype.tip >= 8 && /⛓️ On-chain/.test(hype.t) && /Hyperliquid/.test(hv)
-        && /No token contract|no contract/i.test(pearl) && /Robinhood Chain, Ethereum or Solana/.test(pearl), JSON.stringify({ hype: Object.assign({}, hype, { t: hype.t.slice(0, 300) }), hv, pearl }));
+      const pearlRow = FIX('heatmap.json').rows.find((r) => r.id === 'pearl-2');
+      check('  ...a chain\'s own coin (Bitcoin, from the dominance tile) opens its card, whose ⛓️ On-chain box opens its chain\'s data in the main view; a coin whose place on-chain is not known (Pearl, from the banner: not in the coin list the server read) opens its card saying why — never "no contract"',
+        !btc.modal && btc.chain === 'bitcoin' && btc.tip >= 8 && /⛓️ On-chain/.test(btc.t) && /Bitcoin/.test(bv) && /Dominance/.test(btc.t)
+        && pearlRow.onchain === null && pearl.includes(pearlRow.onchainWhy.slice(1, 60)) && !/no contract|No token contract/i.test(pearl), JSON.stringify({ btc: Object.assign({}, btc, { t: btc.t.slice(0, 300) }), bv, pearl }));
+      // the map folded away and not read: a coin's card from a tile opens the map, reads it, and opens the card from the map's own row
+      await ev('localStorage.setItem("jsi:market-map", "hidden"), true');
+      const h0 = FAKE.log.filter((x) => x.startsWith('/api/market/heatmap')).length;
+      await go('/market', 1280); await moversReady();
+      const folded = { body: await ev('document.getElementById("mkt-map-body").hidden'), asked: FAKE.log.filter((x) => x.startsWith('/api/market/heatmap')).length - h0 };
+      await ev('document.querySelector("#mkt-glance-grid [data-glance=coin][data-arg=bitcoin]").click(), true');
+      const opened = await until('!document.getElementById("mkt-map-card").hidden && /^BTC/.test(document.getElementById("mkt-map-card").textContent) ? document.getElementById("mkt-map-card").textContent : null');
+      const after = { body: await ev('document.getElementById("mkt-map-body").hidden'), kept: await ev('localStorage.getItem("jsi:market-map")'), focus: await ev('document.activeElement && document.activeElement.id') };
+      await ev('localStorage.removeItem("jsi:market-map"), true');
+      check('  ...with the map folded away (and so not read), the dominance tile opens the map — not remembered as opened — reads it, and opens Bitcoin\'s card from the map\'s own row (its dominance included), with the focus on it',
+        folded.body === true && folded.asked === 0 && !!opened && /Dominance59\.6%|Dominance\s*59\.6%/.test(opened) && after.body === false && after.kept === 'hidden' && after.focus === 'mkt-mapc-h', JSON.stringify({ folded, after, opened: String(opened).slice(0, 200) }));
     });
 
     await step('the Watchlist and Calls tabs, signed out and signed in', async () => {
@@ -2008,7 +2037,8 @@ async function runSuite() {
       /^\(function \(\) \{\n  'use strict';/m.test(code) && /\}\)\(\);\s*$/.test(JS) && !/\.on[a-z]+\s*=(?!=)/.test(code) && !/\son[a-z]+="/.test(code) && (code.match(/addEventListener\(/g) || []).length >= 15);
     // 2026-11-17: and two of the member's own reads and one of the site's (the Watchlist and Calls tabs): the watchlist, their calls' tokens, the most-called tokens
     check('  ...it reads only this site\'s own routes: one fetch, behind getJSON, and every caller names a /api/market/ path, the member\'s watchlist or their calls, or the most-called tokens (the CSP\'s connect-src stays as it is)',
-      fetches.length === 1 && fetches[0] === 'url' && asks.length >= 8 && asks.every((a) => a === 'url' || /^'\/api\/market\/|^'\/api\/watchlist'$|^'\/api\/calls\/mine\/ids'$|^'\/api\/calls\/top-tokens\?window=(' \+ w|24h')|^(chainsURL|tokensURL|chainViewURL|tokenViewURL|rwaURL)\(|^v\.token \? tokenViewURL/.test(a))
+      fetches.length === 1 && fetches[0] === 'url' && asks.length >= 8 && asks.every((a) => a === 'url' || /^'\/api\/market\/|^'\/api\/watchlist'$|^'\/api\/calls\/mine\/ids'$|^'\/api\/calls\/top-tokens\?window=(' \+ w|24h')|^(chainsURL|tokensURL|chainViewURL|tokenViewURL|rwaURL)\(|^v\.token \? tokenViewURL|^(CALLS_TOP|RH_VIEW)$/.test(a))
+      && /const RH_VIEW = '\/api\/market\/chain\?key=robinhood';/.test(code) && /CALLS_TOP = '\/api\/calls\/top-tokens\?window=24h';/.test(code)
       && /return '\/api\/market\/rwa' \+ \(q \? '\?' \+ q : ''\);/.test(code) && /getJSON\(rwaURL\(\)\)/.test(code) && /getJSON\('\/api\/market\/rwa\/token\?address=' \+ encodeURIComponent\(addr\)\)/.test(code)
       && /return '\/api\/market\/chains' \+/.test(code) && /return '\/api\/market\/tokens\?' \+/.test(code) && /return '\/api\/market\/chain\?' \+/.test(code) && /return '\/api\/market\/token\?' \+/.test(code)
       && !/https?:\/\/(?!www\.growthepie\.com|l2beat\.com\/scaling|www\.w3\.org\/2000\/svg|www\.coingecko\.com\/en\/coins\/' \+ encodeURIComponent\(cgId\))/.test(code.replace(/'https:\/\/'/g, '')) && !/\/api\/scan\?/.test(code), asks.join(' | '));
