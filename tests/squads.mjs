@@ -212,6 +212,46 @@ try {
   const lb = await api('/api/calls/leaderboard?window=all');
   check('squad calls never reach the public call leaderboard or a profile’s call stats', lb.status === 200 && !lb.j.top.some(t => t.username === A.name && t.calls >= 2) && /AND c\.squad_id IS NULL/.test(SRC) && /WHERE user_id=\? AND squad_id IS NULL ORDER BY created_at DESC/.test(SRC));
 
+  /* ═══ 6b. Market Data's small reads (2026-11-17): the tokens most called lately, my own calls, my watchlist's tokens ═══ */
+  {
+    const tok = (s) => '0x' + createHash('sha256').update(s + tag).digest('hex').slice(0, 40);
+    const T2 = tok('top2'), T3 = tok('top3'), T4 = tok('top4'), T5 = tok('top5');
+    const D = mkUser('__sq_d_' + tag), E = mkUser('__sq_e_' + tag);
+    const mkPub = (uid, t, sym, liq, ago = 60e3) => {   // a public call, straight into the DB (no price lookup): entry_liq is what the floor is checked on
+      const r = db.prepare(`INSERT INTO calls (user_id, token_addr, pair_addr, symbol, name, entry_price, entry_mc, entry_liq, peak_price, cur_price, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`)
+        .run(uid, t, '0x' + createHash('sha256').update('pair' + t).digest('hex').slice(0, 40), sym, sym + ' token', 1, 1e6, liq, 1, 1, Date.now() - ago);
+      const id = Number(r.lastInsertRowid); made.calls.push(id); return id;
+    };
+    const tA2 = mkPub(A.id, T2, 'TOP2', 5000), tB2 = mkPub(B.id, T2, 'TOP2', 5000), tC2 = mkPub(C.id, T2, 'TOP2', 5000, 30e3);   // three members call T2
+    mkPub(A.id, T3, 'TOP3', 5000); mkPub(B.id, T3, 'TOP3', 2000);                                                               // two call T3 (2000 is the floor itself)
+    mkPub(A.id, T4, 'TOP4', 1999); mkPub(B.id, T4, 'TOP4', 100); mkPub(C.id, T4, 'TOP4', null);                                 // T4: no call met the floor
+    mkPub(D.id, T5, 'TOP5', 5000); mkPub(E.id, T5, 'TOP5', 5000); mkPub(A.id, T5, 'TOP5', 5000, 3 * 864e5);                     // T5: a deleted member, the site's own account, and a call 3 days old (in 7d, not 24h)
+    db.prepare('UPDATE users SET deleted_at = ? WHERE id = ?').run(Date.now(), D.id); db.prepare('UPDATE users SET system = 1 WHERE id = ?').run(E.id);
+    const sq3 = mkCall(C.id, sid2 || sid, T3, 'TOP3', 1, 1, 1, 0, []);   // a squad call on T3: private, never counted
+    const top = await api('/api/calls/top-tokens', { noGate: true }), top7 = await api('/api/calls/top-tokens?window=7d', { noGate: true }), topBad = await api('/api/calls/top-tokens?window=1y', { noGate: true });
+    const r2 = top.j && top.j.rows.find((r) => r.token === T2), r3 = top.j && top.j.rows.find((r) => r.token === T3);
+    check('GET /api/calls/top-tokens: the tokens most called in the last 24 h by distinct members — T2 (3) above T3 (2), each with its newest call\'s symbol, name and pair, its calls and last call time; signed out, public',
+      top.status === 200 && top.j.window === '24h' && r2 && r3 && r2.callers === 3 && r2.calls === 3 && r3.callers === 2 && r3.calls === 2 && top.j.rows.indexOf(r2) < top.j.rows.indexOf(r3) && r2.symbol === 'TOP2' && r2.name === 'TOP2 token'
+      && /^0x[0-9a-f]{40}$/.test(r2.pair) && r2.lastAt === db.prepare('SELECT created_at FROM calls WHERE id = ?').get(tC2).created_at && top.j.rows.length <= 10 && /^distinct callers/.test(top.j.ranked), top.status + ' ' + JSON.stringify(top.j && top.j.rows.slice(0, 3)));
+    check('  ...public calls only, as the boards count them: a squad call (T3\'s) is never counted, a call under the $2,000 liquidity floor at entry is not (T4), nor a deleted member\'s or the site\'s own account\'s (T5), nor one outside the window',
+      r3 && r3.calls === 2 && !top.j.rows.some((r) => r.token === T4 || r.token === T5 || r.token === T1) && !!top7.j.rows.find((r) => r.token === T5 && r.callers === 1) && !top7.j.rows.some((r) => r.token === T4), JSON.stringify(top7.j && top7.j.rows.map((r) => [r.token.slice(0, 8), r.callers])));
+    check('  ...no usernames — the count is all; its market is null with why when no price could be read (this test server reads no price feed), never 0; window=7d works and anything else is a 400; 30 a minute per visitor, the whole answer kept a minute',
+      !JSON.stringify(top.j).includes(A.name) && !JSON.stringify(top.j).includes(B.name) && r2.market === null && typeof r2.marketWhy === 'string' && top7.status === 200 && top7.j.window === '7d' && topBad.status === 400
+      && /rateLimit\('calltop:' \+ clientIp\(req\), 30, 6e4\)/.test(SRC) && /const TOP_CALLED_TTL = 60 \* 1000, TOP_CALLED_N = 10;/.test(SRC) && /mcapIs: mc != null \? \(mk\.mcIs === 'fdv' \? 'fdv' : 'mcap'\) : null/.test(SRC), JSON.stringify(r2 && { m: r2.market, w: r2.marketWhy }));
+    const mineOut = await api('/api/calls/mine/ids', { noGate: true }), mineA = await api('/api/calls/mine/ids', { sid: A.sid }), mineB = await api('/api/calls/mine/ids', { sid: B.sid });
+    const aIds = db.prepare('SELECT id FROM calls WHERE user_id = ? ORDER BY created_at DESC, id DESC').all(A.id).map((r) => r.id);
+    check('GET /api/calls/mine/ids: signed out a 401; signed in, every one of my own calls newest first — { id, token, createdAt, squadId } — my squad calls included for me, nobody else\'s',
+      mineOut.status === 401 && mineA.status === 200 && JSON.stringify(mineA.j.calls.map((c) => c.id)) === JSON.stringify(aIds) && mineA.j.calls.every((c) => JSON.stringify(Object.keys(c)) === '["id","token","createdAt","squadId"]')
+      && mineA.j.calls.find((c) => c.id === c1).squadId === sid && mineA.j.calls.find((c) => c.id === tA2).squadId === null && mineA.j.calls.find((c) => c.id === tA2).token === T2 && !mineA.j.calls.some((c) => c.id === tB2 || c.id === c2 || c.id === sq3)
+      && mineB.j.calls.some((c) => c.id === tB2) && !mineB.j.calls.some((c) => c.id === tA2), mineOut.status + ' ' + JSON.stringify(mineA.j && mineA.j.calls.slice(0, 3)));
+    const W1 = '0x' + createHash('sha256').update('wl1' + tag).digest('hex').slice(0, 40), W2 = '0x' + createHash('sha256').update('wl2' + tag).digest('hex').slice(0, 40);
+    for (const [pair, token] of [[W1, T2], [W2, T2.toUpperCase().replace('0X', '0x')], [tok('wl3'), T3]]) db.prepare('INSERT INTO watchlist (user_id, pair_addr, token_addr, quote_symbol, added_at) VALUES (?,?,?,?,?)').run(A.id, pair, token, 'WETH', Date.now());
+    const wlOut = await api('/api/watchlist/ids', { noGate: true }), wlA = await api('/api/watchlist/ids', { sid: A.sid });
+    check('GET /api/watchlist/ids also names the tokens: each saved token once, lower case — ids (the saved pairs) exactly as before; signed out, both empty',
+      wlOut.status === 200 && JSON.stringify(wlOut.j) === '{"ids":[],"tokens":[]}' && wlA.status === 200 && JSON.stringify(Object.keys(wlA.j)) === '["ids","tokens"]' && wlA.j.ids.length === 3 && wlA.j.ids.includes(W1) && wlA.j.ids.includes(W2)
+      && wlA.j.tokens.length === 2 && wlA.j.tokens.includes(T2) && wlA.j.tokens.includes(T3), JSON.stringify(wlA.j));
+  }
+
   /* ═══ 7. members, conviction, settings, leaving ═══ */
   const memC = await api('/api/squads/' + sid + '/members', { sid: C.sid });
   const memA = await api('/api/squads/' + sid + '/members', { sid: A.sid });
@@ -267,7 +307,7 @@ try {
   for (const id of made.calls) { try { db.prepare('DELETE FROM call_hops WHERE call_id = ?').run(id); db.prepare('DELETE FROM calls WHERE id = ?').run(id); } catch {} }
   for (const id of made.squads) { try { db.prepare('DELETE FROM posts WHERE squad_id = ?').run(id); db.prepare('DELETE FROM calls WHERE squad_id = ?').run(id); db.prepare('DELETE FROM squads WHERE id = ?').run(id); } catch {} }
   for (const id of made.users) {
-    for (const t of ['sessions', 'identities', 'pinned_tokens', 'points_events', 'notifications', 'squad_members', 'squad_pin_state', 'call_hops', 'holder_state']) { try { db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(id); } catch {} }
+    for (const t of ['sessions', 'identities', 'pinned_tokens', 'points_events', 'notifications', 'squad_members', 'squad_pin_state', 'call_hops', 'holder_state', 'watchlist']) { try { db.prepare(`DELETE FROM ${t} WHERE user_id = ?`).run(id); } catch {} }
     try { db.prepare('DELETE FROM calls WHERE user_id = ?').run(id); db.prepare('DELETE FROM posts WHERE user_id = ?').run(id); db.prepare('DELETE FROM users WHERE id = ?').run(id); } catch {}
   }
   console.log('cleanup — throwaway users left:', db.prepare("SELECT COUNT(*) n FROM users WHERE username LIKE '\\_\\_sq\\_%' ESCAPE '\\'").get().n, '· squads left:', db.prepare("SELECT COUNT(*) n FROM squads WHERE name LIKE ? OR name LIKE ?").get('%' + tag + '%', 'Gated ' + tag).n);

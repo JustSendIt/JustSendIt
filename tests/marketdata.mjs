@@ -29,6 +29,7 @@ const { AbiCoder, id: keccakId } = require(path.join(ROOT, 'node_modules', 'ethe
 const ABI = AbiCoder.defaultAbiCoder();
 const CM = require(path.join(ROOT, 'lib', 'chainmcap.js'));
 const MM = require(path.join(ROOT, 'lib', 'marketmap.js'));
+const MC_IS_QUOTE = require(path.join(ROOT, 'lib', 'multichain.js')).isQuoteAsset;
 
 const SRC = fs.readFileSync(SERVER_JS, 'utf8');
 const LIB = fs.readFileSync(path.join(ROOT, 'lib', 'marketdata.js'), 'utf8');
@@ -40,6 +41,15 @@ const MCFIX = (f) => JSON.parse(fs.readFileSync(path.join(ROOT, 'tests', 'fixtur
 const HMX = { top: FIX('heatmap-cg-top100.json'), global: FIX('heatmap-cg-global.json'), stables: FIX('heatmap-cg-stables.json'), lore: FIX('heatmap-lore-top100.json') };
 // what the fake's map routes answer: the samples, or a list changed for a case (top), or a 503 (down)
 const hmVendor = { top: null, down: false };
+/* CoinGecko's coin list with platforms (owner, 2026-11-17): the suite's BUILT rows (tests/fixtures/marketdata/README.txt — not read from
+   CoinGecko), CoinGecko's measured lookalike rows, and 18,000 filler rows built here so the body is the size of the real list (some 15 to
+   20 thousand coins): a third on BNB Chain only (never kept), a third on Ethereum (addresses counted up from 1), a third with none.
+   clVendor.mode: null the whole list; 'down' a 503; 'cut' its first 500 rows (an answer cut short); 'notlist' an object; body: a list in its place */
+const CGL = FIX('cg-coins-list-platforms.json');
+const CL_FILL = Array.from({ length: 18000 }, (_, i) => ({ id: 'zz-filler-' + i, symbol: 'zf' + i, name: 'Filler ' + i,
+  platforms: i % 3 === 0 ? { 'binance-smart-chain': '0x' + (i + 1).toString(16).padStart(40, '0') } : i % 3 === 1 ? { ethereum: '0x' + (i + 1).toString(16).padStart(40, '0') } : {} }));
+const clVendor = { mode: null, body: null, seen: [] };
+let clBodyStr = null;   // the whole list as one string, built once (the fake serves it as CoinGecko would: one answer, several megabytes)
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
 // MARKET_DUMP_DIR=<dir>: also write the answers this suite read, as samples of the API's real shapes (for the page and the docs)
@@ -163,6 +173,14 @@ const vendor = http.createServer((req, res) => {
     if (p === '/hcg/coins/markets') { const stab = u.searchParams.get('category') === 'stablecoins'; hit(stab ? 'hcg-stables' : 'hcg-top'); if (hmVendor.down) return send(503, { error: 'down' }); return send(200, stab ? HMX.stables : hmVendor.top || HMX.top); }
     if (p === '/hcg/global') { hit('hcg-global'); return hmVendor.down ? send(503, { error: 'down' }) : send(200, HMX.global); }
     if (p === '/hlore/tickers/') { hit('hlore'); return send(200, HMX.lore); }
+    if (p === '/hcg/coins/list') {
+      hit('hcg-list'); clVendor.seen.push({ q: u.search, ua: String(req.headers['user-agent'] || ''), key: req.headers['x-cg-demo-api-key'] || null });
+      if (clVendor.mode === 'down') return send(503, { error: 'down' });
+      if (clVendor.mode === 'notlist') return send(200, { status: { error_code: 429, error_message: 'You have exceeded the Rate Limit' } });
+      if (clVendor.body) return send(200, clVendor.body);
+      if (!clBodyStr) clBodyStr = JSON.stringify([...CGL, ...FR.cg, ...CL_FILL]);
+      return send(200, clVendor.mode === 'cut' ? JSON.stringify([...CGL, ...FR.cg, ...CL_FILL].slice(0, 500)) : clBodyStr);
+    }
     // L2BEAT, growthepie
     if (p === '/l2beat/scaling/summary') return send(200, F.l2beat);
     if (p.startsWith('/l2beat/scaling/activity/')) { hit('l2beat-activity'); return p.endsWith('/robinhood') ? send(200, FIX('l2beat-activity-robinhood.json')) : send(404, { error: 'no' }); }
@@ -332,8 +350,11 @@ try {
     && (LIB.match(/gtAskNow\('/g) || []).length === 2 && (LIB.match(/gtAsk\(ctx, '/g) || []).length === 4);   // the pools and new pools, and the RWA job's multi read and token pools
   check('the chain node is read only through the injected (paced) batch, stands aside while the site\'s own reads are refused, and cools down after a refusal', /const busy = rpcBusy\(\);\s+if \(busy\) throw Object\.assign\(new Error\('yielded: '/.test(LIB) && /await take\(RPC_SHARE, BG_WAIT\)/.test(LIB) && /rpcCoolUntil = now\(\) \+ 5 \* MIN/.test(LIB) && !/fetch\(RH_RPC|rpc\.mainnet\.chain\.robinhood\.com/.test(LIB));
   check('a DefiLlama point dated today is never stored as a day', /if \(!validDay\(r\[2\]\) \|\| r\[2\] >= today \|\| r\[3\] == null\) continue;/.test(LIB));
-  check('every table the contract names is created, each with an index for paging newest-first', ['mkt_chain_snap', 'mkt_chain_series', 'mkt_pool_snap', 'mkt_new_pool', 'mkt_rh_pulse', 'mkt_scan', 'mkt_radar', 'mkt_runs'].every((t) => q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", t))
-    && ['idx_mkt_chain_snap_at', 'idx_mkt_chain_series_at', 'idx_mkt_pool_snap_at', 'idx_mkt_pool_snap_net_id', 'idx_mkt_pool_snap_pool', 'idx_mkt_new_pool_chain', 'idx_mkt_rh_pulse_at', 'idx_mkt_scan_at', 'idx_mkt_scan_chain', 'idx_mkt_scan_tok_id', 'idx_mkt_radar_upd', 'idx_mkt_runs_at'].every((i) => q1("SELECT name FROM sqlite_master WHERE type='index' AND name=?", i)));
+  check('every table the contract names is created, each with an index for paging newest-first — each coin\'s contracts (mkt_coin_contract, 2026-11-17) among them, registered with the others',
+    ['mkt_chain_snap', 'mkt_chain_series', 'mkt_pool_snap', 'mkt_new_pool', 'mkt_rh_pulse', 'mkt_scan', 'mkt_radar', 'mkt_coin_contract', 'mkt_runs'].every((t) => q1("SELECT name FROM sqlite_master WHERE type='table' AND name=?", t))
+    && ['idx_mkt_chain_snap_at', 'idx_mkt_chain_series_at', 'idx_mkt_pool_snap_at', 'idx_mkt_pool_snap_net_id', 'idx_mkt_pool_snap_pool', 'idx_mkt_new_pool_chain', 'idx_mkt_rh_pulse_at', 'idx_mkt_scan_at', 'idx_mkt_scan_chain', 'idx_mkt_scan_tok_id', 'idx_mkt_radar_upd', 'idx_mkt_coin_contract_at', 'idx_mkt_runs_at'].every((i) => q1("SELECT name FROM sqlite_master WHERE type='index' AND name=?", i))
+    && JSON.stringify(MD.TABLES) === JSON.stringify(['mkt_chain_snap', 'mkt_chain_series', 'mkt_pool_snap', 'mkt_new_pool', 'mkt_rh_pulse', 'mkt_scan', 'mkt_radar', 'mkt_coin_contract', 'mkt_runs', 'mkt_state'])
+    && md.ADMIN_DATASETS.some((d) => d.table === 'mkt_coin_contract' && d.cols.map((c) => c[0]).join() === 'coin,robinhood,ethereum,solana,at'));
   check('the chain table maps this site\'s keys to every source (Robinhood Chain, BSC, OP Mainnet, Polygon measured 2026-10-26)', MD.CHAIN_BY_KEY.get('robinhood').gt === 'robinhood' && MD.CHAIN_BY_KEY.get('bsc').proto === 'Binance' && MD.CHAIN_BY_KEY.get('optimism').l2beat === 'optimism' && MD.CHAIN_BY_KEY.get('optimism').proto === 'Optimism'
     && MD.CHAIN_BY_KEY.get('polygon').gt === 'polygon_pos' && MD.CHAIN_BY_KEY.get('avalanche').bk === 'avax' && MD.chainOfLlama('Some New Chain').key === 'some-new-chain' && MD.chainOfLlama('Robinhood Chain').key === 'robinhood');
 
@@ -612,7 +633,7 @@ try {
   check('the Send API resources page by before / limit, filter by chain / address / metric, and give raw logo URLs (programs, not browsers)', r1.body.data.length === 3 && r2.body.data[0].id < r1.body.data[2].id && typeof r1.body.data[0].src === 'object'
     && r3.body.data.length === 5 && r3.body.data.every((x) => x.address === A) && r4.body.data.length === 5 && r4.body.data[0].day === '2026-10-01' && r5.body.data.length >= 40 && r6 === null && r7.status === 400
     && /^https:\/\/icons\.llamao\.fi\//.test(r5.body.data.find((x) => x.key === 'robinhood').logo || ''), brief({ r1: r1.body.next, r3: r3.body.data.length, r4: r4.body.data.length }));
-  check('  ...every resource the contract names is served', ['chains', 'chain', 'chain-history', 'chain-snapshots', 'tokens', 'token', 'pools', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'rwa', 'rwa-token', 'heatmap'].every((n) => md.RESOURCES.includes(n)));
+  check('  ...every resource the contract names is served', ['chains', 'chain', 'chain-history', 'chain-snapshots', 'tokens', 'token', 'pools', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'rwa', 'rwa-token', 'heatmap', 'movers'].every((n) => md.RESOURCES.includes(n)));
 
   // the budgets
   const gtTakes = meter.log.filter(([k]) => k === 'market:geckoterminal' || k === 'market:geckoterminal-asked').length, gtHits = Object.entries(hits).filter(([k]) => k.startsWith('gt-')).reduce((a, [, v]) => a + v, 0);
@@ -2026,7 +2047,7 @@ try {
      answering at once and every wait a timer on that clock — no two CoinGecko reads within two minutes, ever, and the chains run reading
      CoinGecko itself on every run (never the relay for want of the slot) */
   {
-    let clk = NOW_M; const timers = [], cgAt = [], ran = { chains: 0, heatmap: 0, mcapRefs: 0 };
+    let clk = NOW_M; const timers = [], cgAt = [], ran = { chains: 0, heatmap: 0, mcapRefs: 0, coinPlatforms: 0 };
     const sleepT = (ms) => new Promise((ok) => timers.push({ at: clk + ms, ok }));
     const okA = (data) => ({ ok: true, status: 200, data, reason: null });
     const fetchT = async (url) => {
@@ -2036,12 +2057,13 @@ try {
       if (p === '/cg/coins/markets') { if (q.get('ids')) { const want = new Set(q.get('ids').split(',')); return okA(MC.cg.filter((x) => want.has(x.id))); } return okA(q.get('category') ? HMX.stables : HMX.top); }
       if (p === '/cg/global') return okA(HMX.global);
       if (p === '/cg/asset_platforms') return okA(MC.platforms);
+      if (p === '/cg/coins/list') return okA([...CGL, ...FR.cg]);
       if (p === '/lore/tickers/') { const st = Number(q.get('start') || 0); return okA(st === 0 ? HMX.lore : { data: MC.walk.pages[st] || [], info: MC.walk.info }); }
       return { ok: false, status: 0, data: null, reason: 'unreachable' };
     };
     const dbT = freshDb('t');
     const mdT = MD.createMarketData({ db: dbT, now: () => clk, fetchJson: fetchT, sleep: sleepT, urls: { llama: 'http://t.test/llama', coins: 'http://t.test/coins', stables: 'http://t.test/stables', cg: 'http://t.test/cg', coinlore: 'http://t.test/lore' } }); mdT.migrate();
-    const due = { chains: clk + 25e3, heatmap: clk + 30e3, mcapRefs: clk + 215e3 }, end = clk + 4 * 3600e3, nextAtT = mdT._test.nextAt, busy = new Set();
+    const due = { chains: clk + MD.JOBS.chains.first * 1e3, heatmap: clk + MD.JOBS.heatmap.first * 1e3, mcapRefs: clk + MD.JOBS.mcapRefs.first * 1e3, coinPlatforms: clk + MD.JOBS.coinPlatforms.first * 1e3 }, end = clk + 4 * 3600e3, nextAtT = mdT._test.nextAt, busy = new Set();
     const flush = async () => { for (let i = 0; i < 30; i++) await new Promise((r) => setImmediate(r)); };
     let steps = 0;
     while (clk < end && steps++ < 50000) {
@@ -2059,14 +2081,20 @@ try {
       while (timers.length && timers[0].at <= clk) { timers.shift().ok(); await flush(); timers.sort((a, b) => a.at - b.at); }
     }
     const gaps = cgAt.slice(1).map(([t], i) => t - cgAt[i][0]), kinds = (k) => cgAt.filter(([, x]) => x === k).length;
-    check('  ...and in a timetable — the chains run, the daily references and the map on one clock for four hours — no two CoinGecko reads within two minutes, ever; the chains run reads CoinGecko itself on every run; the map reads its top 100 on most of its runs, its total every half hour, its stablecoins once',
-      steps < 50000 && cgAt.length > 20 && gaps.every((g) => g >= 120e3) && kinds('chains') === ran.chains && ran.chains >= 7 && kinds('top') >= ran.heatmap - 3 && ran.heatmap >= 14 && kinds('global') >= 7 && kinds('stables') === 1 && kinds('asset_platforms') >= 1,
-      brief({ ran, n: cgAt.length, minGap: Math.min(...gaps), kinds: ['chains', 'top', 'global', 'stables', 'asset_platforms'].map(kinds) }));
+    const clRuns = mdT._test.stGet('coin_platforms');
+    check('  ...and in a timetable — the chains run, the daily references, the map and the daily coin list on one clock for four hours — no two CoinGecko reads within two minutes, ever; the chains run reads CoinGecko itself on every run; the map reads its top 100 on most of its runs, its total every half hour, its stablecoins once; the coin list once (and nothing more that day), Robinhood Chain\'s addresses under CoinGecko\'s platform "robinhood"',
+      steps < 50000 && cgAt.length > 20 && gaps.every((g) => g >= 120e3) && kinds('chains') === ran.chains && ran.chains >= 7 && kinds('top') >= ran.heatmap - 3 && ran.heatmap >= 14 && kinds('global') >= 7 && kinds('stables') === 1 && kinds('asset_platforms') >= 1
+      && kinds('coins/list') === 1 && ran.coinPlatforms === 1 && clRuns && clRuns.v.readAt > 0 && clRuns.v.kept > 0 && clRuns.v.platforms.robinhood === 'robinhood',
+      brief({ ran, n: cgAt.length, minGap: Math.min(...gaps), kinds: ['chains', 'top', 'global', 'stables', 'asset_platforms', 'coins/list'].map(kinds), cl: clRuns && clRuns.v }));
     dbT.close();
   }
   check('  ...the map\'s job in the timetable: every 10 minutes, first just after the chains run, again 10 minutes after a failed run; its total every 30 minutes and its stablecoins every 6 hours; every CoinGecko read in the shared two-minute slot (cg_last) — the chains run\'s, the references\' and the map\'s',
     MD.JOBS.heatmap.every === 10 * 60e3 && MD.JOBS.heatmap.first === 30 && MD.JOBS.heatmap.first > MD.JOBS.chains.first && MD.JOBS.heatmap.retry === 10 * 60e3 && /const HM_EVERY = \{ global: 30 \* MIN, stables: 6 \* HOUR \}, HM_POLL = 15000, HM_POLLS = 24, HM_SLOT_MAX = 4 \* MIN;/.test(LIB)
-    && /stSet\('cg_last', \{ why: job \}, now\(\) \+ wait\);/.test(LIB) && /const slot = await cgSlot\('heatmap'\);\s+if \(!slot\.ok\)[^\n]+\n\s+const r = await ask\(ctx, urls\.cg \+ path/.test(LIB));
+    && /stSet\('cg_last', \{ why: job \}, now\(\) \+ wait\);/.test(LIB) && /const slot = await cgSlot\('heatmap'\);\s+if \(!slot\.ok\)[^\n]+\n\s+const r = await ask\(ctx, urls\.cg \+ path/.test(LIB)
+    // the coin list (2026-11-17): daily, after the references, again an hour after a failed run, in the same slot
+    && MD.JOBS.coinPlatforms.every === 864e5 && MD.JOBS.coinPlatforms.retry === 3600e3 && MD.JOBS.coinPlatforms.first > MD.JOBS.mcapRefs.first
+    && /const slot = await cgSlot\('coinPlatforms'\);\s+if \(!slot\.ok\)[^\n]+\n\s+const r = await ask\(ctx, urls\.cg \+ '\/coins\/list\?include_platform=true', \{ maxBytes: CP_MAX_BYTES, timeoutMs: CP_TIMEOUT_MS, headers: cgHeaders \}\);/.test(LIB)
+    && (LIB.match(/urls\.cg \+ /g) || []).length === 4);   // the chains run's coins, the references' platforms, the map's parts, the coin list: every CoinGecko read there is
   // the docs: /data names the resource and every key it returns; the README says what the map is and how it is read; the Privacy Policy §8
   const hmDoc = DOCS.includes('/api/data/v1/heatmap') ? DOCS.slice(DOCS.indexOf('/api/data/v1/heatmap')).split('</details>')[0] : '';
   const hmKeys = [...new Set([...Object.keys(A1), ...Object.keys(A1.rows[0]), ...Object.keys(A1.rows[0].check), ...Object.keys(A1.reads)])].filter((k) => k !== 'rows');
@@ -2079,6 +2107,168 @@ try {
   check('  ...the heatmap shape names every key of a check\'s sources as served — CoinLore\'s match and name among them — and the docs say a coin under another name is the only one with its symbol within 10% among those 100',
     hmSrcKeys.includes('match') && hmSrcKeys.includes('name') && hmSrcKeys.every((k) => new RegExp('\\b' + k + '\\b').test(hmSrcDoc)) && /match: 'name' or 'symbol'/.test(hmDoc)
     && /no other coin with that symbol among those 100 is within 10%/.test(hmDoc), JSON.stringify([hmSrcKeys, hmSrcDoc]));
+  }
+  /* ── each coin's contracts and the biggest movers (owner, 2026-11-17: "Have the top 10 market movers within the top 100 top tokens in the
+     bubble maps be a moving banner showing the token the price and percentage move, ranked by the 24hr percentage move"; "when you click one
+     of the token bubbles it shows the user all the on-chain data like it does everywhere else on the site"): the daily coin list (one booked
+     CoinGecko read, the honest User-Agent, kept last-good), where each of the map's coins is on-chain (contract, quote, native, none), its
+     picture, and the movers ranked from the map's own read ── */
+  {
+    const T_H = Date.parse('2026-10-30T00:30:00Z');
+    const dbV = freshDb('mv'); let clockV = T_H;
+    const mdV = MD.createMarketData({ db: dbV, now: () => clockV, outboundTake: take, urls: Object.assign({}, URLS, { cg: V + '/hcg', coinlore: V + '/hlore' }), bgWaitMs: 1000, askWaitMs: 1000,
+      sleep: async (ms) => { clockV += ms; } }); mdV.migrate();
+    const listAsk = (from) => log.slice(from).filter((l) => /^GET \/hcg\/coins\/list/.test(l));
+    const ccRows = () => dbV.prepare('SELECT * FROM mkt_coin_contract ORDER BY coin').all();
+    const rowOf = (A, id) => A.rows.find((r) => r.id === id);
+    const M0 = mdV.movers().body;
+    check('movers: before the map\'s first read the answer is a 200 with no rows that says why — never an error, never a list made up',
+      Array.isArray(M0.rows) && M0.rows.length === 0 && M0.gainers.length === 0 && M0.losers.length === 0 && M0.counts.of === 0 && /^CoinGecko's top 100 coins has not been read yet/.test(M0.why) && M0.ranked === 'absolute 24 h move, either way' && M0.total.v === null, brief(M0));
+    // the map's first read (the bubble map section's answers), then the coin list in its own slot
+    const rM = await mdV.runJob('heatmap'); clockV += 20e3;
+    const A0 = mdV.heatmap({}).body;
+    check('  ...the map read and the coin list not yet: every row carries its picture through this site\'s image proxy (CoinGecko\'s, never fetched by the browser) and onchain null with onchainWhy; contracts says the list has not been read, and a note says so',
+      rM.ok && A0.rows.length === 100 && A0.rows.every((r) => r.onchain === null && /has not been read yet \(it is read once a day\)/.test(r.onchainWhy)) && A0.contracts.ok === false && A0.contracts.at === null && /has not been read yet/.test(A0.contracts.why)
+      && A0.rows[0].logo === '/api/market/logo?u=' + encodeURIComponent(HMX.top[0].image) && A0.rows.every((r) => r.logo === null || /^\/api\/market\/logo\?u=https%3A%2F%2Fcoin-images\.coingecko\.com%2F/.test(r.logo)) && A0.rows.filter((r) => r.logo).length === 100
+      && A0.notes.some((n) => /^Where each coin is on-chain is not known yet/.test(n)) && JSON.stringify(Object.keys(A0.reads)) === JSON.stringify(['coins', 'global', 'stables', 'coinlore']), brief({ r0: A0.rows[0].logo, c: A0.contracts }));
+    const w1 = log.length, cg0 = mdV._test.stGet('cg_last'), seen0 = clVendor.seen.length;
+    const rC1 = await mdV.runJob('coinPlatforms'); const at1 = clockV;
+    const asked1 = listAsk(w1), cp1 = mdV._test.stGet('coin_platforms').v, rows1 = ccRows();
+    // what should be kept, worked out here from the body served: an address on robinhood / ethereum / solana that is one (0x… lower-cased, Solana as given)
+    const served = [...CGL, ...FR.cg, ...CL_FILL], keepOf = (x) => { const o = {}; for (const k of ['robinhood', 'ethereum', 'solana']) { const a = x.platforms && x.platforms[k]; if (typeof a === 'string' && (k === 'solana' ? /^[1-9A-HJ-NP-Za-km-z]{32,44}$/.test(a) : /^0x[0-9a-f]{40}$/i.test(a))) o[k] = k === 'solana' ? a : a.toLowerCase(); } return Object.keys(o).length ? o : null; };
+    const wantKept = served.filter(keepOf), hasAddr = (r) => !!(r.robinhood || r.ethereum || r.solana);
+    check('coin list: its first run asks CoinGecko once — /coins/list?include_platform=true, as the site (the honest User-Agent), in its own two-minute slot after the map\'s last CoinGecko read — and the run counts that one request',
+      rC1.ok && rC1.calls === 1 && asked1.length === 1 && asked1[0] === 'GET /hcg/coins/list?include_platform=true' && clVendor.seen.length === seen0 + 1 && clVendor.seen[seen0].ua === UA && clVendor.seen[seen0].key === null
+      && cg0 && at1 >= cg0.at + 120e3 && mdV._test.stGet('cg_last').v.why === 'coinPlatforms', brief({ rC1, asked1, at1, cg: cg0 && cg0.at }));
+    check('  ...a body the size of CoinGecko\'s real list (' + served.length + ' coins, ' + Math.round(clBodyStr.length / 1024) + ' kB) is read whole; every coin it lists is kept, ' + wantKept.length + ' with an address on Robinhood Chain, Ethereum or Solana (the 0x ones lower-cased, Solana\'s exactly as given) and the rest with none — BNB Chain\'s, an empty platform ("": "") and a coin with no platforms are no address — so a coin with no row is one the list did not hold',
+      clBodyStr.length > 1.5e6 && rows1.length === served.length && rows1.filter(hasAddr).length === wantKept.length && cp1.total === served.length && cp1.kept === wantKept.length && cp1.readAt === at1
+      && rows1.find((r) => r.coin === 'tether').ethereum === '0xdac17f958d2ee523a2206206994597c13d831ec7' && rows1.find((r) => r.coin === 'tether').solana === 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB'
+      && rows1.find((r) => r.coin === 'jupiter-exchange-solana').solana === 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN' && ['pancakeswap-token', 'litecoin', 'bitcoin', 'zz-filler-0'].every((id) => { const r = rows1.find((x) => x.coin === id); return !!r && !hasAddr(r); })
+      && rows1.filter((r) => /^zz-filler-/.test(r.coin) && hasAddr(r)).length === 6000 && rows1.filter((r) => /^zz-filler-/.test(r.coin)).length === CL_FILL.length && rows1.every((r) => r.at === at1) && cp1.byChain.robinhood === wantKept.filter((x) => keepOf(x).robinhood).length && cp1.byChain.solana === wantKept.filter((x) => keepOf(x).solana).length
+      && JSON.stringify(cp1.platforms) === JSON.stringify({ robinhood: 'robinhood', ethereum: 'ethereum', solana: 'solana' }) && /^\d+ coins listed; \d+ kept with an address on Robinhood Chain \(\d+\), Ethereum \(\d+\) or Solana \(\d+\)$/.test(rC1.note), brief({ n: rows1.length, want: wantKept.length, cp1, note: rC1.note }));
+    const w2 = log.length; clockV += 6 * 3600e3; const rC2 = await mdV.runJob('coinPlatforms');
+    check('  ...one read a day: run again six hours on, it asks nothing and says when the list was read', rC2.ok && rC2.calls === 0 && listAsk(w2).length === 0 && /^nothing due: CoinGecko's coin list was read at 2026-10-30 00:36 UTC/.test(rC2.note), rC2.note);
+    // CoinGecko's platform id for each chain comes from its asset platforms (the references' read); built cases each change ONE field of a measured row, said here
+    const plat0 = mdV._test.scanPlatformIds();
+    mdV._test.stSet('cg_platforms', { list: CM.platformsOf(MC.platforms) }); const platM = mdV._test.scanPlatformIds();
+    const renamed = MC.platforms.map((p) => (p.chain_identifier === 4663 ? Object.assign({}, p, { id: 'robinhood-chain' }) : p));   // built: Robinhood's platform under another id
+    mdV._test.stSet('cg_platforms', { list: CM.platformsOf(renamed) }); const platR = mdV._test.scanPlatformIds();
+    const twice = MC.platforms.concat([Object.assign({}, MC.platforms.find((p) => p.chain_identifier === 4663), { id: 'robinhood-two' })]);   // built: a second platform claiming chain id 4663
+    mdV._test.stSet('cg_platforms', { list: CM.platformsOf(twice) }); const platT = mdV._test.scanPlatformIds();
+    dbV.prepare("DELETE FROM mkt_state WHERE name = 'cg_platforms'").run();
+    check('  ...CoinGecko\'s platform id for each chain is its asset platforms\' (Robinhood Chain by chain id 4663 — "robinhood" as measured, or whatever id CoinGecko gives it — Ethereum by chain id 1, Solana by the chain table, which has no chain id there); two platforms claiming one chain, or none read yet, take the chain table\'s own column',
+      platM.robinhood === 'robinhood' && platM.ethereum === 'ethereum' && platM.solana === 'solana' && platR.robinhood === 'robinhood-chain' && platT.robinhood === 'robinhood' && plat0.robinhood === 'robinhood'
+      && MC.platforms.some((p) => p.id === 'robinhood' && p.chain_identifier === 4663), brief({ plat0, platM, platR, platT }));
+    check('  ...an address is kept as the Scanner reads it: 0x and 40 hex digits (lower-cased), a 32-byte base58 key on Solana (as given); anything else is no address',
+      mdV._test.coinAddr('ethereum', ' 0xAbC0000000000000000000000000000000000001 ') === '0xabc0000000000000000000000000000000000001' && mdV._test.coinAddr('solana', 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') === 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
+      && mdV._test.coinAddr('solana', '0x6982508145454ce325ddbe47a25d4ec3d2311933') === null && mdV._test.coinAddr('ethereum', 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v') === null && mdV._test.coinAddr('robinhood', '') === null
+      && mdV._test.coinAddr('solana', 'So1111111111111111111111111111111111111111O') === null && mdV._test.coinAddr('ethereum', 42) === null);
+    // the map's rows with the list read and DefiLlama's chains not yet; then with the chains (the 2026-10-26 snapshot the chains job kept above, copied)
+    clockV += 20e3; const A1 = mdV.heatmap({}).body;
+    check('  ...with the list read and no chains snapshot yet: a coin with a contract is decided ($LINK a contract, $USDT a base asset); a coin with none (Bitcoin) is null with why — which coin is each chain\'s own has not been read — never "none"',
+      rowOf(A1, 'chainlink').onchain.kind === 'contract' && rowOf(A1, 'tether').onchain.kind === 'quote' && rowOf(A1, 'bitcoin').onchain === null && /which coin is each chain's own has not been read yet/.test(rowOf(A1, 'bitcoin').onchainWhy)
+      && A1.contracts.ok === true && A1.contracts.at === at1 && A1.contracts.why === null && !A1.notes.some((n) => /^Where each coin is on-chain is not known yet/.test(n)), brief(rowOf(A1, 'bitcoin')));
+    const snapA = dbA.prepare('SELECT chain, name, chain_id, at, tvl, native_token, native_symbol, src FROM mkt_chain_snap WHERE at = (SELECT MAX(at) FROM mkt_chain_snap)').all();
+    const insSnap = dbV.prepare('INSERT INTO mkt_chain_snap (chain, name, chain_id, at, tvl, native_token, native_symbol, src) VALUES (?,?,?,?,?,?,?,?)');
+    for (const r of snapA) insSnap.run(r.chain, r.name, r.chain_id, r.at, r.tvl, r.native_token, r.native_symbol, r.src);
+    clockV += 20e3; const A2 = mdV.heatmap({}).body, oc = (id) => rowOf(A2, id).onchain;
+    const nativeKey = (gid) => (snapA.find((r) => r.native_token === gid) || {}).chain;
+    const KINDS = ['contract', 'quote', 'native', 'none'];
+    check('onchain on every row of the map, in the order the owner\'s ask needs — a contract the Scanner profiles: $LINK, $UNI, $SHIB, $PEPE, $AAVE, $ENA, $ETHFI, $WLD on Ethereum (lower-cased), $JUP on Solana (as given), scannable',
+      ['chainlink', 'uniswap', 'shiba-inu', 'pepe', 'aave', 'ethena', 'ether-fi', 'worldcoin-wld'].every((id) => oc(id).kind === 'contract' && oc(id).chain === 'ethereum' && oc(id).scannable === true && oc(id).address === keepOf(CGL.find((c) => c.id === id)).ethereum && oc(id).src === 'coingecko' && oc(id).at === at1)
+      && oc('chainlink').address === '0x514910771af9ca656af840dff83e8264ecf986ca' && oc('jupiter-exchange-solana').kind === 'contract' && oc('jupiter-exchange-solana').chain === 'solana' && oc('jupiter-exchange-solana').address === 'JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN',
+      brief([oc('chainlink'), oc('jupiter-exchange-solana')]));
+    check('  ...a base trading asset, said so and not scannable: $USDT, $USDC and $DAI on Ethereum, $USDG on Robinhood Chain (the home chain\'s WETH and USDG, the Scanner\'s list on Ethereum and Solana)',
+      ['tether', 'usd-coin', 'dai'].every((id) => oc(id).kind === 'quote' && oc(id).chain === 'ethereum' && oc(id).scannable === false && /The Scanner profiles tokens, not base assets\.$/.test(oc(id).why))
+      && oc('global-dollar').kind === 'quote' && oc('global-dollar').chain === 'robinhood' && oc('global-dollar').address === USDG && /^\$USDG’s contract on Robinhood Chain is a base trading asset/.test(oc('global-dollar').why), brief([oc('tether'), oc('global-dollar')]));
+    check('  ...the own coin of a chain this site reads (DefiLlama\'s gecko_id in the chains snapshot): Bitcoin, Ether, SOL, BNB, TRX and XRP each open their chain\'s view — a key the chain view answers — with why, from DefiLlama, as old as the snapshot',
+      [['bitcoin', 'bitcoin'], ['ethereum', 'ethereum'], ['solana', 'solana'], ['binancecoin', 'bsc'], ['tron', 'tron']].every(([id, key]) => oc(id).kind === 'native' && oc(id).chain === key && oc(id).scannable === false && oc(id).src === 'defillama' && oc(id).at === snapA[0].at)
+      && oc('ripple').kind === 'native' && oc('ripple').chain === nativeKey('ripple') && /^\$BTC is Bitcoin’s own coin: it has no token contract to scan/.test(oc('bitcoin').why)
+      && A2.rows.filter((r) => r.onchain && r.onchain.kind === 'native').every((r) => mdV.chain({ key: r.onchain.chain }).status === 200), brief([oc('bitcoin'), oc('ripple')]));
+    check('  ...and none, said so: Monero has no contract CoinGecko lists on the three chains and is no chain\'s own coin here; every row has exactly one of onchain and onchainWhy, scannable only for a contract',
+      oc('monero').kind === 'none' && oc('monero').scannable === false && /^CoinGecko lists no contract for \$XMR on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads\.$/.test(oc('monero').why)
+      && A2.rows.every((r) => (r.onchain === null) === (typeof r.onchainWhy === 'string') && (r.onchain === null || (KINDS.includes(r.onchain.kind) && r.onchain.scannable === (r.onchain.kind === 'contract') && (r.onchain.kind === 'contract' || typeof r.onchain.why === 'string'))))
+      && A2.rows.every((r) => (r.onchain !== null) === served.some((x) => x.id === r.id)), brief(oc('monero')));
+    // a coin the list did not hold at all (most of the top 100 here: the built list is 25 coins and the lookalikes) is unknown, said so — never "none"
+    const unheld = A2.rows.filter((r) => !served.some((x) => x.id === r.id));
+    check('  ...a coin the last good read of the list did not hold at all (CoinGecko listed it since, or here: the built list is a sample) is null with why — never "none", which only a coin the list holds with no address on the three chains gets',
+      unheld.length > 0 && unheld.every((r) => r.onchain === null && new RegExp('^\\$' + r.symbol.replace(/[^A-Za-z0-9]/g, '.') + ' is not in CoinGecko\'s coin list as read at 2026-10-30 00:36 UTC \\(it is read once a day').test(r.onchainWhy)) && !rowOf(A2, 'pearl-2').onchain,
+      brief(unheld.slice(0, 2).map((r) => r.onchainWhy)));
+    // the order's edges, on built contracts (each a measured address, put on another coin here): a token on any chain beats a base asset; Robinhood Chain first
+    const ocOf = (contracts) => MM.onchainOf({ symbol: 'X', contracts, map: { read: true, at: 1 }, native: { chain: 'ethereum', name: 'Ethereum' }, chains: { read: true, at: 1 }, isQuote: (k, a) => (k === 'robinhood' ? a === MD.RH.weth || a === MD.RH.usdg : MC_IS_QUOTE(k, a)) }).onchain;
+    const LINK = '0x514910771af9ca656af840dff83e8264ecf986ca', USDC_SOL = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v';
+    check('  ...the order\'s edges: Robinhood Chain\'s contract first, then Ethereum\'s, then Solana\'s; a base asset on one chain never hides a token\'s contract on another; two base assets name the first; a contract beats being a chain\'s own coin',
+      ocOf({ robinhood: SEND, ethereum: LINK }).chain === 'robinhood' && ocOf({ robinhood: MD.RH.weth, ethereum: LINK }).kind === 'contract' && ocOf({ robinhood: MD.RH.weth, ethereum: LINK }).chain === 'ethereum'
+      && ocOf({ robinhood: USDG, solana: USDC_SOL }).kind === 'quote' && ocOf({ robinhood: USDG, solana: USDC_SOL }).chain === 'robinhood' && ocOf({ ethereum: LINK }).kind === 'contract' && ocOf(null).kind === 'native');
+    // pictures: never Robinhood's artwork (a picture named after the coin's own Robinhood Chain address), never a host the proxy does not fetch from — built by changing ONE field of the measured row
+    const stH = mdV._test.stGet('heatmap').v, stArt = JSON.parse(JSON.stringify(stH));
+    stArt.coins.list.find((c) => c.id === 'global-dollar').image = 'https://coin-images.coingecko.com/coins/images/1/large/' + USDG + '.png';
+    stArt.coins.list.find((c) => c.id === 'chainlink').image = 'https://example.com/link.png';
+    mdV._test.stSet('heatmap', stArt); clockV += 20e3; const A3 = mdV.heatmap({}).body; mdV._test.stSet('heatmap', stH); clockV += 20e3;
+    check('  ...and a picture only through the proxy, from the hosts it fetches from: none for a Robinhood Chain coin whose picture is named after its own address (Robinhood\'s artwork, the RWA tab\'s rule), none from another host; the rest unchanged',
+      rowOf(A3, 'global-dollar').logo === null && rowOf(A3, 'chainlink').logo === null && rowOf(A3, 'tether').logo === rowOf(A2, 'tether').logo && /^\/api\/market\/logo\?u=/.test(rowOf(A2, 'global-dollar').logo || ''), brief([rowOf(A3, 'global-dollar').logo, rowOf(A2, 'global-dollar').logo]));
+    // the movers, from the same stored read: nothing asked
+    const w3 = log.length, M = mdV.movers().body, M_api = await mdV.apiResource('movers', {}, {}), noAsk = log.length === w3;
+    const chgOf = (c) => c.price_change_percentage_24h, ordered = HMX.top.map((c, i) => ({ c, i })).filter((x) => chgOf(x.c) != null);
+    const wantMov = [...ordered].sort((a, b) => Math.abs(chgOf(b.c)) - Math.abs(chgOf(a.c)) || a.i - b.i).slice(0, 10).map((x) => x.c.id);
+    const wantUp = ordered.filter((x) => chgOf(x.c) > 0).sort((a, b) => chgOf(b.c) - chgOf(a.c) || a.i - b.i).slice(0, 5).map((x) => x.c.id);
+    const wantDn = ordered.filter((x) => chgOf(x.c) < 0).sort((a, b) => chgOf(a.c) - chgOf(b.c) || a.i - b.i).slice(0, 5).map((x) => x.c.id);
+    check('movers: the 10 of the 100 with the biggest 24 h move either way, ranked by its size (worked out here from CoinGecko\'s answer: ' + wantMov.slice(0, 3).join(', ') + ' …) — each row the map\'s own figures, picture and onchain, in the banner\'s fields; nothing asked of any source',
+      noAsk && JSON.stringify(M.rows.map((r) => r.id)) === JSON.stringify(wantMov) && M.rows.every((r) => JSON.stringify(Object.keys(r)) === JSON.stringify(MM.MOVER_KEYS))
+      && M.rows.every((r) => { const h = rowOf(A2, r.id); return JSON.stringify([r.price, r.change24h, r.mcap, r.volume24h, r.stable, r.onchain, r.logo, r.rank]) === JSON.stringify([h.price, h.change24h, h.mcap, h.volume24h, h.stable, h.onchain, h.logo, h.rank]); })
+      && M.rows[0].id === 'ethena' && M.rows[0].change24h.v === -20.09284 && M.ranked === 'absolute 24 h move, either way' && M.at === A2.at, brief(M.rows.map((r) => [r.symbol, r.change24h.v])));
+    check('  ...and the market at a glance from the same read: counts of the 100 (11 up, 88 down, 1 level — BUIDL\'s own 0% — none without a change), the total, the three largest coins\' dominance (Bitcoin 59.6%), the top 5 gainers (only rises) and losers (only falls)',
+      JSON.stringify(M.counts) === JSON.stringify({ up: 11, down: 88, flat: 1, none: 0, of: 100 }) && JSON.stringify(M.total) === JSON.stringify(A2.total)
+      && M.dominance.map((d) => d.id).join() === 'bitcoin,ethereum,tether' && M.dominance.every((d) => JSON.stringify(d.fig) === JSON.stringify(rowOf(A2, d.id).dominance) && Object.keys(d).join() === 'id,symbol,fig') && Math.abs(M.dominance[0].fig.v - 59.597) < 0.01
+      && JSON.stringify(M.gainers.map((r) => r.id)) === JSON.stringify(wantUp) && JSON.stringify(M.losers.map((r) => r.id)) === JSON.stringify(wantDn) && M.gainers.every((r) => r.change24h.v > 0) && M.losers.every((r) => r.change24h.v < 0)
+      && JSON.stringify(M.reads) === JSON.stringify(A2.reads) && JSON.stringify(M.contracts) === JSON.stringify(A2.contracts) && M.notes[0] === 'Not advice, never a tip to buy. Do your own research.', brief({ c: M.counts, up: M.gainers.map((r) => r.symbol), dn: M.losers.map((r) => r.symbol) }));
+    check('  ...the Send API\'s movers resource is the same answer with its rows as data (one answer, not paged)',
+      M_api.status === 200 && M_api.body.data.length === 10 && M_api.body.rows === undefined && JSON.stringify(M_api.body.data.map((r) => r.id)) === JSON.stringify(wantMov) && M_api.body.gainers.length === 5 && mdV.RESOURCES.includes('movers'));
+    dump('heatmap', A2); dump('movers', M);
+    // a coin CoinGecko gives no change for is left out — never ranked as a 0% move; ENA (the biggest move) and HYPE (the biggest rise) without theirs
+    const stNull = JSON.parse(JSON.stringify(stH));
+    for (const id of ['ethena', 'hyperliquid']) stNull.coins.list.find((c) => c.id === id).change24h = null;   // built: two measured rows with their change taken away
+    mdV._test.stSet('heatmap', stNull); clockV += 20e3; const MN = mdV.movers().body; mdV._test.stSet('heatmap', stH); clockV += 20e3;
+    const lists = (m) => [...m.rows, ...m.gainers, ...m.losers];
+    check('  ...a coin with no 24 h change given is left out of every ranking and counted as "none" — never ranked as a 0% move: without ENA\'s and HYPE\'s, WLD leads and TRX is the first gainer, the counts say 2 none, and a note says why',
+      !lists(MN).some((r) => r.id === 'ethena' || r.id === 'hyperliquid') && lists(MN).every((r) => typeof r.change24h.v === 'number') && MN.rows[0].id === 'worldcoin-wld' && MN.gainers[0].id === 'tron'
+      && MN.counts.none === 2 && MN.counts.up === 10 && MN.counts.down === 87 && MN.counts.flat === 1 && MN.notes.some((n) => /^2 of the 100 coins have no 24 h change given by CoinGecko: left out of every ranking, never counted as 0%\.$/.test(n))
+      && !lists(MN).some((r) => r.id === 'blackrock-usd-institutional-digital-liquidity-fund'), brief({ r0: MN.rows[0].id, g0: MN.gainers[0].id, c: MN.counts }));
+    // the strip's edges, on built rows (the pure rule): a day with no rises, a tie
+    const fakeRow = (id, v, i) => ({ id, symbol: id.toUpperCase(), name: id, rank: i + 1, change24h: { v, src: 'coingecko', at: 1 }, dominance: { v: null, src: 'coingecko', at: 1, why: 'x' } });
+    const allDown = MM.moversOf(Array.from({ length: 12 }, (_, i) => fakeRow('d' + i, -1 - i, i))), tie = MM.moversOf([fakeRow('a', -5, 0), fakeRow('b', 5, 1), fakeRow('c', -9, 2), fakeRow('z', 0, 3)]);
+    check('  ...a day with no rises has no gainers (never a falling coin called one); a tie keeps CoinGecko\'s order (the larger coin first); a 0% move is level, neither gainer nor loser',
+      allDown.gainers.length === 0 && allDown.losers.length === 5 && allDown.losers[0].id === 'd11' && tie.rows.map((r) => r.id).join() === 'c,a,b,z' && tie.gainers.map((r) => r.id).join() === 'b' && tie.losers.map((r) => r.id).join() === 'c,a' && tie.counts.flat === 1);
+    // keep-last-good: CoinGecko down, an answer cut short, an answer that is not the list, an empty list — the last good map stays, said so
+    const before = JSON.stringify(ccRows());
+    clockV = at1 + 864e5; clVendor.mode = 'down'; const rF1 = await mdV.runJob('coinPlatforms');
+    clockV += 3600e3; clVendor.mode = 'cut'; const rF2 = await mdV.runJob('coinPlatforms');
+    clockV += 3600e3; clVendor.mode = 'notlist'; const rF3 = await mdV.runJob('coinPlatforms');
+    clockV += 3600e3; clVendor.mode = null; clVendor.body = '[]'; const rF4 = await mdV.runJob('coinPlatforms'); clVendor.body = null;
+    const cpF = mdV._test.stGet('coin_platforms').v; clockV += 20e3; const AF = mdV.heatmap({}).body;
+    check('coin list: a read that fails keeps the last good map — CoinGecko down (503), an answer cut short (500 coins, under half the last read\'s), one that is not the list, an empty list: each run fails and says why, the map\'s rows are the same, the coins keep their onchain, and contracts says when it failed and that the last good read is used — never "no contract"',
+      [rF1, rF2, rF3, rF4].every((r) => !r.ok && r.calls === 1 && /the map from 2026-10-30 00:36 UTC is kept$/.test(r.note)) && /\(upstream 503\)/.test(rF1.note) && /it listed 500 coins, under half the \d+ of the last good read/.test(rF2.note) && /\(not a list\)/.test(rF3.note) && /\(an empty list\)/.test(rF4.note)
+      && JSON.stringify(ccRows()) === before && cpF.readAt === at1 && cpF.failAt > cpF.readAt && cpF.failWhy === 'an empty list' && cpF.kept === wantKept.length
+      && JSON.stringify(rowOf(AF, 'tether').onchain) === JSON.stringify(oc('tether')) && rowOf(AF, 'chainlink').onchain.kind === 'contract' && AF.contracts.ok === false
+      && /^CoinGecko's list of each coin's contracts could not be read at 2026-10-31 \d\d:\d\d UTC \(an empty list\) — the last good read, from 2026-10-30 00:36 UTC, is used$/.test(AF.contracts.why), brief([rF1.note, rF2.note, rF3.note, rF4.note, AF.contracts]));
+    // the next good read replaces the map whole: a coin it no longer lists an address for loses it (built: the same body without $LINK's row)
+    clockV += 3600e3; clVendor.body = JSON.stringify([...CGL.filter((c) => c.id !== 'uniswap').map((c) => (c.id === 'chainlink' ? Object.assign({}, c, { platforms: {} }) : c)), ...FR.cg, ...CL_FILL]); const rG = await mdV.runJob('coinPlatforms'); clVendor.body = null;
+    const rowsG = ccRows(), cpG = mdV._test.stGet('coin_platforms').v; clockV += 20e3; const AG = mdV.heatmap({}).body; const rPr = await mdV.runJob('prune');
+    check('  ...and the next good read replaces the map whole, in one transaction: a coin it lists with no address now has none (LINK is "none"), a coin it no longer lists at all is unknown (UNI: null with why), every row is that read\'s, the failure is cleared, and the prune keeps only the newest read\'s rows',
+      rG.ok && rowsG.length === served.length - 1 && rowsG.filter(hasAddr).length === wantKept.length - 2 && !hasAddr(rowsG.find((r) => r.coin === 'chainlink')) && !rowsG.some((r) => r.coin === 'uniswap') && rowsG.every((r) => r.at === cpG.readAt) && !('failAt' in cpG)
+      && rowOf(AG, 'chainlink').onchain.kind === 'none' && rowOf(AG, 'uniswap').onchain === null && /^\$UNI is not in CoinGecko's coin list as read at /.test(rowOf(AG, 'uniswap').onchainWhy) && AG.contracts.ok === true && AG.contracts.why === null
+      && /coin contracts 0/.test(rPr.note) && ccRows().length === rowsG.length, brief({ n: rowsG.length, note: rPr.note }));
+    // the docs: /data documents the movers resource with every key it returns, and the heatmap's new keys; the README; robots.txt
+    const mvDoc = DOCS.includes('/api/data/v1/movers') ? DOCS.slice(DOCS.indexOf('/api/data/v1/movers')).split('</details>')[0] : '';
+    const mvKeys = [...new Set([...Object.keys(M), ...Object.keys(M.rows[0]), ...Object.keys(M.counts), ...Object.keys(M.dominance[0]), ...Object.keys(M.contracts)])].filter((k) => k !== 'rows');
+    const hmDoc2 = DOCS.includes('/api/data/v1/heatmap') ? DOCS.slice(DOCS.indexOf('/api/data/v1/heatmap')).split('</details>')[0] : '';
+    const README_M = fs.readFileSync(path.join(ROOT, 'README.md'), 'utf8'), ROBOTS = fs.readFileSync(path.join(ROOT, 'public', 'robots.txt'), 'utf8');
+    check('  ...the docs: /data documents movers with every key it returns (data, the ranking, counts, total, dominance, gainers, losers, contracts) and its ranking rule, and the heatmap\'s logo and onchain with its four kinds; the README says what the movers and the coin list are and how often; robots.txt opens /api/market/movers at its default address only',
+      !!mvDoc && ['data'].concat(mvKeys).every((k) => new RegExp('\\b' + k + '\\b').test(mvDoc)) && /<tr><td><code>movers<\/code><\/td>/.test(DOCS) && /ranked by the size of the move either way/.test(mvDoc) && /never ranked as 0%/.test(mvDoc)
+      && ['logo', 'onchain', 'onchainWhy', 'contracts', 'scannable', '"contract"', '"quote"', '"native"', '"none"'].every((k) => hmDoc2.includes(k)) && /<tr><td>Coin contracts<\/td>[^\n]*<td>Daily<\/td><\/tr>/.test(DOCS)
+      && /`movers`/.test(README_M) && /`coinPlatforms`/.test(README_M) && /\*\*`contract`\*\*[^\n]*\*\*`quote`\*\*[^\n]*\*\*`native`\*\*[^\n]*\*\*`none`\*\*/.test(README_M) && /once a day/.test(README_M.slice(README_M.indexOf('coinPlatforms') - 300))
+      && /^Allow: \/api\/market\/movers\$$/m.test(ROBOTS), mvKeys.filter((k) => !new RegExp('\\b' + k + '\\b').test(mvDoc)).join(','));
+    dbV.close();
   }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join(' | '));
@@ -2182,6 +2372,12 @@ try {
   check('GET /api/market/heatmap: the bubble map\'s 100 coins with the total, the counts, the reads and the legend (no-store, at the routes\' 120 a minute); limit=50&stables=0 the top 50 without their stablecoins',
     hm.status === 200 && hm.j.rows.length === 100 && hm.j.rows[0].id === 'bitcoin' && Math.abs(hm.j.rows[0].dominance.v - 59.597) < 0.01 && hm.j.total.src === 'coingecko' && hm.j.legend.length === 10 && hm.j.reads.coins.ok === true && /no-store/.test(hm.cc)
     && hm50.status === 200 && hm50.j.rows.length === 40 && hm50.j.limit === 50 && hm50.j.stables === false, brief({ s: hm.status, n: hm.j && hm.j.rows && hm.j.rows.length, n50: hm50.j && hm50.j.rows && hm50.j.rows.length }));
+  // the movers through the route (2026-11-17): from the same seeded read, nothing asked of a source; the coin list not read on this server
+  const mvLog = log.length, mv = await asVisitor('/api/market/movers');
+  check('GET /api/market/movers: the 10 biggest 24 h moves among the map\'s 100 coins (ENA first, down 20%), with the counts, the total, the dominance, the gainers and losers — no-store, at the routes\' 120 a minute, nothing read for it; each row\'s onchain null with why (this server has not read the coin list)',
+    mv.status === 200 && mv.j.rows.length === 10 && mv.j.rows[0].id === 'ethena' && mv.j.ranked === 'absolute 24 h move, either way' && mv.j.counts.of === 100 && mv.j.gainers.length === 5 && mv.j.losers.length === 5 && mv.j.dominance.length === 3
+    && mv.j.total.src === 'coingecko' && /no-store/.test(mv.cc) && !log.slice(mvLog).some((l) => /\/(hcg|cg|hlore|lore)\//.test(l)) && mv.j.rows.every((r) => r.onchain === null && typeof r.onchainWhy === 'string' && /^\/api\/market\/logo\?u=/.test(r.logo)) && mv.j.contracts.ok === false
+    && /else if \(p === '\/api\/market\/movers'\) r = MKT\.movers\(\);/.test(SRC), brief({ s: mv.status, r0: mv.j && mv.j.rows && mv.j.rows[0] && mv.j.rows[0].id, c: mv.j && mv.j.counts }));
   // the RWA tab, through the routes (the RWA job ran once, on the server's own timer, against the fakes)
   const ra = await api('/api/market/rwa'), rt = await api('/api/market/rwa?view=tokens&sort=tvl&dir=asc&kind=stock&issuer=rhj&limit=5'), rc = await api('/api/market/rwa?view=connected'), rs = await api('/api/market/rwa?view=stables');
   check('GET /api/market/rwa: Top RWAs by value on chain, the totals, the reads, the definitions — no-store; view, sort, dir, kind, issuer and limit as asked; the connected and stablecoin views', ra.status === 200 && ra.j.view === 'assets' && ra.j.rows.length > 0 && ra.j.totals && ra.j.reads.registry.ok === true && typeof ra.j.definitions.tvl === 'string' && /no-store/.test(ra.cc)
@@ -2237,9 +2433,9 @@ try {
   const dsn2 = await api('/api/data/v1/chain-snapshots?limit=4&before=' + (dsn.j && dsn.j.next), { key }), dsc = await api('/api/data/v1/scans?chain=ethereum&address=' + PEPE, { key });
   check('  ...with one: the chains (raw logo URLs — programs, not browsers), a chain\'s history, snapshots paged by before / limit, every scan', dc.status === 200 && dc.j.data.length > 0 && dc.j.data[0].tvl.src === 'defillama' && dh.status === 200 && Array.isArray(dh.j.data)
     && dsn.status === 200 && dsn.j.data.length === 4 && dsn.j.next && dsn2.j.data[0].id < dsn.j.data[3].id && dsc.j.data.length === 2 && dsc.j.data.some((x) => x.src === 'market') && dsc.j.data.some((x) => x.src === 'scan'), brief({ dsn: dsn.j && dsn.j.next, dsc: dsc.j && dsc.j.data.map((x) => x.src) }));
-  const dall = await Promise.all(['chain?key=robinhood', 'tokens?chain=robinhood', 'tokens?chain=all', 'token?chain=robinhood&address=' + USDG, 'pools?network=robinhood&limit=3', 'new-pools?limit=3', 'radar', 'pulse?limit=2', 'collectors', 'rwa?view=tokens', 'rwa-token?address=' + TSLA, 'heatmap?limit=20'].map((r) => api('/api/data/v1/' + r, { key })));
+  const dall = await Promise.all(['chain?key=robinhood', 'tokens?chain=robinhood', 'tokens?chain=all', 'token?chain=robinhood&address=' + USDG, 'pools?network=robinhood&limit=3', 'new-pools?limit=3', 'radar', 'pulse?limit=2', 'collectors', 'rwa?view=tokens', 'rwa-token?address=' + TSLA, 'movers', 'heatmap?limit=20'].map((r) => api('/api/data/v1/' + r, { key })));
   const dunk = await api('/api/data/v1/nope', { key });
-  check('  ...every one of the new resources answers, and the unknown-resource error lists them all', dall.every((r) => r.status === 200 && r.j && (r.j.data !== undefined)) && dunk.status === 404 && ['chains', 'chain-history', 'chain-snapshots', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'competition', 'rwa', 'rwa-token', 'heatmap'].every((n) => dunk.j.error.includes(n)) && dall[dall.length - 1].j.data.length === 20,
+  check('  ...every one of the new resources answers, and the unknown-resource error lists them all', dall.every((r) => r.status === 200 && r.j && (r.j.data !== undefined)) && dunk.status === 404 && ['chains', 'chain-history', 'chain-snapshots', 'new-pools', 'radar', 'scans', 'pulse', 'collectors', 'competition', 'rwa', 'rwa-token', 'heatmap', 'movers'].every((n) => dunk.j.error.includes(n)) && dall[dall.length - 1].j.data.length === 20 && dall[dall.length - 2].j.data.length === 10,
     dall.map((r) => r.status).join(' ') + ' ' + brief(dunk.j));
 
   // the admin browser
@@ -2251,7 +2447,7 @@ try {
   const ac = await api('/api/admin/collected', { sid: admin.sid });
   const ids = (ac.j && ac.j.datasets || []).map((d) => d.id);
   check('  ...for the admin: every mkt_* table, the token cache, the runners store, the holder ledger, the chart-source cache, and the Send API\'s public views — each with its rows, newest and oldest, and its columns',
-    ac.status === 200 && ['mkt_chain_snap', 'mkt_chain_series', 'mkt_pool_snap', 'mkt_new_pool', 'mkt_rh_pulse', 'mkt_scan', 'mkt_radar', 'mkt_runs', 'token_cache', 'runner_tokens', 'holder_index', 'chart_sources', 'users', 'posts', 'comments', 'calls', 'communities', 'leaderboard', 'competition'].every((i) => ids.includes(i))
+    ac.status === 200 && ['mkt_chain_snap', 'mkt_chain_series', 'mkt_pool_snap', 'mkt_new_pool', 'mkt_rh_pulse', 'mkt_scan', 'mkt_radar', 'mkt_coin_contract', 'mkt_runs', 'token_cache', 'runner_tokens', 'holder_index', 'chart_sources', 'users', 'posts', 'comments', 'calls', 'communities', 'leaderboard', 'competition'].every((i) => ids.includes(i))
     && ac.j.datasets.every((d) => d.title && Array.isArray(d.columns) && d.columns.length > 0 && 'rows' in d && 'newestAt' in d && 'oldestAt' in d) && ac.j.datasets.find((d) => d.id === 'mkt_pool_snap').rows > 0 && /no-store/.test(ac.cc), ids.join(','));
   dump('admin-collected', ac.j); dump('admin-collected-mkt_chain_snap', (await api('/api/admin/collected/mkt_chain_snap?limit=3', { sid: admin.sid })).j);
   dump('admin-collected-users', (await api('/api/admin/collected/users?limit=3', { sid: admin.sid })).j); dump('market-scan-ethereum', qs.j);

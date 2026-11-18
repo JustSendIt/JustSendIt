@@ -66,7 +66,17 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F1%2Flarge%2Fbitcoin.png%3F1696501400",
+   "onchain": {
+    "kind": "native",
+    "chain": "bitcoin",
+    "scannable": false,
+    "src": "defillama",
+    "at": 1793037600000,
+    "why": "$BTC is Bitcoin’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
+   },
+   "onchainWhy": null
   },
   {
    "id": "ethereum",
@@ -125,7 +135,17 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F279%2Flarge%2Fethereum.png%3F1696501628",
+   "onchain": {
+    "kind": "native",
+    "chain": "ethereum",
+    "scannable": false,
+    "src": "defillama",
+    "at": 1793037600000,
+    "why": "$ETH is Ethereum’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
+   },
+   "onchainWhy": null
   },
   {
    "id": "tether",
@@ -184,7 +204,18 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F325%2Flarge%2FTether.png%3F1696501661",
+   "onchain": {
+    "kind": "quote",
+    "chain": "ethereum",
+    "address": "0xdac17f958d2ee523a2206206994597c13d831ec7",
+    "scannable": false,
+    "src": "coingecko",
+    "at": 1793320560000,
+    "why": "$USDT’s contract on Ethereum is a base trading asset — a stablecoin or wrapped coin other tokens are priced in. The Scanner profiles tokens, not base assets."
+   },
+   "onchainWhy": null
   },
   {
    "id": "binancecoin",
@@ -245,7 +276,17 @@
     "notes": [
      "CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Binance Coin”, CoinGecko “BNB” — their prices are 0.2% apart on this read (a coin under another name counts only within 3% of CoinGecko’s price, and only as the one coin with the symbol $BNB within 10% of it among CoinLore’s 100 largest coins, the part of its list this map reads)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F825%2Flarge%2Fbnb-icon2_2x.png%3F1696501970",
+   "onchain": {
+    "kind": "native",
+    "chain": "bsc",
+    "scannable": false,
+    "src": "defillama",
+    "at": 1793037600000,
+    "why": "$BNB is BSC’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
+   },
+   "onchainWhy": null
   },
   {
    "id": "ripple",
@@ -304,7 +345,17 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F44%2Flarge%2Fxrp-symbol-white-128.png%3F1696501442",
+   "onchain": {
+    "kind": "native",
+    "chain": "xrpl",
+    "scannable": false,
+    "src": "defillama",
+    "at": 1793037600000,
+    "why": "$XRP is XRPL’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
+   },
+   "onchainWhy": null
   },
   {
    "id": "usd-coin",
@@ -363,7 +414,18 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F6319%2Flarge%2FUSDC.png%3F1769615602",
+   "onchain": {
+    "kind": "quote",
+    "chain": "ethereum",
+    "address": "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+    "scannable": false,
+    "src": "coingecko",
+    "at": 1793320560000,
+    "why": "$USDC’s contract on Ethereum is a base trading asset — a stablecoin or wrapped coin other tokens are priced in. The Scanner profiles tokens, not base assets."
+   },
+   "onchainWhy": null
   },
   {
    "id": "solana",
@@ -422,7 +484,17 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F4128%2Flarge%2Fsolana.png%3F1718769756",
+   "onchain": {
+    "kind": "native",
+    "chain": "solana",
+    "scannable": false,
+    "src": "defillama",
+    "at": 1793037600000,
+    "why": "$SOL is Solana’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
+   },
+   "onchainWhy": null
   },
   {
    "id": "tron",
@@ -481,7 +553,17 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F1094%2Flarge%2Fphoto_2026-04-13_09-59-16.png%3F1776048311",
+   "onchain": {
+    "kind": "native",
+    "chain": "tron",
+    "scannable": false,
+    "src": "defillama",
+    "at": 1793037600000,
+    "why": "$TRX is Tron’s own coin: it has no token contract to scan. Its chain's figures are in Market Data's chain view."
+   },
+   "onchainWhy": null
   },
   {
    "id": "figure-heloc",
@@ -533,7 +615,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $FIGR_HELOC — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F68480%2Flarge%2Ffigure.png%3F1755863954",
+   "onchain": null,
+   "onchainWhy": "$FIGR_HELOC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "hyperliquid",
@@ -594,7 +679,10 @@
     "notes": [
      "CoinGecko $21.3B, CoinLore $29.8B (40% apart): both price $HYPE the same (about $89.09); they count a different circulating supply (CoinGecko 239M, CoinLore 334M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F50882%2Flarge%2Fhyperliquid.jpg%3F1729431300",
+   "onchain": null,
+   "onchainWhy": "$HYPE is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "zcash",
@@ -653,7 +741,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F486%2Flarge%2FBrandmark-Yellow_%25281%2529.png%3F1785810558",
+   "onchain": null,
+   "onchainWhy": "$ZEC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "dogecoin",
@@ -712,7 +803,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F5%2Flarge%2Fdogecoin.png%3F1696501409",
+   "onchain": null,
+   "onchainWhy": "$DOGE is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "monero",
@@ -771,7 +865,16 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F69%2Flarge%2Fmonero_logo.png%3F1696501460",
+   "onchain": {
+    "kind": "none",
+    "scannable": false,
+    "src": "coingecko",
+    "at": 1793320560000,
+    "why": "CoinGecko lists no contract for $XMR on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
+   },
+   "onchainWhy": null
   },
   {
    "id": "usds",
@@ -823,7 +926,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $USDS — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F39926%2Flarge%2Fusds.webp%3F1726666683",
+   "onchain": null,
+   "onchainWhy": "$USDS is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "whitebit",
@@ -875,7 +981,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $WBT — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F27045%2Flarge%2Fwbt_token.png%3F1696526096",
+   "onchain": null,
+   "onchainWhy": "$WBT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "leo-token",
@@ -927,7 +1036,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $LEO — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F8418%2Flarge%2Fleo-token.png%3F1696508607",
+   "onchain": null,
+   "onchainWhy": "$LEO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "chainlink",
@@ -988,7 +1100,17 @@
     "notes": [
      "CoinGecko $7.93B, CoinLore $7.05B (11% apart): both price $LINK the same (about $10.35); they count a different circulating supply (CoinGecko 767M, CoinLore 678M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F877%2Flarge%2FChainlink_Logo_500.png%3F1760023405",
+   "onchain": {
+    "kind": "contract",
+    "chain": "ethereum",
+    "address": "0x514910771af9ca656af840dff83e8264ecf986ca",
+    "scannable": true,
+    "src": "coingecko",
+    "at": 1793320560000
+   },
+   "onchainWhy": null
   },
   {
    "id": "cardano",
@@ -1047,7 +1169,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F975%2Flarge%2Fcardano.png%3F1696502090",
+   "onchain": null,
+   "onchainWhy": "$ADA is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "stellar",
@@ -1106,7 +1231,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F100%2Flarge%2FfmpFRHHQ_400x400.jpg%3F1735231350",
+   "onchain": null,
+   "onchainWhy": "$XLM is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "bitcoin-cash",
@@ -1165,7 +1293,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F780%2Flarge%2Fbitcoin-cash-circle.png%3F1696501932",
+   "onchain": null,
+   "onchainWhy": "$BCH is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "near",
@@ -1224,7 +1355,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F10365%2Flarge%2Fnear.jpg%3F1696510367",
+   "onchain": null,
+   "onchainWhy": "$NEAR is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "rain",
@@ -1276,7 +1410,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $RAIN — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F69134%2Flarge%2FRain_logo_1_.png%3F1762952191",
+   "onchain": null,
+   "onchainWhy": "$RAIN is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "dai",
@@ -1337,7 +1474,18 @@
     "notes": [
      "CoinGecko $4.57B, CoinLore $5.33B (17% apart): both price $DAI the same (about $1); they count a different circulating supply (CoinGecko 4.57B, CoinLore 5.37B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F9956%2Flarge%2FBadge_Dai.png%3F1696509996",
+   "onchain": {
+    "kind": "quote",
+    "chain": "ethereum",
+    "address": "0x6b175474e89094c44da98b954eedeac495271d0f",
+    "scannable": false,
+    "src": "coingecko",
+    "at": 1793320560000,
+    "why": "$DAI’s contract on Ethereum is a base trading asset — a stablecoin or wrapped coin other tokens are priced in. The Scanner profiles tokens, not base assets."
+   },
+   "onchainWhy": null
   },
   {
    "id": "ethena-usde",
@@ -1398,7 +1546,10 @@
     "notes": [
      "CoinGecko $4.53B, CoinLore $14.1B (211% apart): both price $USDE the same (about $1); they count a different circulating supply (CoinGecko 4.54B, CoinLore 14.1B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F33613%2Flarge%2Fusde.png%3F1733810059",
+   "onchain": null,
+   "onchainWhy": "$USDE is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "litecoin",
@@ -1450,7 +1601,16 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $LTC — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F2%2Flarge%2Flitecoin.png%3F1696501400",
+   "onchain": {
+    "kind": "none",
+    "scannable": false,
+    "src": "coingecko",
+    "at": 1793320560000,
+    "why": "CoinGecko lists no contract for $LTC on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
+   },
+   "onchainWhy": null
   },
   {
    "id": "uniswap",
@@ -1509,7 +1669,17 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12504%2Flarge%2Funiswap-logo.png%3F1720676669",
+   "onchain": {
+    "kind": "contract",
+    "chain": "ethereum",
+    "address": "0x1f9840a85d5af5bf1d1762f925bdaddc4201f984",
+    "scannable": true,
+    "src": "coingecko",
+    "at": 1793320560000
+   },
+   "onchainWhy": null
   },
   {
    "id": "usd1-wlfi",
@@ -1561,7 +1731,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $USD1 — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F54977%2Flarge%2FUSD1_1000x1000_transparent.png%3F1749297002",
+   "onchain": null,
+   "onchainWhy": "$USD1 is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "canton-network",
@@ -1613,7 +1786,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $CC — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F70468%2Flarge%2FCanton-Ticker_%25281%2529.png%3F1762826299",
+   "onchain": null,
+   "onchainWhy": "$CC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "avalanche-2",
@@ -1672,7 +1848,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12559%2Flarge%2FAvalanche_Circle_RedWhite_Trans.png%3F1696512369",
+   "onchain": null,
+   "onchainWhy": "$AVAX is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "sui",
@@ -1733,7 +1912,10 @@
     "notes": [
      "CoinGecko $3.45B, CoinLore $3.02B (13% apart): both price $SUI the same (about $0.84); they count a different circulating supply (CoinGecko 4.12B, CoinLore 3.57B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F26375%2Flarge%2Fsui-ocean-square.png%3F1727791290",
+   "onchain": null,
+   "onchainWhy": "$SUI is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "tether-gold",
@@ -1794,7 +1976,10 @@
     "notes": [
      "CoinGecko $3.24B, CoinLore $1.5B (54% apart): both price $XAUT the same (about $4002.15); they count a different circulating supply (CoinGecko 809k, CoinLore 376k)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F10481%2Flarge%2Flogo.png%3F1774627372",
+   "onchain": null,
+   "onchainWhy": "$XAUT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "the-open-network",
@@ -1846,7 +2031,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $GRAM — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F17980%2Flarge%2FGram_Circular_Badge.png%3F1781524778",
+   "onchain": null,
+   "onchainWhy": "$GRAM is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "global-dollar",
@@ -1907,7 +2095,18 @@
     "notes": [
      "CoinGecko $3.14B, CoinLore $676M (78% apart): both price $USDG the same (about $1); they count a different circulating supply (CoinGecko 3.14B, CoinLore 675M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F51281%2Flarge%2FGDN_USDG_Token_200x200.png%3F1730484111",
+   "onchain": {
+    "kind": "quote",
+    "chain": "robinhood",
+    "address": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+    "scannable": false,
+    "src": "coingecko",
+    "at": 1793320560000,
+    "why": "$USDG’s contract on Robinhood Chain is a base trading asset — a stablecoin or wrapped coin other tokens are priced in. The Scanner profiles tokens, not base assets."
+   },
+   "onchainWhy": null
   },
   {
    "id": "hedera-hashgraph",
@@ -1966,7 +2165,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F3688%2Flarge%2Fhbar.png%3F1696504364",
+   "onchain": null,
+   "onchainWhy": "$HBAR is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "paypal-usd",
@@ -2027,7 +2229,10 @@
     "notes": [
      "CoinGecko $2.99B, CoinLore $1.39B (53% apart): both price $PYUSD the same (about $1); they count a different circulating supply (CoinGecko 2.99B, CoinLore 1.39B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F31212%2Flarge%2FPYUSD_Token_Logo_2x.png%3F1765987788",
+   "onchain": null,
+   "onchainWhy": "$PYUSD is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "shiba-inu",
@@ -2086,7 +2291,17 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F11939%2Flarge%2Fshiba.png%3F1696511800",
+   "onchain": {
+    "kind": "contract",
+    "chain": "ethereum",
+    "address": "0x95ad61b0a150d79219dcf64e1e6cc01f0b64c4ce",
+    "scannable": true,
+    "src": "coingecko",
+    "at": 1793320560000
+   },
+   "onchainWhy": null
   },
   {
    "id": "ripple-usd",
@@ -2147,7 +2362,10 @@
     "notes": [
      "CoinGecko $2.63B, CoinLore $731M (72% apart): both price $RLUSD the same (about $1); they count a different circulating supply (CoinGecko 2.63B, CoinLore 730M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F39651%2Flarge%2FRLUSD_200x200_%25281%2529.png%3F1727376633",
+   "onchain": null,
+   "onchainWhy": "$RLUSD is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "bittensor",
@@ -2208,7 +2426,10 @@
     "notes": [
      "CoinGecko $2.62B, CoinLore $2.25B (14% apart): both price $TAO the same (about $225.02); they count a different circulating supply (CoinGecko 11.7M, CoinLore 9.93M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F28452%2Flarge%2FARUsPeNQ_400x400.jpeg%3F1696527447",
+   "onchain": null,
+   "onchainWhy": "$TAO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "quant-network",
@@ -2269,7 +2490,10 @@
     "notes": [
      "CoinGecko $2.56B, CoinLore $2.14B (17% apart): both price $QNT the same (about $176.67); they count a different circulating supply (CoinGecko 14.6M, CoinLore 12.1M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F3370%2Flarge%2F5ZOu7brX_400x400.jpg%3F1696504070",
+   "onchain": null,
+   "onchainWhy": "$QNT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "crypto-com-chain",
@@ -2331,7 +2555,10 @@
      "CoinGecko $2.56B, CoinLore $474M (81% apart): both price $CRO the same (about $0.05); they count a different circulating supply (CoinGecko 50.7B, CoinLore 9.28B)",
      "CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Crypto.com Chain”, CoinGecko “Cronos” — their prices are 1.4% apart on this read (a coin under another name counts only within 3% of CoinGecko’s price, and only as the one coin with the symbol $CRO within 10% of it among CoinLore’s 100 largest coins, the part of its list this map reads)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F7310%2Flarge%2Fcro_token_logo.png%3F1696507599",
+   "onchain": null,
+   "onchainWhy": "$CRO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "ondo-us-dollar-yield",
@@ -2383,7 +2610,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $USDY — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F31700%2Flarge%2Fusdy_%25281%2529.png%3F1696530524",
+   "onchain": null,
+   "onchainWhy": "$USDY is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "hashnote-usyc",
@@ -2435,7 +2665,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $USYC — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F51054%2Flarge%2FHashnote_SDYC_200x200.png%3F1730370965",
+   "onchain": null,
+   "onchainWhy": "$USYC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "bitway",
@@ -2487,7 +2720,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $BTW — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F71205%2Flarge%2FBTW_Token_200x200.png%3F1786291907",
+   "onchain": null,
+   "onchainWhy": "$BTW is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "memecore",
@@ -2539,7 +2775,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $M — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F53247%2Flarge%2Fsquare-bg-transparent.png%3F1752637478",
+   "onchain": null,
+   "onchainWhy": "$M is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "okb",
@@ -2598,7 +2837,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F4463%2Flarge%2FWeChat_Image_20220118095654.png%3F1696505053",
+   "onchain": null,
+   "onchainWhy": "$OKB is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "ethena",
@@ -2659,7 +2901,17 @@
     "notes": [
      "CoinGecko $2.23B, CoinLore $1.16B (48% apart): both price $ENA the same (about $0.17); they count a different circulating supply (CoinGecko 13.4B, CoinLore 6.89B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F36530%2Flarge%2Fethena.png%3F1711701436",
+   "onchain": {
+    "kind": "contract",
+    "chain": "ethereum",
+    "address": "0x57e114b691db790c35207b2e685d4a43181e6061",
+    "scannable": true,
+    "src": "coingecko",
+    "at": 1793320560000
+   },
+   "onchainWhy": null
   },
   {
    "id": "blackrock-usd-institutional-digital-liquidity-fund",
@@ -2711,7 +2963,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $BUIDL — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F36291%2Flarge%2Fblackrock.png%3F1711013223",
+   "onchain": null,
+   "onchainWhy": "$BUIDL is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "pepe",
@@ -2770,7 +3025,17 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F29850%2Flarge%2Fpepe-token.jpeg%3F1696528776",
+   "onchain": {
+    "kind": "contract",
+    "chain": "ethereum",
+    "address": "0x6982508145454ce325ddbe47a25d4ec3d2311933",
+    "scannable": true,
+    "src": "coingecko",
+    "at": 1793320560000
+   },
+   "onchainWhy": null
   },
   {
    "id": "falcon-finance",
@@ -2829,7 +3094,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F54558%2Flarge%2Fff_200_X_200.png%3F1740741076",
+   "onchain": null,
+   "onchainWhy": "$USDF is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "spiko-amundi-overnight-swap-fund-eur",
@@ -2881,7 +3149,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $EURSAFO — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102172591%2Flarge%2FFund_eurSAF0.png%3F1774104814",
+   "onchain": null,
+   "onchainWhy": "$EURSAFO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "aave",
@@ -2940,7 +3211,17 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12645%2Flarge%2Faave-token-round.png%3F1720472354",
+   "onchain": {
+    "kind": "contract",
+    "chain": "ethereum",
+    "address": "0x7fc66500c84a76ad7e9c93437bfc5ac33e2ddae9",
+    "scannable": true,
+    "src": "coingecko",
+    "at": 1793320560000
+   },
+   "onchainWhy": null
   },
   {
    "id": "pax-gold",
@@ -3001,7 +3282,10 @@
     "notes": [
      "CoinGecko $1.79B, CoinLore $1.17B (35% apart): both price $PAXG the same (about $4007.7); they count a different circulating supply (CoinGecko 446k, CoinLore 291k)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F9519%2Flarge%2Fasset-paxg.png%3F1785284785",
+   "onchain": null,
+   "onchainWhy": "$PAXG is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "ondo-finance",
@@ -3062,7 +3346,10 @@
     "notes": [
      "CoinGecko $1.78B, CoinLore $1.17B (34% apart): both price $ONDO the same (about $0.37); they count a different circulating supply (CoinGecko 4.87B, CoinLore 3.16B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F26580%2Flarge%2FONDO.png%3F1696525656",
+   "onchain": null,
+   "onchainWhy": "$ONDO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "pump-fun",
@@ -3114,7 +3401,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $PUMP — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F67164%2Flarge%2Fpump.jpg%3F1751949376",
+   "onchain": null,
+   "onchainWhy": "$PUMP is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "aster-2",
@@ -3175,7 +3465,10 @@
     "notes": [
      "CoinGecko $1.66B, CoinLore $1.15B (31% apart): their prices for $ASTER differ by 2% (CoinGecko $0.66, CoinLore $0.68), and they count a different circulating supply (CoinGecko 2.51B, CoinLore 1.7B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F69040%2Flarge%2F_ASTER.png%3F1757326782",
+   "onchain": null,
+   "onchainWhy": "$ASTER is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "world-liberty-financial",
@@ -3236,7 +3529,10 @@
     "notes": [
      "CoinGecko $1.61B, CoinLore $1.24B (23% apart): both price $WLFI the same (about $0.051); they count a different circulating supply (CoinGecko 31.8B, CoinLore 24.6B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F50767%2Flarge%2Fwlfi.png%3F1756438915",
+   "onchain": null,
+   "onchainWhy": "$WLFI is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "united-stables",
@@ -3288,7 +3584,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $U — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F71157%2Flarge%2Funited-stables-logo.jpg%3F1766061640",
+   "onchain": null,
+   "onchainWhy": "$U is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "htx-dao",
@@ -3340,7 +3639,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $HTX — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F35491%2Flarge%2FFrame_1321318576.png%3F1708908626",
+   "onchain": null,
+   "onchainWhy": "$HTX is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "mantle",
@@ -3399,7 +3701,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F30980%2Flarge%2FMNT_Token_Logo.png%3F1765516974",
+   "onchain": null,
+   "onchainWhy": "$MNT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "sky",
@@ -3451,7 +3756,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $SKY — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F39925%2Flarge%2Fsky.jpg%3F1724827980",
+   "onchain": null,
+   "onchainWhy": "$SKY is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "polkadot",
@@ -3512,7 +3820,10 @@
     "notes": [
      "CoinGecko $1.51B, CoinLore $1.34B (11% apart): both price $DOT the same (about $0.88); they count a different circulating supply (CoinGecko 1.71B, CoinLore 1.52B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12171%2Flarge%2Fpolkadot.jpg%3F1766533446",
+   "onchain": null,
+   "onchainWhy": "$DOT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "usdd",
@@ -3573,7 +3884,10 @@
     "notes": [
      "CoinGecko $1.46B, CoinLore $522M (64% apart): both price $USDD the same (about $1); they count a different circulating supply (CoinGecko 1.47B, CoinLore 523M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F25380%2Flarge%2FUUSD.jpg%3F1696524513",
+   "onchain": null,
+   "onchainWhy": "$USDD is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "morpho",
@@ -3634,7 +3948,10 @@
     "notes": [
      "CoinGecko $1.46B, CoinLore $704M (52% apart): both price $MORPHO the same (about $2.07); they count a different circulating supply (CoinGecko 703M, CoinLore 339M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F29837%2Flarge%2FMorpho-token-icon.png%3F1726771230",
+   "onchain": null,
+   "onchainWhy": "$MORPHO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "worldcoin-wld",
@@ -3695,7 +4012,17 @@
     "notes": [
      "CoinGecko $1.36B, CoinLore $754M (44% apart): both price $WLD the same (about $0.36); they count a different circulating supply (CoinGecko 3.73B, CoinLore 2.05B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F31069%2Flarge%2Fworldcoin.jpeg%3F1696529903",
+   "onchain": {
+    "kind": "contract",
+    "chain": "ethereum",
+    "address": "0x163f8c2467924be0ae7b5347228cabf260318753",
+    "scannable": true,
+    "src": "coingecko",
+    "at": 1793320560000
+   },
+   "onchainWhy": null
   },
   {
    "id": "bfusd",
@@ -3756,7 +4083,10 @@
     "notes": [
      "CoinGecko $1.32B, CoinLore $1.65B (26% apart): both price $BFUSD the same (about $1); they count a different circulating supply (CoinGecko 1.32B, CoinLore 1.66B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F68227%2Flarge%2Fbfusd.png%3F1755132827",
+   "onchain": null,
+   "onchainWhy": "$BFUSD is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "internet-computer",
@@ -3815,7 +4145,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F14495%2Flarge%2FInternet_Computer_logo.png%3F1696514180",
+   "onchain": null,
+   "onchainWhy": "$ICP is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "usdgo",
@@ -3867,7 +4200,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $USDGO — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102172077%2Flarge%2FUSDGO_Primary_Icon.png%3F1789694084",
+   "onchain": null,
+   "onchainWhy": "$USDGO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "bitget-token",
@@ -3926,7 +4262,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F11610%2Flarge%2FBitget_logo.png%3F1736925727",
+   "onchain": null,
+   "onchainWhy": "$BGB is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "just",
@@ -3987,7 +4326,10 @@
     "notes": [
      "CoinGecko $1.12B, CoinLore $1.38B (24% apart): both price $JST the same (about $0.14); they count a different circulating supply (CoinGecko 8.02B, CoinLore 9.9B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F11095%2Flarge%2FJUST.jpg%3F1696511035",
+   "onchain": null,
+   "onchainWhy": "$JST is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "ethereum-classic",
@@ -4046,7 +4388,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F453%2Flarge%2Fethereum-classic-logo.png%3F1696501717",
+   "onchain": null,
+   "onchainWhy": "$ETC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "venice-token",
@@ -4107,7 +4452,10 @@
     "notes": [
      "CoinGecko $1.08B, CoinLore $817M (24% apart): both price $VVV the same (about $22.18); they count a different circulating supply (CoinGecko 48.7M, CoinLore 36.6M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F54023%2Flarge%2FVVV_Token_Transparent.png%3F1741856877",
+   "onchain": null,
+   "onchainWhy": "$VVV is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "arbitrum",
@@ -4168,7 +4516,10 @@
     "notes": [
      "CoinGecko $1.04B, CoinLore $815M (21% apart): both price $ARB the same (about $0.15); they count a different circulating supply (CoinGecko 6.89B, CoinLore 5.4B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F16547%2Flarge%2Farb.jpg%3F1721358242",
+   "onchain": null,
+   "onchainWhy": "$ARB is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "kucoin-shares",
@@ -4229,7 +4580,10 @@
     "notes": [
      "CoinGecko $985M, CoinLore $612M (38% apart): their prices for $KCS differ by 2.4% (CoinGecko $7.06, CoinLore $6.89), and they count a different circulating supply (CoinGecko 140M, CoinLore 88.7M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F1047%2Flarge%2Fsa9z79.png%3F1696502152",
+   "onchain": null,
+   "onchainWhy": "$KCS is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "gatechain-token",
@@ -4281,7 +4635,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $GT — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F8183%2Flarge%2F200X200.png%3F1735246724",
+   "onchain": null,
+   "onchainWhy": "$GT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "kaspa",
@@ -4340,7 +4697,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F25751%2Flarge%2Fkaspa-icon-exchanges.png%3F1696524837",
+   "onchain": null,
+   "onchainWhy": "$KAS is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "polygon-ecosystem-token",
@@ -4392,7 +4752,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $POL — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F32440%2Flarge%2Fpol.png%3F1759114181",
+   "onchain": null,
+   "onchainWhy": "$POL is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "open-usd",
@@ -4444,7 +4807,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $OUSD — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102174264%2Flarge%2Fopen_standard.png%3F1782864430",
+   "onchain": null,
+   "onchainWhy": "$OUSD is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "pi-network",
@@ -4506,7 +4872,10 @@
      "CoinGecko $859M, CoinLore $622M (28% apart): both price $PI the same (about $0.076); they count a different circulating supply (CoinGecko 11.3B, CoinLore 8.2B)",
      "CoinLore’s coin is matched by its symbol and price, not by its name: CoinLore calls it “Pi”, CoinGecko “Pi Network” — their prices are less than 0.05% apart on this read (a coin under another name counts only within 3% of CoinGecko’s price, and only as the one coin with the symbol $PI within 10% of it among CoinLore’s 100 largest coins, the part of its list this map reads)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F54342%2Flarge%2Fpi_network.jpg%3F1739347576",
+   "onchain": null,
+   "onchainWhy": "$PI is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "algorand",
@@ -4565,7 +4934,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F4380%2Flarge%2Fdownload.png%3F1696504978",
+   "onchain": null,
+   "onchainWhy": "$ALGO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "jupiter-exchange-solana",
@@ -4617,7 +4989,17 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $JUP — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F34188%2Flarge%2Fjup.png%3F1704266489",
+   "onchain": {
+    "kind": "contract",
+    "chain": "solana",
+    "address": "JUPyiwrYJFskUPiHa7hkeR8VUtAeFoSYbKedZNsDvCN",
+    "scannable": true,
+    "src": "coingecko",
+    "at": 1793320560000
+   },
+   "onchainWhy": null
   },
   {
    "id": "cosmos",
@@ -4678,7 +5060,10 @@
     "notes": [
      "CoinGecko $781M, CoinLore $682M (13% apart): both price $ATOM the same (about $1.45); they count a different circulating supply (CoinGecko 539M, CoinLore 469M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F1481%2Flarge%2Fcosmos_hub.png%3F1696502525",
+   "onchain": null,
+   "onchainWhy": "$ATOM is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "nexo",
@@ -4739,7 +5124,10 @@
     "notes": [
      "CoinGecko $770M, CoinLore $500M (35% apart): both price $NEXO the same (about $0.77); they count a different circulating supply (CoinGecko 1B, CoinLore 646M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F3695%2Flarge%2FCG-nexo-token-200x200_2x.png%3F1730414360",
+   "onchain": null,
+   "onchainWhy": "$NEXO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "render-token",
@@ -4798,7 +5186,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F11636%2Flarge%2Frndr.png%3F1696511529",
+   "onchain": null,
+   "onchainWhy": "$RENDER is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "injective-protocol",
@@ -4857,7 +5248,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12882%2Flarge%2FOther_200x200.png%3F1738782212",
+   "onchain": null,
+   "onchainWhy": "$INJ is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "gho",
@@ -4918,7 +5312,10 @@
     "notes": [
      "CoinGecko $697M, CoinLore $352M (49% apart): both price $GHO the same (about $1); they count a different circulating supply (CoinGecko 699M, CoinLore 353M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F30663%2Flarge%2Fgho-token-logo.png%3F1720517092",
+   "onchain": null,
+   "onchainWhy": "$GHO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "superstate-short-duration-us-government-securities-fund-ustb",
@@ -4970,7 +5367,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $USTB — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F35012%2Flarge%2FInvesco_icon_lg.png%3F1780816895",
+   "onchain": null,
+   "onchainWhy": "$USTB is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "filecoin",
@@ -5031,7 +5431,10 @@
     "notes": [
      "CoinGecko $660M, CoinLore $544M (18% apart): both price $FIL the same (about $0.79); they count a different circulating supply (CoinGecko 838M, CoinLore 690M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12817%2Flarge%2Ffilecoin.png%3F1696512609",
+   "onchain": null,
+   "onchainWhy": "$FIL is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "lighter",
@@ -5083,7 +5486,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $LIT — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F71121%2Flarge%2Flighter.png%3F1765888098",
+   "onchain": null,
+   "onchainWhy": "$LIT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "pancakeswap-token",
@@ -5142,7 +5548,16 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F12632%2Flarge%2Fpancakeswap-cake-logo_%25281%2529.png%3F1696512440",
+   "onchain": {
+    "kind": "none",
+    "scannable": false,
+    "src": "coingecko",
+    "at": 1793320560000,
+    "why": "CoinGecko lists no contract for $CAKE on Robinhood Chain, Ethereum or Solana — the chains the Scanner reads — and it is not the own coin of a chain Market Data reads."
+   },
+   "onchainWhy": null
   },
   {
    "id": "xdce-crowd-sale",
@@ -5194,7 +5609,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $XDC — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F2912%2Flarge%2Fxdc-icon.png%3F1696503661",
+   "onchain": null,
+   "onchainWhy": "$XDC is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "dash",
@@ -5253,7 +5671,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F19%2Flarge%2Fdash-logo.png%3F1696501423",
+   "onchain": null,
+   "onchainWhy": "$DASH is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "midnight-3",
@@ -5305,7 +5726,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $NIGHT — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F71015%2Flarge%2Fmidnight.png%3F1765193080",
+   "onchain": null,
+   "onchainWhy": "$NIGHT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "layerzero",
@@ -5366,7 +5790,10 @@
     "notes": [
      "CoinGecko $589M, CoinLore $368M (38% apart): both price $ZRO the same (about $1.48); they count a different circulating supply (CoinGecko 400M, CoinLore 248M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F28206%2Flarge%2FftxG9_TJ_400x400.jpeg%3F1696527208",
+   "onchain": null,
+   "onchainWhy": "$ZRO is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "ether-fi",
@@ -5418,7 +5845,17 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $ETHFI — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F35958%2Flarge%2Fetherfi.jpeg%3F1710254562",
+   "onchain": {
+    "kind": "contract",
+    "chain": "ethereum",
+    "address": "0xfe0c30065b384f05761f15d0cc899d4f9f9cc0eb",
+    "scannable": true,
+    "src": "coingecko",
+    "at": 1793320560000
+   },
+   "onchainWhy": null
   },
   {
    "id": "janus-henderson-anemoy-aaa-clo-fund",
@@ -5470,7 +5907,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $JAAA — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F70446%2Flarge%2Fjaaa.png%3F1762078666",
+   "onchain": null,
+   "onchainWhy": "$JAAA is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "pearl-2",
@@ -5522,7 +5962,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $PEARL — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F102173580%2Flarge%2Fpearl.png%3F1780324634",
+   "onchain": null,
+   "onchainWhy": "$PEARL is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "beldex",
@@ -5581,7 +6024,10 @@
      }
     ],
     "notes": []
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F5111%2Flarge%2FBeldex.png%3F1696505631",
+   "onchain": null,
+   "onchainWhy": "$BDX is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "usual-usd",
@@ -5633,7 +6079,10 @@
     "notes": [
      "CoinLore’s 100 largest coins include none with the symbol $USD0 — the part of its list this map reads"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F38272%2Flarge%2FUSD0LOGO.png%3F1716962811",
+   "onchain": null,
+   "onchainWhy": "$USD0 is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "aptos",
@@ -5694,7 +6143,10 @@
     "notes": [
      "CoinGecko $519M, CoinLore $417M (20% apart): both price $APT the same (about $0.59); they count a different circulating supply (CoinGecko 884M, CoinLore 702M)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F26455%2Flarge%2FAptos-Network-Profile-Picture_%25281%2529.png%3F1788259511",
+   "onchain": null,
+   "onchainWhy": "$APT is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   },
   {
    "id": "flare-networks",
@@ -5755,7 +6207,10 @@
     "notes": [
      "CoinGecko $518M, CoinLore $440M (15% apart): both price $FLR the same (about $0.0059); they count a different circulating supply (CoinGecko 87.6B, CoinLore 74.1B)"
     ]
-   }
+   },
+   "logo": "/api/market/logo?u=https%3A%2F%2Fcoin-images.coingecko.com%2Fcoins%2Fimages%2F28624%2Flarge%2FFLR-icon200x200.png%3F1696527609",
+   "onchain": null,
+   "onchainWhy": "$FLR is not in CoinGecko's coin list as read at 2026-10-30 00:36 UTC (it is read once a day — a coin listed since is in the next read), so where it is on-chain is not known yet"
   }
  ],
  "counts": {
@@ -5782,6 +6237,11 @@
    "at": 1793320440000,
    "ok": true
   }
+ },
+ "contracts": {
+  "why": null,
+  "at": 1793320560000,
+  "ok": true
  },
  "legend": [
   {
@@ -5844,7 +6304,9 @@
   "volume24h": "CoinGecko's trading volume over the last 24 hours, every market it tracks.",
   "stable": "true when CoinGecko files the coin in its stablecoins category (read every 6 hours); null until that list has been read.",
   "check": "The market cap checked against CoinLore's 100 largest coins, by the chain market caps' rules (lib/chainmcap.js): its coin counts when its symbol, name and price (within 10%) are CoinGecko's on the same read, or — under another name (CoinLore calls BNB \"Binance Coin\") — when its symbol and a price within 3% are and no other coin with that symbol among those 100 is priced within 10%, which the check says, with CoinLore's name; for a coin under $0.0001, whose price CoinLore rounds to 6 decimal places, CoinLore's own market cap ÷ circulating supply is the price compared; \"agreed\" within 10%, \"differs\" (the notes say why from the numbers), \"single\" (one source; the notes say why).",
-  "total": "CoinGecko's total market cap of every coin it lists — not only the 100 drawn."
+  "total": "CoinGecko's total market cap of every coin it lists — not only the 100 drawn.",
+  "logo": "The coin's picture as CoinGecko gives it, served through this site's own image proxy (/api/market/logo) — never fetched by your browser from CoinGecko; null when CoinGecko gives none, or when it would be Robinhood's artwork (a Robinhood Chain token's picture named after its own address, or a Robinhood Stock Token's).",
+  "onchain": "Where the coin's on-chain data is on this site, from CoinGecko's list of every coin's contract addresses (read once a day): \"contract\" — its contract on Robinhood Chain, Ethereum or Solana (preferred in that order), which the Scanner profiles (scannable: true); \"quote\" — its contract there is a base trading asset, a stablecoin or wrapped coin other tokens are priced in (WETH, USDG, USDC, USDT, DAI, WBTC, wrapped SOL), which the Scanner does not profile; \"native\" — no such contract, and the coin is the own coin of a chain Market Data reads (DefiLlama names it), whose chain view has its figures; \"none\" — no contract on those three chains that CoinGecko lists, and not the own coin of a chain Market Data reads. onchain is null, with onchainWhy saying why, until CoinGecko's list (or, for a coin with no contract there, DefiLlama's list of chains) has been read; onchainWhy is null otherwise."
  },
  "notes": [
   "Not advice, never a tip to buy. Do your own research.",

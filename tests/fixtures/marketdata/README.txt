@@ -85,3 +85,23 @@ market). Read 2026-10-30 ~00:30 UTC with the honest User-Agent; rows were droppe
     cut to its first 25 rows of 250: the 17 stablecoins among the top 100 (its first 17) and the 8 after them;
   heatmap-lore-top100.json — CoinLore /tickers/?start=0&limit=100, the whole answer (its first page has no LTC, LEO or WBT,
     and BNB as "Binance Coin": the check says so for each).
+
+Coin contracts fixture (tests/marketdata.mjs, the movers section; owner, 2026-11-17: a bubble opens the coin's on-chain data, and
+the biggest movers run as a banner). NOT read from CoinGecko: its /coins/list?include_platform=true was not asked for this fixture,
+because the live site shares this machine's address and its keyless CoinGecko budget. It is BUILT for the suite, in that answer's
+shape ([{ id, symbol, name, platforms: { <CoinGecko platform id>: <address> } }], measured on the real rows of
+rwa-cg-lookalikes.json above), and says nothing about what CoinGecko lists beyond what each row states:
+  cg-coins-list-platforms.json — 25 rows: ids and names as heatmap-cg-top100.json gives them; addresses that are the repo's own
+    measured ones (WETH, USDC, USDT, DAI, WBTC on Ethereum and USDC, USDT on Solana: lib/multichain.js QUOTE_ASSETS; USDG and WETH
+    on Robinhood Chain: lib/marketdata.js RH; PEPE: tests/fixtures/multichain/; Bonk: the same) or the coins' published mainnet
+    contracts (LINK, UNI, SHIB, AAVE, ENA, ETHFI, WLD, JUP, USDT and CAKE on BNB Chain), the EVM ones written mixed-case as CoinGecko gives
+    some; a coin with "platforms": {} or { "": "" } is a native coin's shape, NOT a claim that CoinGecko lists no contract for
+    it (BNB's row is left empty on purpose: the suite does not assert what CoinGecko lists for it). The platform key for
+    Robinhood Chain, "robinhood", is the one CoinGecko's measured rows use (rwa-cg-lookalikes.json) and its asset platforms name
+    for chain id 4663 (mcap-cg-platforms.json).
+  The suite builds the rest of the answer it serves and says so where it is built: the measured lookalike rows appended, and
+  18,000 filler rows ("zz-filler-N", addresses counted up from 1) so the body is the size of CoinGecko's real list (some 15 to
+  20 thousand coins), never written here as if read.
+  Most of the top 100 are not in this sample, so the answers built from it (tests/fixtures/market/heatmap.json and movers.json)
+  give those coins onchain null with "not in CoinGecko's coin list as read at …" — what the server says of a coin the last good
+  read did not hold — never "none", which only a coin the list holds with no address on the three chains gets.

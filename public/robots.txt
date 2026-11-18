@@ -18,14 +18,17 @@ Allow: /api/posts
 Allow: /api/users/
 Allow: /api/pins?user=
 Allow: /api/calls
+# ...except a member's own list of their calls, which answers only them (the longer rule wins)
+Disallow: /api/calls/mine/
 Allow: /api/communities
 Allow: /api/competitions
 Allow: /api/scan/recent$
 # Market Data (/market): the chain list, Robinhood Chain in full and its token list, the Top tokens tab's list of
-# every chain's tokens, and the bubble map of the whole crypto market, at their default addresses only. A search,
-# another chain alone, a sort, a token, a scan, a custom window, the map cut another way and the logo proxy stay
-# below the Disallow.
+# every chain's tokens, the bubble map of the whole crypto market and the banner of its biggest movers, at their
+# default addresses only. A search, another chain alone, a sort, a token, a scan, a custom window, the map cut
+# another way and the logo proxy stay below the Disallow.
 Allow: /api/market/heatmap$
+Allow: /api/market/movers$
 Allow: /api/market/chains$
 Allow: /api/market/chain?key=robinhood$
 Allow: /api/market/tokens?chain=robinhood$

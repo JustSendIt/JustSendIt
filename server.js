@@ -4805,7 +4805,9 @@ async function marketFor(tokens) {
       const base = ((pr.baseToken && pr.baseToken.address) || '').toLowerCase();
       if (!base) continue;
       const liq = (pr.liquidity && Number(pr.liquidity.usd)) || 0;
-      if (!byTok[base] || liq > byTok[base].liq) byTok[base] = { price: pr.priceUsd != null ? Number(pr.priceUsd) : null, mc: pr.marketCap != null ? Number(pr.marketCap) : (pr.fdv != null ? Number(pr.fdv) : null), pc24: pr.priceChange && pr.priceChange.h24 != null ? Number(pr.priceChange.h24) : null, liq };
+      // mcIs: which figure mc is — Dexscreener's market cap, else its FDV (a reader that shows mc says which); src: where the row came from
+      if (!byTok[base] || liq > byTok[base].liq) byTok[base] = { price: pr.priceUsd != null ? Number(pr.priceUsd) : null, mc: pr.marketCap != null ? Number(pr.marketCap) : (pr.fdv != null ? Number(pr.fdv) : null), pc24: pr.priceChange && pr.priceChange.h24 != null ? Number(pr.priceChange.h24) : null, liq,
+        mcIs: pr.marketCap != null ? 'mcap' : pr.fdv != null ? 'fdv' : null, src: 'dexscreener' };
     }
     // the same answer carries each token's current branding: a convicted token's logo is kept in step with it
     if (Array.isArray(arr)) for (const k of batch) noteDexAnswer(k, arr);
@@ -13527,7 +13529,7 @@ async function withOwnPools(arr, tokens) {
 async function ownPoolRow(token) {
   const m = await poolMarket(token).catch(() => null);
   if (!m || m.priceUsd == null) return null;
-  return { price: Number(m.priceUsd), mc: m.marketCap != null ? m.marketCap : m.fdv, pc24: m.priceChange.h24, liq: m.liquidity.usd || 0 };
+  return { price: Number(m.priceUsd), mc: m.marketCap != null ? m.marketCap : m.fdv, pc24: m.priceChange.h24, liq: m.liquidity.usd || 0, mcIs: m.marketCap != null ? 'mcap' : m.fdv != null ? 'fdv' : null, src: 'pool' };
 }
 // an enriched Scanner/lookup pair for one of the two coins that the price feed left unpriced: its market from the pool
 async function fillFromOwnPool(p) {
@@ -16075,6 +16077,50 @@ function callLeaderboard(windowKey) {
     calls: r.calls, bestX: r.best, totalX: r.totalX, bestGrade: callGrade(r.best),
   }));
 }
+/* ----- the tokens most called lately (GET /api/calls/top-tokens): the same calls the public boards count — public ones only (a squad
+   call is private to its squad: never here, as /api/calls/live leaves it out for anyone outside), by live members (not deleted, not
+   the site's own account), each having met the liquidity floor at entry (MIN_CALL_LIQ, as the leaderboard) — ranked by how many
+   distinct members called the token in the window, then how many calls, then the newest. No usernames: the count is all. Each token's
+   market is marketFor's (Dexscreener's batch read with the honest User-Agent, on its meter, a minute per token); null with why when
+   it has none. The whole answer is kept a minute per window, and one read builds it however many ask at once. ----- */
+const TOP_CALLED_WINDOWS = { '24h': 864e5, '7d': 7 * 864e5 };
+const TOP_CALLED_TTL = 60 * 1000, TOP_CALLED_N = 10;
+const topCalledMemo = new Map();   // window -> { at, body, p (the build under way) }
+async function topCalledTokens(w) {
+  const m = topCalledMemo.get(w);
+  if (m && m.body && now() - m.at < TOP_CALLED_TTL) return m.body;
+  if (m && m.p) return m.p;
+  const p = (async () => {
+    const at = now(), since = at - TOP_CALLED_WINDOWS[w];
+    const live = `c.created_at > ? AND c.squad_id IS NULL AND c.entry_price > 0 AND c.entry_liq >= ? AND u.system = 0 AND u.deleted_at IS NULL`;
+    const top = db.prepare(`SELECT c.token_addr token, COUNT(DISTINCT c.user_id) callers, COUNT(*) calls, MAX(c.created_at) lastAt
+      FROM calls c JOIN users u ON u.id = c.user_id WHERE ${live}
+      GROUP BY c.token_addr ORDER BY callers DESC, calls DESC, lastAt DESC LIMIT ?`).all(since, MIN_CALL_LIQ, TOP_CALLED_N);
+    const newest = db.prepare(`SELECT c.symbol, c.name, c.pair_addr FROM calls c JOIN users u ON u.id = c.user_id WHERE ${live} AND c.token_addr = ? ORDER BY c.created_at DESC, c.id DESC LIMIT 1`);
+    let mkt = {}; try { mkt = await marketFor(top.map(r => r.token)); } catch {}
+    const pos = (x) => (typeof x === 'number' && Number.isFinite(x) && x > 0 ? x : null);
+    const rows = top.map((r) => {
+      const tok = String(r.token).toLowerCase(), c = newest.get(since, MIN_CALL_LIQ, r.token) || {}, mk = mkt[tok] || null, cached = marketCache.get(tok);
+      const price = mk ? pos(mk.price) : null, mc = mk ? pos(mk.mc) : null;
+      const market = mk && (price != null || mc != null) ? {
+        price, change24h: typeof mk.pc24 === 'number' && Number.isFinite(mk.pc24) ? mk.pc24 : null,
+        mcap: mc, mcapIs: mc != null ? (mk.mcIs === 'fdv' ? 'fdv' : 'mcap') : null,
+        mcapLabel: mc == null ? null : mk.mcIs === 'fdv' ? 'fully diluted value — no market cap is given for this token' : 'market cap',
+        at: cached ? cached.at : at, src: mk.src || 'dexscreener',
+      } : null;
+      return { token: tok, symbol: c.symbol || null, name: c.name || null, pair: c.pair_addr ? String(c.pair_addr).toLowerCase() : null,
+        callers: r.callers, calls: r.calls, lastAt: r.lastAt, market, marketWhy: market ? null : 'no price could be read for this token just now (Dexscreener, a minute at a time) — tried again on the next read' };
+    });
+    return { window: w, since, at, ranked: 'distinct callers, then calls, then the newest call', rows,
+      notes: ['Public Send Calls only, by members whose call met the $' + MIN_CALL_LIQ.toLocaleString('en-US') + ' liquidity floor at entry; squad calls are private and never counted here.', 'Not advice, never a tip to buy. Do your own research.'] };
+  })();
+  topCalledMemo.set(w, Object.assign({}, m || {}, { p }));
+  try {
+    const body = await p;
+    topCalledMemo.set(w, { at: now(), body });
+    return body;
+  } catch (e) { topCalledMemo.delete(w); throw e; }
+}
 function callStats(userId, me) {
   const rows = db.prepare('SELECT * FROM calls WHERE user_id=? AND squad_id IS NULL ORDER BY created_at DESC').all(userId);   // a squad call lives on its squad's page only
   const views = rows.map(r => callView(r, me));
@@ -18374,6 +18420,20 @@ const server = http.createServer(async (req, res) => {
         if (!Object.prototype.hasOwnProperty.call(CALL_WINDOWS, w)) return bad(res, 'bad window');
         return send(res, 200, { window: w, top: callLeaderboard(w) });
       }
+      /* The tokens most called on the site lately (2026-11-17, Market Data's "Most called" tab): public calls only, by distinct callers —
+         no names, the count is all (topCalledTokens). Memoised a minute per window; its market figures are marketFor's (metered, cached). */
+      if (p === '/api/calls/top-tokens' && req.method === 'GET') {
+        if (!rateLimit('calltop:' + clientIp(req), 30, 6e4)) return bad(res, 'slow down', 429);
+        const w = url.searchParams.get('window') || '24h';
+        if (!Object.prototype.hasOwnProperty.call(TOP_CALLED_WINDOWS, w)) return bad(res, 'bad window — one of: ' + Object.keys(TOP_CALLED_WINDOWS).join(', '));
+        return send(res, 200, await topCalledTokens(w));
+      }
+      // my own Send Calls, light (drives "you called this" on a token wherever it shows) — my squad calls too: they are mine to see
+      if (p === '/api/calls/mine/ids' && req.method === 'GET') {
+        if (!me) return bad(res, 'sign in first', 401);
+        return send(res, 200, { calls: db.prepare('SELECT id, token_addr, created_at, squad_id FROM calls WHERE user_id = ? ORDER BY created_at DESC, id DESC').all(me.id)
+          .map(r => ({ id: r.id, token: String(r.token_addr || '').toLowerCase(), createdAt: r.created_at, squadId: r.squad_id || null })) });
+      }
       /* One read for every Send Call currently on a reader's screen. The card widgets used to poll
          /api/calls/:id one at a time — eight visible cards meant eight round-trips every tick, which is
          why the refresh had to be slow. This answers the whole screen at once, so the Xs can move often
@@ -19039,7 +19099,9 @@ const server = http.createServer(async (req, res) => {
         else if (p === '/api/market/rwa/token') { if (!rateLimit('mktrwa:' + clientIp(req), 30, 6e4)) return bad(res, 'too many RWA reads — slow down', 429); r = MKT.rwaToken(mq); }
         // the bubble map of the whole crypto market (2026-10-30): read from what the heatmap job keeps, so it inherits the 120 a minute
         else if (p === '/api/market/heatmap') r = MKT.heatmap(mq);
-        if (!r) return bad(res, 'unknown market endpoint — one of: chains, chain, tokens, token, scan, search, new-pools, status, logo, rwa, rwa/token, heatmap', 404);
+        // the biggest movers among the map's 100 coins (2026-11-17): ranked from the map's own stored read, so it inherits the 120 a minute too
+        else if (p === '/api/market/movers') r = MKT.movers();
+        if (!r) return bad(res, 'unknown market endpoint — one of: chains, chain, tokens, token, scan, search, new-pools, status, logo, rwa, rwa/token, heatmap, movers', 404);
         return send(res, r.status, r.body);
       }
       /* ----- which other sites chart these pools: the chart switch shows only the buttons that will draw a chart ----- */
@@ -19611,8 +19673,11 @@ const server = http.createServer(async (req, res) => {
 
       /* ----- watchlist (personal saved tokens; enriched view reuses the pairs pipeline) ----- */
       if (p === '/api/watchlist/ids' && req.method === 'GET') { // light: just the saved pair addresses (for save-button state)
-        if (!me) return send(res, 200, { ids: [] });
-        return send(res, 200, { ids: db.prepare('SELECT pair_addr FROM watchlist WHERE user_id=?').all(me.id).map(r => r.pair_addr) });
+        if (!me) return send(res, 200, { ids: [], tokens: [] });
+        /* tokens (2026-11-17): the same rows' token addresses, lower case, each once — so a page that knows a token and not its pair
+           (Market Data's movers and bubbles, the watchlist tab) can tell it is saved; ids is unchanged */
+        const wl = db.prepare('SELECT pair_addr, token_addr FROM watchlist WHERE user_id=?').all(me.id);
+        return send(res, 200, { ids: wl.map(r => r.pair_addr), tokens: [...new Set(wl.map(r => String(r.token_addr || '').toLowerCase()).filter(a => /^0x[0-9a-f]{40}$/.test(a)))] });
       }
       if (p === '/api/watchlist' && req.method === 'GET') {
         if (!me) return bad(res, 'sign in first', 401);

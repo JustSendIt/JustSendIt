@@ -2128,6 +2128,8 @@ a.og-badge:focus-visible { outline: 3px solid var(--green-bright); outline-offse
 .tm-body { flex: 1 1 auto; overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; padding: 1rem 1.05rem calc(1.3rem + var(--fab-clear)); }   /* the Send it button and the music strip sit over the popup's foot: the last card scrolls clear of them */
 .tm-loading, .tm-msg { text-align: center; color: var(--text-dim); padding: 1.6rem 0.5rem; }
 .tm-msg.tm-note { text-align: left; color: var(--gold); padding: 0 0 0.85rem; margin: 0; font-weight: 700; }
+/* a caller's own line above the dashboard (the Market Data page: where its figures came from) — plain words, not a warning */
+.tm-lead { margin: 0 0 0.75rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.88rem); line-height: 1.45; overflow-wrap: anywhere; }
 @media (max-width: 640px) { .tm-modal { padding: 0; } .tm-dialog { border-radius: 0; border: 0; } .tm-body { padding-left: 0.75rem; padding-right: 0.75rem; } }
 
 /* ===== "Conviction Plays" pinned tokens on the public wall ===== */
