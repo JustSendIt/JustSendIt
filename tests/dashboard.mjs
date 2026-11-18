@@ -81,7 +81,8 @@ try {
     check('rekt: it never compares against a key the server does not send', !/rules\.callLimitDefault/.test(GAMIFY));
     check('rekt: the free appeal route is offered alongside the buy-out', /appeal to a person at/.test(GAMIFY));
     check('rekt: the beta reset is stated before it happens', /every balance on the site goes to zero/.test(GAMIFY));
-    check('rekt: the $100 floor is named per coin', /under the \$' \+ floor \+ ' floor/.test(GAMIFY));
+    // since 2026-11-17 the floor is $100 BOUGHT: named per coin as such, and what a bag is worth now is said to decide nothing
+    check('rekt: the $100 floor is named per coin, as the $100-bought floor since 2026-11-17', /under the \$' \+ floor \+ '-bought floor, so it counts for nothing\./.test(GAMIFY) && /' now, which decides nothing\.'/.test(GAMIFY));
     check('record: everything tracked gets a row', /function recordBlock\(g\)/.test(GAMIFY) && /gsec\('record'[^\n]*recordBlock\(g\)\)/.test(GAMIFY));
   }
 
@@ -165,11 +166,14 @@ try {
      at OG_DUST_WEI — so with an unreadable community price, a slot the whole site calls "$100 of the
      token" was satisfied by 1e-9 of it, and with it the go-live count and the flat 10x. */
   {
-    check('holdsToken refuses to decide without a price', /if \(minUsd > 0\) \{\s*\n\s*if \(!\(priceUsd > 0\)\) return null;/.test(SRC));
-    check('the revocation sweep treats undecided as "leave them alone"', /if \(holds === null\) continue;/.test(SRC));
-    check('the join path says which one it is', /if \(holds === null\) return bad\(res,[\s\S]{0,160}?Nothing has been decided/.test(SRC));
-    check('the posting path does too', /if \(holdsP === null\) return bad\(res,[\s\S]{0,160}?Nothing has been decided/.test(SRC));
-    check('starting a community does too', /if \(holdsC === null\) return bad\(res,[\s\S]{0,200}?Nothing has been decided/.test(SRC));
+    /* Since "$100 bought" (2026-11-17) every dollar floor is the BOUGHT verdict (boughtVerdict: true / false / null, read from the
+       verdicts the background worker keeps) — no price decides it, and holdsToken is only the sell-out test (more than dust) */
+    check('the dollar floor is the bought verdict: no answer yet is null, never "dust will do"', /function boughtVerdict\(uid, tokenAddr, prio\) \{\n  try \{ return BOUGHT \? BOUGHT\.verdictOf\(/.test(SRC)
+      && /async function holdsToken\(uid, tokenAddr\) \{/.test(SRC) && !/holdsToken\([^)]*MIN_(COMMUNITY_)?HOLD_USD/.test(SRC));
+    check('the revocation sweep treats undecided as "leave them alone"', /if \(holds === null\) \{ db\.prepare\('UPDATE community_members SET qual_check_at=\? WHERE community_id=\? AND user_id=\?'\)\.run\(t, r\.community_id, r\.user_id\); continue; \}/.test(SRC));
+    check('the join path says which one it is', /if \(holds === null\) return send\(res, 503, \{ error: boughtCheckingText\(/.test(SRC) && /Nothing has been decided; try again shortly/.test(SRC));
+    check('the posting path reads the verified slot alone (the sweep keeps it to the verdict): no chain read on a post', !/let holdsP;/.test(SRC) && /the verified slot above IS the holding gate \(H10\)/.test(SRC));
+    check('starting a community does too', /if \(holdsC === null && !devWalletC\) return send\(res, 503, \{ error: boughtCheckingText\(/.test(SRC));
   }
 
   /* ═══════════ 10. losses are in the ledger the user can read ═══════════ */
