@@ -424,7 +424,7 @@ try {
     const gj = (re, name) => { const m = re.exec(GJ); if (!m) throw new Error('could not find ' + name + ' in gamify.js'); return m[0]; };
     const src = gj(/  function esc\(s\) [^\n]+\n/, 'esc') + gj(/  const DIA_TIERS = \[[\s\S]*?\n  \];\n/, 'DIA_TIERS') + gj(/  const diaNext = [^\n]+\n/, 'diaNext') + gj(/  const diaNextLabel = [^\n]+\n/, 'diaNextLabel')
       + gj(/  const nf = [^\n]+\n/, 'nf') + gj(/  const GWC_W = [^\n]+\n/, 'GWC_W') + gj(/  function qualPct\([^\n]+\n/, 'qualPct') + gj(/  function supplyTermOf\([^\n]+\n/, 'supplyTermOf')
-      + gj(/  const pausedHold = [^\n]+\n/, 'pausedHold') + gj(/  const pausedDays = [^\n]+\n/, 'pausedDays') + gj(/  const pausedCoin = [^\n]+\n/, 'pausedCoin') + gj(/  function daysToNext\(h, d, anyClock\) \{[\s\S]*?\n  \}\n/, 'daysToNext') + gj(/  const gwcAlonePaused = [^\n]+\n/, 'gwcAlonePaused') + gj(/  function objectiveBar\(g\) \{[\s\S]*?\n  \}\n/, 'objectiveBar')
+      + gj(/  const pausedHold = [^\n]+\n/, 'pausedHold') + gj(/  const pausedDays = [^\n]+\n/, 'pausedDays') + gj(/  const pausedCoin = [^\n]+\n/, 'pausedCoin') + gj(/  const heldMin = [^\n]+\n/, 'heldMin') + gj(/  function daysToNext\(h, d, anyClock\) \{[\s\S]*?\n  \}\n/, 'daysToNext') + gj(/  const gwcAlonePaused = [^\n]+\n/, 'gwcAlonePaused') + gj(/  function objectiveBar\(g\) \{[\s\S]*?\n  \}\n/, 'objectiveBar')
       + gj(/  function holdForge\(h\) \{[\s\S]*?\n  \}\n/, 'holdForge') + gj(/  function diamondRelic\(h\) \{[\s\S]*?\n  \}\n/, 'diamondRelic') + gj(/  function boostEngine\(g\) \{[\s\S]*?\n  \}\n/, 'boostEngine');
     const ui = vm.createContext({ AUTH: { user: { wallets: ['0x1'] } }, Math, Date, String, Number });
     vm.runInContext(src + '\nthis.boostEngine = boostEngine; this.objectiveBar = objectiveBar;', ui);
@@ -444,9 +444,10 @@ try {
     const ob2 = ui.objectiveBar({ holder: both, level: 3, nextLevelXp: 100, intoLevel: 90, spanLevel: 100 });
     check('the days to the next tier are calendar days from the clocks that run: day 40 of both clocks, $GWC days counting double, is 20 days from 120 — not 40 (the review\'s round-6 case)', /<b>20<\/b> days of holding to/.test(ob2) || /20 days to/.test(ob2), ob2.slice(0, 300));
     const ob3 = ui.objectiveBar({ holder: { ...both, gwcStreakPaused: true }, level: 3, nextLevelXp: 100, intoLevel: 90, spanLevel: 100 });
-    check('  ...and a $GWC clock paused while $SEND keeps the other running is shown as paused, with what picks it up again', /\$GWC<\/b> clock is paused at <b>40<\/b> days/.test(ob3) && /of \$GWC in your linked wallets picks it up again/.test(ob3), ob3.slice(0, 400));
+    // since 2026-11-17 the floor is $100 BOUGHT (with $10 of it still held at cost): what picks a clock up again is said that way
+    check('  ...and a $GWC clock paused while $SEND keeps the other running is shown as paused, with what picks it up again ($100 of $GWC bought, $10 still held)', /\$GWC<\/b> clock is paused at <b>40<\/b> days/.test(ob3) && /of \$GWC bought, \$10 of it still held at cost, in your linked wallets picks it up again/.test(ob3), ob3.slice(0, 400));
     const gob = ui.objectiveBar({ holder: gwcOnly, level: 3, nextLevelXp: 100, intoLevel: 10, spanLevel: 50 });
-    check('  ...and says it is $GWC that picks it up again (a $SEND buy starts a new clock — the review\'s round-5 case)', /of \$GWC right now/.test(gh) && /60-day<\/b> Diamond streak is paused/.test(gob) && /of \$GWC right now/.test(gob) && !/\$SEND or \$GWC/.test(gob), gob.slice(0, 300));
+    check('  ...and says it is $GWC that picks it up again (a $SEND buy starts a new clock — the review\'s round-5 case), against the $100-bought floor', /in \$GWC right now/.test(gh) && /60-day<\/b> Diamond streak is paused/.test(gob) && /of \$GWC bought, with \$10 of it still held at cost, right now/.test(gob) && !/\$SEND or \$GWC/.test(gob), gob.slice(0, 300));
   }
   const KEYS = readFileSync(path.join(ROOT, 'lib', 'keys.js'), 'utf8');
   check('the followed wallets and moves are encrypted + indexed like every wallet link, and key rotation carries them', ['dh_follow\', \'addr_enc', 'dh_follow\', \'info_enc', 'dh_moves\', \'info_enc', 'dh_moves\', \'tx_enc'].every((x) => KEYS.includes(x)) && /\{ t: 'dh_moves', c: 'move_idx' \}/.test(KEYS) && /\{ t: 'dh_follow', c: 'addr_idx' \}/.test(KEYS));

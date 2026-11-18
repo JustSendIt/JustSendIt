@@ -81,7 +81,8 @@ try {
     check('rekt: it never compares against a key the server does not send', !/rules\.callLimitDefault/.test(GAMIFY));
     check('rekt: the free appeal route is offered alongside the buy-out', /appeal to a person at/.test(GAMIFY));
     check('rekt: the beta reset is stated before it happens', /every balance on the site goes to zero/.test(GAMIFY));
-    check('rekt: the $100 floor is named per coin', /under the \$' \+ floor \+ ' floor/.test(GAMIFY));
+    // since 2026-11-17 the floor is $100 BOUGHT: named per coin as such, and what a bag is worth now is said to decide nothing
+    check('rekt: the $100 floor is named per coin, as the $100-bought floor since 2026-11-17', /under the \$' \+ floor \+ '-bought floor, so it counts for nothing\./.test(GAMIFY) && /' now, which decides nothing\.'/.test(GAMIFY));
     check('record: everything tracked gets a row', /function recordBlock\(g\)/.test(GAMIFY) && /gsec\('record'[^\n]*recordBlock\(g\)\)/.test(GAMIFY));
   }
 

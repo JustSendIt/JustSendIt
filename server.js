@@ -5583,7 +5583,10 @@ function boughtAdmin() {
            migration: by, unknown, sizeTopups: { open: topups.open || 0, done: topups.done || 0 } };
 }
 // what "no answer yet" says, wherever it has to (a join, a community start)
-function boughtCheckingText(sym) {
+function boughtCheckingText(sym, tokenAddr) {
+  const row = tokenAddr && BOUGHT ? BOUGHT.tokenRow(String(tokenAddr).toLowerCase()) : null;
+  if (row && row.state === 'too-big') return sym + '’s history is too long to keep here (over ' + BOUGHT_LIB.LIMITS.TAPE_MAX_TRANSFERS.toLocaleString('en-US') + ' transfers), so what your wallets bought of it cannot be counted. Nothing has been decided.';
+  if (row && row.state === 'no-pool') return sym + ' has no pool this site can read (against WETH or USDG), so what your wallets bought of it cannot be valued. Nothing has been decided.';
   return 'We are reading ' + sym + '’s trades from the chain to see what your linked wallets bought — the first time takes a few minutes. Nothing has been decided; try again shortly.';
 }
 /* What a "no" says, with the member's own figures (their own wallets: shown only to them): how much counts as bought, what is
@@ -5720,8 +5723,8 @@ function qualifyReason(me, c, ip, holds) {
   // skips the holding test AND the per-network anti-sybil cap, which is safe only because a demo
   // membership grants no Send Power multiplier (see joinCommunity) — so there is nothing to farm.
   if (c.demo) return null;
-  if (holds === null) return 'We couldn’t read the $' + c.symbol + ' price, so your holding can’t be checked against the $' + MIN_COMMUNITY_HOLD_USD + ' floor yet. You’re in as a member; the verified slot and the 10× follow once we can price it.';
-  if (!holds) return 'You must hold at least $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' (verified on-chain from a linked wallet).'; // MUST hold the community's own token — read-only
+  if (holds === null) return 'What your linked wallets bought of $' + c.symbol + ' is not read yet, so the $' + MIN_COMMUNITY_HOLD_USD + '-bought floor can’t be checked. You’re in as a member; the verified slot and the 10× follow once it is.';
+  if (!holds) return 'A verified slot takes $' + MIN_COMMUNITY_HOLD_USD + ' of $' + c.symbol + ' bought from the market across your linked wallets (a buy counts once held 24 hours), with $10 of it still held at cost.'; // "$100 bought" of the community's own token, read from the verdicts
   const ipk = ip ? bidx(ip) : null; // IPs are stored only as blind indexes
   const ipUses = db.prepare("SELECT COUNT(*) n FROM community_members WHERE community_id=? AND qualified=1 AND join_ip=?").get(c.id, ipk).n;
   /* Both network rules answer with ONE sentence that names neither: which rule matched would tell a member
@@ -6637,6 +6640,8 @@ function gamifySummary(u) {
       minHoldUsd: MIN_HOLD_USD,
       sendUsd: h.send_usd == null ? null : h.send_usd, gwcUsd: h.gwc_usd == null ? null : h.gwc_usd,
       sendQualifies: h.send_qual == null ? null : !!h.send_qual, gwcQualifies: h.gwc_qual == null ? null : !!h.gwc_qual,
+      // "$100 bought" (2026-11-17): what qualifies is BOUGHT — the member's own figures from their verdicts (no chain read)
+      basis: 'bought', bought: { SEND: boughtView(u.id, TOK.SEND), GWC: boughtView(u.id, TOK.GWC) },
     } : null,
     /* ═══ THE OTHER HALF OF THE LEDGER ═══════════════════════════════════════════════════════════
        Everything below this line is state the site has always kept about an account and never shown it.
@@ -16208,14 +16213,14 @@ function checkProbation(userId, sendTok) {
       db.prepare('UPDATE users SET restricted_until=?, restrict_reason=?, redeem_dur=0, redeem_base_send=?, redeem_hold_until=0, redeem_floor=0, redeem_since=? WHERE id=?')
         .run(PERM_UNTIL, 'You sold your $SEND before the hold was up — your permanent read-only is back.', sendTok, now(), userId);
       if (typeof oidcRevokeUser === 'function') oidcRevokeUser(userId);   // read-only accounts do not sign in to apps: every app's tokens end now, not when it lifts
-      notify(userId, '🔇', 'You sold your $SEND before the hold was up — your permanent read-only is back. Buy & hold $SEND again to lift it.', 'restriction');
+      notify(userId, '🔇', 'You sold your $SEND before the hold was up — your permanent read-only is back. $SEND bought from now on (each buy counting once held 24 hours) can lift it again.', 'restriction');
       return;
     }
     const newDur = Math.max(DAY_MS, (u.redeem_dur || DAY_MS) * 2); // timed → returns doubled
     db.prepare('UPDATE users SET restricted_until=?, restrict_reason=?, redeem_dur=?, redeem_base_send=?, redeem_hold_until=0, redeem_floor=0, redeem_since=? WHERE id=?')
       .run(now() + newDur, 'You sold your $SEND before the hold was up — read-only is back, and the timer is doubled.', newDur, sendTok, now(), userId);
     if (typeof oidcRevokeUser === 'function') oidcRevokeUser(userId);   // read-only accounts do not sign in to apps: every app's tokens end now, not when it lifts
-    notify(userId, '🔇', 'You sold your $SEND before the hold was up — read-only is back, and doubled. Buy & hold again to lift it.', 'restriction');
+    notify(userId, '🔇', 'You sold your $SEND before the hold was up — read-only is back, and doubled. $SEND bought from now on (each buy counting once held 24 hours) can lift it again.', 'restriction');
   }
 }
 /* THE PARTICIPATION GATE'S FIRST-DAY WATCH. Selling the bag that opened the door inside its first day is
@@ -16267,7 +16272,7 @@ async function checkGateHold(userId) {
   const after = db.prepare('SELECT restrict_level, redeem_dur, strikes FROM users WHERE id = ?').get(userId) || {};
   const lvl = after.restrict_level || 1;
   const span = lvl >= 3 ? 'for good' : 'for ' + humanDur(after.redeem_dur || PROOF_SELL_WINDOW_MS);
-  notify(userId, '🔇', reason + ' That is strike ' + (after.strikes || 1) + ' of 3 — read-only ' + span + '. You can still read every part of the site; buying and holding $SEND lifts it early ($25 a day of the sanction, $1000 for a permanent one), and selling that bag before the hold is up brings it back doubled.', 'restriction');
+  notify(userId, '🔇', reason + ' That is strike ' + (after.strikes || 1) + ' of 3 — read-only ' + span + '. $SEND bought from now on lifts it early ($25 a day, $1000 if permanent); sold inside the hold, it comes back doubled.', 'restriction');
 }
 const _probTick = new Map();
 // fire-and-forget on-chain re-check while EITHER hold window is open — the redemption deal or the gate's
@@ -16574,7 +16579,7 @@ function blockReadOnly(res, me) {
      not proved itself yet has done nothing wrong. */
   if (needsHolderProof(me)) {
     send(res, 403, {
-      error: 'Connect a wallet to start posting — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND (a wallet that can’t sign can be proved by a burn instead). No waiting period.',
+      error: 'Connect a wallet to start posting — a read-only check that your linked wallets show $' + MIN_HOLD_USD + ' of $SEND bought (a buy counts once held 24 hours; a wallet that can’t sign can be proved by a burn instead).',
       needsProof: true, proof: holderProofState(me),
     });
     return true;
@@ -18599,7 +18604,7 @@ const server = http.createServer(async (req, res) => {
            is never gated at all — nobody should need to prove anything to stop being notified. */
         if (req.method === 'POST' && needsHolderProof(me)) {
           return send(res, 403, {
-            error: 'Connect a wallet to set alerts — a read-only check that you hold $' + MIN_HOLD_USD + ' of $SEND (a wallet that can’t sign can be proved by a burn instead). No waiting period.',
+            error: 'Connect a wallet to set alerts — a read-only check that your linked wallets show $' + MIN_HOLD_USD + ' of $SEND bought (a buy counts once held 24 hours; a wallet that can’t sign can be proved by a burn instead).',
             needsProof: true, proof: holderProofState(me),
           });
         }
@@ -21059,7 +21064,7 @@ const server = http.createServer(async (req, res) => {
         const holdsC = boughtVerdict(me.id, token, 3);
         const devWalletC = isTokenDev(me.id, pr.token);
         // no answer yet: the coin's trades are being read (the first time takes a few minutes) — undecided, never "you don't hold it"
-        if (holdsC === null && !devWalletC) return send(res, 503, { error: boughtCheckingText('$' + sym), code: 'checking' });
+        if (holdsC === null && !devWalletC) return send(res, 503, { error: boughtCheckingText('$' + sym, token), code: 'checking' });
         // The token's own deployer/owner wallet may start the community WITHOUT holding — a dev often keeps a clean
         // wallet. The deployer is the creator address a keyed explorer gives, else GoPlus Security's creator_address
         // (token.deployerSource says which), and the owner is owner() from the contract (GoPlus's owner_address only
@@ -21438,7 +21443,7 @@ const server = http.createServer(async (req, res) => {
             else {
               holds = boughtVerdict(me.id, c.token_addr, 3);   // only real buyers of THIS token can opt in: $MIN_COMMUNITY_HOLD_USD of it bought, the site-wide floor (no chain read here)
               // `null` is not a refusal, it is the absence of an answer — say which one this is
-              if (holds === null) return send(res, 503, { error: boughtCheckingText('$' + c.symbol), code: 'checking' });
+              if (holds === null) return send(res, 503, { error: boughtCheckingText('$' + c.symbol, c.token_addr), code: 'checking' });
               if (!holds) return bad(res, boughtShortText(me.id, c.token_addr, '$' + c.symbol, 'join this community'), 403);
             }
             const j = await joinCommunity(me, cid, clientIp(req), holds);
