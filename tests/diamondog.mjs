@@ -55,7 +55,7 @@ try {
      (and Gold) for good while a sell-out of $GWC alone drops them to what $SEND alone earns (tests/ogsilver.mjs runs both) */
   check('Diamond (and Gold) need both coins; selling out of $SEND loses them for good, selling out of $GWC alone drops them (ogLoss)', /const OG_TIER_NEEDS = \{ 4: \['SEND', 'GWC'\], 3: \['SEND', 'GWC'\],/.test(SRC)
     && /if \(sendTok <= OG_DUST \|\| gwcTok <= OG_DUST\) ogAfterHolderRead\(userId, sendTok, gwcTok\);/.test(SRC)
-    && /const loss = ogLoss\(gone\);\n\s+if \(loss === 'revoke'\) \{\n\s+db\.prepare\('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1, og_requal = 0 WHERE id = \?'\)/.test(SRC)
+    && /const loss = ogLoss\(gone\);\n\s+if \(loss === 'revoke'\) \{\n\s+db\.prepare\('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1, og_requal = 0, og_lift = 0, og_paused_tier = 0, og_paused_at = 0 WHERE id = \?'\)/.test(SRC)
     && /return gone\.includes\('SEND'\) \? 'revoke' : 'drop';/.test(SRC));
 
   /* ═══ 2. the decision, on fixed inputs ═══ */
@@ -131,8 +131,10 @@ try {
       OG_TIER_NAME: val(constSrc('OG_TIER_NAME')), OG_TIER_MULT: val(constSrc('OG_TIER_MULT'), { OG_DIAMOND_MULT, OG_BONUS: val(constSrc('OG_BONUS')) }),
       OG_TIER_NEEDS: val(constSrc('OG_TIER_NEEDS')), OG_MIN_HOLD_USD: val(constSrc('MIN_HOLD_USD')) };
     const PURE = ['ogTierForBuy', 'ogBetterScan', 'ogFloorOk', 'ogAccountTier', 'ogDiamondOk', 'ogLiftable', 'ogLiftWhat', 'ogReadDecides', 'ogClaimWallets', 'ogCapped',
-      'ogGrantText', 'ogRevokedText', 'ogDropText', 'ogDropLostText', 'ogRestoreText', 'ogHeldThrough'];
-    const SYNC = ['ogRequalify', 'ogAgain', 'ogOnLink'];
+      'ogGrantText', 'ogRevokedText', 'ogDropText', 'ogRestoreText', 'ogHeldThrough',
+      // what checkOg and the lift reach since the 2026-11-18 OG review: the drop proven by the badge's own grant, the pause's continuity, their notes
+      'ogDropPick', 'ogDropOffText', 'ogGoldHeldBack', 'ogPauseHeld', 'ogResumeText', 'ogPauseSilverText', 'ogPauseRevokedText', 'ogDiamondText'];
+    const SYNC = ['ogRequalify', 'ogAgain', 'ogOnLink', 'ogRevokedWallets', 'ogRevokedWalletRows'];
     const ASYNC = ['checkOg', 'liftOgSilver', 'grantDiamondUpgrade', 'restoreOg', 'linkWalletTo'];
     const missing = [...PURE, ...SYNC].filter((n) => !fnSrc(n)).concat(ASYNC.filter((n) => !asyncSrc(n)));
     check('linkWalletTo, checkOg, grantDiamondUpgrade and the Diamond-on-link steps can be lifted out of server.js', !missing.length, missing.join(', '));
@@ -159,14 +161,15 @@ try {
       mem.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, og INTEGER NOT NULL DEFAULT 0, og_tier INTEGER NOT NULL DEFAULT 0, og_revoked INTEGER NOT NULL DEFAULT 0,
         og_diamond_at INTEGER, og_lift INTEGER NOT NULL DEFAULT 0, og_buy_ms INTEGER NOT NULL DEFAULT 0, og_checked_at INTEGER NOT NULL DEFAULT 0, og_dq INTEGER NOT NULL DEFAULT 0,
         og_try_at INTEGER NOT NULL DEFAULT 0, system INTEGER NOT NULL DEFAULT 0, og_requal INTEGER NOT NULL DEFAULT 0, og_cap INTEGER NOT NULL DEFAULT 0,
-        og_recheck INTEGER NOT NULL DEFAULT 0, deleted_at INTEGER);
-        CREATE TABLE identities (user_id INTEGER, type TEXT, addr TEXT);
+        og_recheck INTEGER NOT NULL DEFAULT 0, deleted_at INTEGER, og_paused_tier INTEGER NOT NULL DEFAULT 0, og_paused_at INTEGER NOT NULL DEFAULT 0);
+        CREATE TABLE identities (id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, type TEXT, addr TEXT, identifier_enc TEXT, linked_at INTEGER);
         CREATE TABLE og_claims (addr_idx TEXT PRIMARY KEY, user_id INTEGER NOT NULL, tier INTEGER NOT NULL, claimed_at INTEGER NOT NULL);`);
       const notes = [];
       const E = {
         db: mem, now: () => Date.now(), bidx: (a) => 'idx:' + String(a).toLowerCase(), notify: (uid, emo, text) => notes.push({ uid, text }),
         walletAddresses: (uid) => mem.prepare("SELECT addr FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY rowid").all(uid).map((r) => r.addr),
-        insertIdentity: (uid, type, addr) => mem.prepare('INSERT INTO identities (user_id, type, addr) VALUES (?,?,?)').run(uid, type, addr),
+        insertIdentity: (uid, type, addr) => mem.prepare('INSERT INTO identities (user_id, type, addr, identifier_enc, linked_at) VALUES (?,?,?,?,?)').run(uid, type, addr, addr, Date.now()),
+        decField: (x) => x,   // the restore reads the wallets linked when a badge was removed (ogRevokedWallets): stored plain here
         OG_MAX_WALLETS: 5, TOK: TOKS, OG_PAIR: { SEND: '0xp1', GWC: '0xp2' }, ...ENV0, OG_DIAMOND_MULT, OG_GRANT_UNTIL_MS: grantUntil,
         OG_MONTH_MS: 30 * DAY, OG_DUST: val(constSrc('OG_DUST')),
         ogDisqualified: (f) => !!(f.dumped && f.notAccumulator),
@@ -179,7 +182,7 @@ try {
       };
       const K = new Function(...Object.keys(E), [...PURE.map(fnSrc), ...SYNC.map(fnSrc), ...ASYNC.map(asyncSrc)].join('\n') + '\nreturn { checkOg, linkWalletTo };')(...Object.values(E));
       let uid = 0;
-      const link = (id, w) => mem.prepare("INSERT INTO identities (user_id, type, addr) VALUES (?, 'wallet', ?)").run(id, w);
+      const link = (id, w) => mem.prepare("INSERT INTO identities (user_id, type, addr, identifier_enc) VALUES (?, 'wallet', ?, ?)").run(id, w, w);   // no link time: a legacy row
       return {
         K, notes, link,
         user: (wallets) => { uid++; mem.prepare('INSERT INTO users (id) VALUES (?)').run(uid); for (const w of wallets) link(uid, w); return uid; },

@@ -483,30 +483,48 @@
         : tier === 2 ? (both ? 'in the 90 days after the beta ended' : 'before Silver’s deadline, 90 days after the beta ended')
         : 'before $GWC turned one year old';
       const v = ogVariant(g);
-      /* $GWC found sold on a Gold or Diamond (owner, 2026-11-17: "Drop to Silver"): the server is reading the $Send history to
-         set what $Send alone keeps — Silver or Bronze — and pays no OG bonus until it has. Said as that, not as the old tier. */
+      /* $GWC found sold on a Gold or Diamond (owner, 2026-11-17: "Drop to Silver") and marked before the drop was written at once
+         (og_requal): the server is setting what $Send alone keeps — Silver, which the badge's own $Send buy proves — and pays no
+         OG bonus until it has. Said as that, not as the old tier. */
       if (g.ogRequal) return '<div class="og-block' + (v ? ' og-block' + v : '') + '"><span class="og-block-badge">⏳ OG ' + (g.ogTierName || '') + '</span>'
-        + '<div class="og-block-body"><b>Your OG ' + (g.ogTierName || '') + ' is being re-checked.</b> Your linked wallets no longer hold $GWC, which ' + (g.ogTierName || 'it') + ' needs, so it doesn’t come back. '
-        + 'Silver and Bronze need only $Send: your $Send history is being read on-chain to set which one you keep — or, if no $Send buy of yours earns one, that the badge is gone. '
+        + '<div class="og-block-body"><b>Your OG ' + (g.ogTierName || '') + ' is moving to Silver.</b> Your linked wallets no longer hold $GWC, which ' + (g.ogTierName || 'it') + ' needs, so it doesn’t come back. '
+        + 'Silver needs only $Send, and the $Send your ' + (g.ogTierName || 'badge') + ' was earned on came before the beta ended — it is being written from the chain now (unless your wallets turn out to hold no $Send). '
         + 'No OG bonus is paid until that’s done; you’ll get a notification.</div></div>';
+      // a Gold or Diamond paused at Silver: the wallet holding its $GWC was unlinked (not a sale), the others hold $Send
+      const pausedUp = Number(g.ogPausedTier) > tier ? Number(g.ogPausedTier) : 0, pausedName = pausedUp ? (pausedUp === 4 ? 'Diamond' : 'Gold') : '';
       return '<div class="og-block' + (v ? ' og-block' + v : '') + '"><span class="og-block-badge">' + (tier === 4 ? '💎' : '🏅') + ' OG ' + (g.ogTierName || '') + '</span>'
         + '<div class="og-block-body"><b>You’re an OG ' + (g.ogTierName || '') + '.</b> You bought <b>' + (both ? 'both $Send and $GWC' : '$Send') + '</b> '
         + when + ' (checked on-chain) — a permanent <b>' + (Number(g.ogBonus) || 1) + '× Send Power</b> bonus on <b>everything</b> you do (+' + ((Number(g.ogBonus) || 1) - 1) + '× on top of any other boosts — boosts add, they don’t multiply). '
         + (!both ? 'Keep holding <b>$Send</b> — this tier doesn’t need $GWC: sell out of $Send and it’s gone for good.'
-          // since 2026-11-17 selling $GWC alone drops a both-coins badge to what $Send alone earns; only $Send ends one
-          : ogSendOnlyTiers(camp) ? 'Keep holding <b>both</b>: sell out of $GWC and it drops to Silver or Bronze on $Send alone (' + (g.ogTierName || 'this tier') + ' doesn’t come back); sell out of $Send and it’s gone for good.'
-          : 'Keep holding <b>both</b>: sell out of either and it’s gone for good.') + '</div></div>';
+          // since 2026-11-17 selling $GWC alone drops a both-coins badge to Silver (what its own pre-beta $Send buy earns); only $Send ends one
+          : ogSendOnlyTiers(camp) ? 'Keep holding <b>both</b>: sell out of $GWC and it drops to Silver on $Send alone (' + (g.ogTierName || 'this tier') + ' doesn’t come back); sell out of $Send and it’s gone for good.'
+          : 'Keep holding <b>both</b>: sell out of either and it’s gone for good.')
+        + (pausedUp ? ' <b>Your OG ' + pausedName + ' is paused:</b> the wallet holding its $GWC was unlinked, which is not a sale — relink it, its $GWC held without a break meanwhile, and ' + pausedName + ' comes back (checked on-chain).' : '')
+        + '</div></div>';
     }
     /* Revoked. Since 2026-11-17 only a sell-out of $Send ends a badge for good; one removed before that, when a sell-out of
-       either coin did, is re-checked on-chain once (ogRestorePending) and comes back as Silver or Bronze if $Send alone earns it. */
+       either coin did, is re-checked on-chain once (ogRestorePending) on the wallets linked when it was removed, and comes back
+       as Silver or Bronze if $Send alone earns it. One re-checked and not restored (ogRechecked) is never said to have sold
+       $Send: which coin went was never recorded. */
     if (g.ogRevoked && g.ogRestorePending) return '<div class="og-block og-block-lost"><span class="og-block-badge">⏳</span><div class="og-block-body"><b>OG status removed — being re-checked once.</b> '
-      + 'Your badge was removed while OG still needed both $Send and $GWC to keep. Since the beta ended, Silver and Bronze need only <b>$Send</b>, so it is being re-checked on-chain: '
-      + 'if your linked wallets still hold $Send, held without a break since the badge was last checked, and your $Send buy earns Silver or Bronze ($100 or more held today, the same standard as any badge), it comes back — with a notification. Gold and Diamond don’t.</div></div>';
+      + 'Your badge was removed while OG still needed both $Send and $GWC to keep. Since the beta ended, Silver and Bronze need only <b>$Send</b>, so it is being re-checked on-chain, on the wallets that were linked when it was removed (a wallet linked since doesn’t count): '
+      + 'if they still hold $Send, held without a break since the badge was last checked, and your $Send buy earns Silver or Bronze ($100 or more held today, the same standard as any badge), it comes back — with a notification. Gold and Diamond don’t.</div></div>';
+    if (g.ogRevoked && g.ogRechecked) return '<div class="og-block og-block-lost"><span class="og-block-badge">🥀</span><div class="og-block-body"><b>OG status removed.</b> '
+      + 'It was removed under the old rule, when selling out of either coin ended a badge, and was re-checked once on <b>$Send</b> alone: the wallets linked when it was removed don’t show everything a restore needs — $Send held without a break since it was last checked, a $Send buy that earns Silver or Bronze, and $100 of it today — and a wallet linked since doesn’t count. '
+      + 'It stays removed, with its Send Power bonus, and can’t be reclaimed.</div></div>';
     if (g.ogRevoked) return '<div class="og-block og-block-lost"><span class="og-block-badge">🥀</span><div class="og-block-body"><b>OG status removed.</b> '
       + (ogSendOnlyTiers(camp)
-        ? 'Selling out of <b>$Send</b> ends an OG badge for good (selling only $GWC drops Gold or Diamond to Silver or Bronze instead), and this account’s badge has ended'
+        ? 'Selling out of <b>$Send</b> ends an OG badge for good (selling only $GWC drops Gold or Diamond to Silver instead), and this account’s linked wallets were found holding none'
         : 'OG requires holding <b>both</b> $Send and $GWC, and you sold out of one')
       + ' — your badge and its Send Power bonus are gone, and can’t be reclaimed.</div></div>';
+    // Paused, not lost: wallets leaving took off what the badge needs, and nothing was sold (the server's ogOnLeave)
+    if (Number(g.ogPausedTier) > 0) {
+      const pt = Number(g.ogPausedTier), pn = pt === 4 ? 'Diamond' : pt === 3 ? 'Gold' : pt === 2 ? 'Silver' : 'Bronze';
+      return '<div class="og-block og-block-lost"><span class="og-block-badge">⏸ OG ' + pn + '</span><div class="og-block-body"><b>Your OG ' + pn + ' is paused.</b> '
+        + 'It follows your wallets, and the wallets linked now don’t re-verify it on their own. Relink your <b>$Send</b> wallet and it is re-verified on-chain'
+        + (pt >= 3 ? ' — ' + pn + ' also needs $GWC held without a break since it was paused; without that it comes back as Silver.' : '.')
+        + ' <b>Sell out of $Send while it is paused and it ends for good</b> — the wallets you relink must show your $Send held without a break since then. No OG bonus is paid while it is paused.</div></div>';
+    }
     // ogDq is one bit for the whole account: it says at least one wallet was ruled out by the dump
     // standard, NOT that this is the only reason there is no badge (the other coin may simply never
     // have been bought). So it states what it actually knows and stops there — the earlier wording
@@ -532,7 +550,7 @@
         + '<div class="og-block-body"><b>The OG ' + esc(name) + ' window is open' + (left ? ' — it closes in ' + left : '') + '.</b> '
         + (ogNeeds(c, c.tierNow).length > 1
           ? 'A wallet that got into <b>both $Send and $GWC</b> before it shuts, and keeps holding both, earns a permanent badge and <b>' + mult + '× Send Power</b> on everything. '
-            + (ogSendOnlyTiers(c) ? 'Sell out of $GWC and it drops to Silver or Bronze on $Send alone; sell out of $Send and it’s gone for good. Not a reason to buy.' : 'Sell out of either and it’s gone for good. Not a reason to buy.')
+            + (ogSendOnlyTiers(c) ? 'Sell out of $GWC and it drops to Silver on $Send alone; sell out of $Send and it’s gone for good. Not a reason to buy.' : 'Sell out of either and it’s gone for good. Not a reason to buy.')
           // this tier needs $Send alone: any buy of it before the close counts, one made during the beta too
           : 'A wallet that bought <b>$Send</b> before it shuts (a buy from during the beta counts too) and keeps holding it earns a permanent badge and <b>' + mult + '× Send Power</b> on everything — $GWC isn’t needed. '
             + 'Sell out of $Send and it’s gone for good. Not a reason to buy.')
@@ -1136,9 +1154,9 @@
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Sell, and your Diamond Level resets to zero.</b> A sale is a market sell from one of your linked wallets, a wallet you unlinked, or a wallet you sent the coins to. The streak is what the tier measures, so selling ends it — and the factor it was applying to your whole Holder Boost goes with it. Moving coins to another wallet is not a sale and never resets it.</span></li>' +
         // by tier, as the server's ogSoldOut revokes (campaign.needs); a payload without `needs` is the older rule, where every tier needed both
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span>' + (ogSendOnlyTiers(g.ogCampaign)
-          ? '<b>Sell out entirely of $SEND and your OG badge is revoked for good.</b> Sell out of $GWC alone and a Gold or Diamond badge drops to Silver or Bronze on $SEND alone — Gold and Diamond don’t come back; Silver and Bronze never needed $GWC.'
+          ? '<b>Sell out entirely of $SEND and your OG badge is revoked for good.</b> Sell out of $GWC alone and a Gold or Diamond badge drops to Silver on $SEND alone — Gold and Diamond don’t come back; Silver and Bronze never needed $GWC.'
           : '<b>Sell out of either $SEND or $GWC entirely and the OG badge is revoked for good.</b>') +
-          ' It cannot be re-earned. Unlinking the wallet only pauses it; relink and it returns.</span></li>' +
+          ' It cannot be re-earned. Unlinking a wallet is not a sale: it pauses what your other wallets can’t show, and relinking it brings that back (Gold or Diamond only with $GWC held without a break meanwhile).</span></li>' +
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Sell a community’s token and that community’s ' + (rules.communityMult || 10) + '× is revoked,</b> along with your standing in it. Membership is re-checked on-chain, not taken on trust.</span></li>' +
         '<li class="rekt-row"><span class="rekt-dot" aria-hidden="true">▲</span><span><b>Let a holdings check go stale and every holding-based boost pays 1× until it is re-read.</b> Not a punishment — the site will not quote a multiplier it has not verified.</span></li>' +
       '</ul>' +
@@ -1256,9 +1274,11 @@
     items.push(recDt('Wallets linked', nf(g.wallets || 0), (g.wallets || 0) === 0 ? 'boosts need at least one' : 'read-only: a signature or a burn proved each', (g.wallets || 0) === 0 ? 'bad' : ''));
     items.push(recDt('Participation', g.holderVerified ? 'Verified' : 'Read-only', g.holderVerified ? 'you can do everything' : 'prove your bags to act', g.holderVerified ? 'ok' : 'bad'));
 
-    if (g.og && g.ogRequal) items.push(recDt('OG badge', '⏳ ' + esc(g.ogTierName || ''), 'no $GWC left — being re-checked on $Send alone, paid nothing meanwhile', 'bad'));
-    else if (g.og) items.push(recDt('OG badge', '🏅 ' + esc(g.ogTierName || ''), (g.ogBonus || 1) + '× — ' + (ogNeeds(g.ogCampaign, Number(g.ogTier || g.og) || 0).length > 1 && ogSendOnlyTiers(g.ogCampaign) ? 'drops to Silver or Bronze if you sell out of $GWC, revoked if you sell out of $Send' : 'revoked if you sell out')));
-    else if (g.ogRevoked) items.push(recDt('OG badge', 'Revoked', g.ogRestorePending ? 'removed under the old both-coins rule — being re-checked once' : 'sold out — it cannot come back', 'bad'));
+    if (g.og && g.ogRequal) items.push(recDt('OG badge', '⏳ ' + esc(g.ogTierName || ''), 'no $GWC left — moving to Silver on $Send alone, paid nothing meanwhile', 'bad'));
+    else if (g.og) items.push(recDt('OG badge', '🏅 ' + esc(g.ogTierName || ''), (g.ogBonus || 1) + '× — ' + (ogNeeds(g.ogCampaign, Number(g.ogTier || g.og) || 0).length > 1 && ogSendOnlyTiers(g.ogCampaign) ? 'drops to Silver if you sell out of $GWC, revoked if you sell out of $Send' : 'revoked if you sell out')
+      + (Number(g.ogPausedTier) > (Number(g.ogTier) || 0) ? '; ' + (Number(g.ogPausedTier) === 4 ? 'Diamond' : 'Gold') + ' paused until you relink the wallet holding its $GWC' : '')));
+    else if (g.ogRevoked) items.push(recDt('OG badge', 'Revoked', g.ogRestorePending ? 'removed under the old both-coins rule — being re-checked once' : g.ogRechecked ? 'removed under the old rule — re-checked once, not restored' : 'no $Send left in your wallets — it cannot come back', 'bad'));
+    else if (Number(g.ogPausedTier) > 0) items.push(recDt('OG badge', 'Paused', 'relink your $Send wallet to be re-verified', 'bad'));
 
     const live = (g.communities || []).filter(c => c.status === 'live' && !c.demo);
     items.push(recDt('Communities', nf(live.length), live.length ? 'a flat ' + (rules.communityMult || 10) + '× while in ≥1' : 'no ' + (rules.communityMult || 10) + '× yet'));
@@ -1417,9 +1437,9 @@
         '<li><b>After that:</b> no badge, whatever you buy. All three deadlines are the same date for both coins.</li>' +
         '<li><b>Two things disqualify a wallet, the same way in every window:</b> if it dumped its whole holding to nothing inside its own first month <b>and</b> it holds less today than it did at the end of that month, it earns nothing. A wallet that sold out but bought back past where it stood keeps its place.</li>' +
         (sendOnly
-          ? '<li><b>Sell out entirely of $Send, ever, and the badge is revoked for good.</b> Sell out of $GWC alone and a Gold or Diamond badge drops to Silver or Bronze — whichever your earliest $Send buy earns on its own — and Gold and Diamond don’t come back. Badges removed before this rule for a $GWC sale are re-checked once and restored as Silver or Bronze where $Send alone earns it.'
+          ? '<li><b>Sell out entirely of $Send, ever, and the badge is revoked for good.</b> Sell out of $GWC alone and a Gold or Diamond badge drops to Silver — what the $Send it was earned on, bought before the beta ended, earns on its own — and Gold and Diamond don’t come back. Badges removed before this rule are re-checked once, on the wallets linked when they were removed, and restored as Silver or Bronze where $Send alone earns it.'
           : '<li><b>Sell out of either coin entirely, ever, and the badge is revoked for good.</b>') +
-        ' The badge follows your wallet: unlink it and the badge pauses until you relink. Everything is read from the chain, and a read that cannot be completed is retried rather than guessed — nobody loses a badge to an outage.</li>' +
+        ' The badge follows your wallets: unlink the one holding a coin it needs and that part pauses until you relink it — Gold and Diamond come back only with $GWC held without a break meanwhile. Everything is read from the chain, and a read that cannot be completed is retried rather than guessed — nobody loses a badge to an outage.</li>' +
       '</ul>';
   }
   /* The two community ladders, printed from the server's own tables. Before this, the community-XP rates
@@ -1607,8 +1627,9 @@
     return {
       /* every one of these is READ from the payload, and each says what its own body says — a summary
          that contradicts the section under it is worse than no summary at all */
-      og: g.ogRevoked ? (g.ogRestorePending ? 'Removed under the old both-coins rule — being re-checked once' : 'Revoked — sold out, and it cannot come back')
-        : tier && g.ogRequal ? (g.ogTierName || 'OG') + ' · no $GWC left — being re-checked on $Send alone'
+      og: g.ogRevoked ? (g.ogRestorePending ? 'Removed under the old both-coins rule — being re-checked once' : g.ogRechecked ? 'Removed under the old rule — re-checked once, not restored' : 'Revoked — no $Send left in your wallets, and it cannot come back')
+        : tier && g.ogRequal ? (g.ogTierName || 'OG') + ' · no $GWC left — moving to Silver on $Send alone'
+        : !tier && Number(g.ogPausedTier) > 0 ? 'Paused — relink your $Send wallet to be re-verified'
         : tier ? (g.ogTierName || 'OG') + ' · ' + (em.og > 1 ? em.og + '× live on everything' : (Number(g.ogBonus) || 1) + '× — paused until your holdings are re-read')
         : (g.ogCampaign && g.ogCampaign.open ? 'Not earned yet — the windows are still open' : 'The windows have closed'),
       comm: comms
