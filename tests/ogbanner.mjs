@@ -51,10 +51,12 @@ check('  ...the boost strip pays OG while the coins the TIER needs are held (Sil
   /const ogHeld = ogNeeds\(g\.ogCampaign, Number\(g\.ogTier \|\| g\.og\) \|\| 0\)\.every\(/.test(GAM) && !/\(h\.sendTok \|\| 0\) > 0 && \(h\.gwcTok \|\| 0\) > 0\); \/\/ OG pays only while/.test(GAM));
 check('  ...the rulebook: Gold and Diamond needed both, Silver and Bronze need only $Send since the beta ended, and a $Send buy from the beta is Silver, never Gold',
   /<b>Gold and Diamond needed both \$Send and \$GWC<\/b>; since the beta ended, <b>Silver and Bronze need only \$Send<\/b>/.test(GAM) && /without \$GWC it is Silver, never Gold/.test(GAM)
-  && /either coin for Gold and Diamond, \$Send for Silver and Bronze/.test(GAM));
-check('  ...and the "Revoked, not drained" card says the same by tier — either coin for Gold and Diamond, $SEND for Silver and Bronze — keeping the old line only for a payload without `needs`',
-  /'<b>Sell out entirely of a coin your OG tier needs and the badge is revoked for good<\/b> — either \$SEND or \$GWC for Gold and Diamond, \$SEND for Silver and Bronze\.'/.test(GAM)
-  && /\(ogSendOnlyTiers\(g\.ogCampaign\)\s*\? '<b>Sell out entirely of a coin your OG tier needs/.test(GAM));
+  && /<li><b>Sell out entirely of \$Send, ever, and the badge is revoked for good\.<\/b> Sell out of \$GWC alone and a Gold or Diamond badge drops to Silver or Bronze/.test(GAM));
+// since the owner's "Drop to Silver" (2026-11-17): selling $SEND ends a badge for good, selling $GWC alone drops a Gold or Diamond
+check('  ...and the "Revoked, not drained" card says the same — $SEND ends a badge for good, $GWC alone drops Gold and Diamond to Silver or Bronze — keeping the old line only for a payload without `needs`',
+  /'<b>Sell out entirely of \$SEND and your OG badge is revoked for good\.<\/b> Sell out of \$GWC alone and a Gold or Diamond badge drops to Silver or Bronze on \$SEND alone/.test(GAM)
+  && /\(ogSendOnlyTiers\(g\.ogCampaign\)\s*\? '<b>Sell out entirely of \$SEND and your OG badge/.test(GAM)
+  && !/either \$SEND or \$GWC for Gold and Diamond/.test(GAM));
 check('the Arcade\'s OG card reads o.needs (and falls back to both), and words the ladder and the "how" by it',
   /const n = o\.needs && o\.needs\[t\]; return Array\.isArray\(n\) && n\.length \? n : \['SEND', 'GWC'\];/.test(CMP) && /'\$SEND only'/.test(CMP) && /Since the beta ended, Silver and Bronze need only <b>\$SEND<\/b>/.test(CMP));
 check('  ...a revoked member is told the badge is gone for good, never invited to earn one in the open window (the server never re-grants a revoked account)',
@@ -62,9 +64,9 @@ check('  ...a revoked member is told the badge is gone for good, never invited t
   && CMP.indexOf('o.mine && o.mine.revoked') < CMP.indexOf("window goes to wallets that bought <b>$SEND</b>"));
 check('the About page\'s state line says when the open window needs only $SEND, read from the campaign',
   /const need = c\.needs && c\.needs\[c\.tierNow\];/.test(ABJ) && /it needs only \$SEND\./.test(ABJ));
-check('the OG badge tooltip: Diamond and Gold "BOTH $Send and $GWC", Silver and Bronze "$Send" alone and lost only by selling out of it',
+check('the OG badge tooltip: Diamond and Gold "BOTH $Send and $GWC" (dropping to Silver or Bronze on a $GWC sell-out), Silver and Bronze "$Send" alone, and every tier lost only by selling out of $Send',
   /4: \{ name: 'Diamond', mult: 20, both: true,/.test(APP) && /3: \{ name: 'Gold', mult: 10, both: true,/.test(APP) && /2: \{ name: 'Silver', mult: 5, both: false,/.test(APP) && /1: \{ name: 'Bronze', mult: 3, both: false,/.test(APP)
-  && /Lost if they sell out of ' \+ \(t\.both \? 'either' : 'their \$Send'\)/.test(APP));
+  && /\+ \(t\.both \? 'Drops to Silver or Bronze if they sell out of \$GWC; lost if they sell out of their \$Send\.' : 'Lost if they sell out of their \$Send\.'\);/.test(APP));
 check('the ticket builds its rail words from the campaign (no fixed "Gold OG closes in"), with Silver\'s rail starting at the beta\'s end',
   !/Gold OG closes in/.test(INV) && /w\.medal \+ ' ' \+ w\.name \+ ' OG closes in'/.test(INV) && /Number\(c\.betaEndsAt\)/.test(INV) && /'🏅 Every OG window has closed'/.test(INV));
 check('  ...and gate.css colours the rail by the window: the site\'s silver and bronze tokens, never literals in the rules',
@@ -81,6 +83,23 @@ check('White Paper: the same rule',
 check('README §3.11: the table says which coins each tier needs, and the rail\'s Silver banner is described',
   /\| 🥈 Silver \| \*\*5×\*\* \| \*\*\$Send only\*\* \|/.test(README) && /\| 🥉 Bronze \| \*\*3×\*\* \| \*\*\$Send only\*\* \|/.test(README) && /\| 🥇 Gold \| \*\*10×\*\* \| both coins \|/.test(README)
   && /\*\*"🥈 Silver OG closes in"\*\*/.test(README) && /capped at Silver/.test(README));
+/* The owner's two decisions the same day: "Drop to Silver" (a Gold or Diamond that sells out of $GWC but keeps $SEND keeps a
+   badge on $SEND alone; only selling out of $SEND ends one for good) and "Re-check and restore" (badges already lost that way
+   are re-checked once). Every page that states the rule states these, and the dashboard and the Arcade say when an account
+   is waiting on either. */
+check('the drop is stated wherever the rule is: About, the White Paper, README §3.11, the Arcade\'s OG card — $SEND ends a badge, $GWC alone drops Gold and Diamond to Silver or Bronze',
+  /<b>Sell out entirely of \$SEND, ever, and it's revoked for good\.<\/b> Sell out of \$GWC alone and a Diamond or Gold badge <b>drops to Silver or Bronze<\/b>/.test(ABOUT)
+  && /Sell out entirely of \$SEND, at any time, and the badge is revoked for good\. Sell out of \$GWC alone while still holding \$SEND and a Diamond or Gold badge is not revoked/.test(WP)
+  && /\*\*Losing it\.\*\* Sell out entirely of \*\*\$Send\*\*, at any time, and the badge is revoked \*\*for good\*\* — whatever the tier\. Sell out of \*\*\$GWC alone\*\* while still holding \$Send and a Diamond or Gold badge \*\*drops to Silver or Bronze\*\* instead/.test(README)
+  && /sell out of \$GWC alone and a Gold or Diamond drops to Silver or Bronze on \$SEND alone/.test(CMP)
+  && !/either coin for (Gold and Diamond|Diamond and Gold), \$SEND for Silver and Bronze/.test(ABOUT + WP + CMP + README));
+check('  ...and the restore: About, the White Paper and README say a badge lost before the rule is re-checked once, and nobody who sold out of $SEND is restored',
+  /Badges removed before this rule \(when selling either coin ended any tier\) are re-checked on-chain once/.test(ABOUT) && /Nobody who sold out of \$SEND is restored\./.test(WP)
+  && /\*\*Badges lost before this rule are re‑checked once\*\*/.test(README) && /nobody who sold out of \$Send is restored/.test(README));
+check('the dashboard says when a Gold or Diamond is being re-decided on $Send alone (ogRequal, paid nothing meanwhile) and when a removed badge waits for its one re-check (ogRestorePending); the Arcade card says the second too',
+  /if \(g\.ogRequal\) return '<div class="og-block/.test(GAM) && /No OG bonus is paid until that’s done; you’ll get a notification\./.test(GAM) && /ogHeld && !g\.ogRequal\);/.test(GAM)
+  && /if \(g\.ogRevoked && g\.ogRestorePending\) return/.test(GAM) && /else if \(o\.mine && o\.mine\.revoked && o\.mine\.recheck\) me = '<b>OG status removed — being re-checked once\.<\/b>/.test(CMP));
+check('  ...and none of the new copy tells anyone to buy', !/\b(buy now|you should buy|go buy|buy more|buy \$GWC again to)\b/i.test(GAM + CMP + ABOUT.slice(ABOUT.indexOf('id="og-rules"'), ABOUT.indexOf('id="og-rules"') + 9000)));
 
 /* ═══ 2. in a browser ═══ */
 function findChrome() {

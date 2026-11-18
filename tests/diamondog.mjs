@@ -40,14 +40,17 @@ try {
   check('Diamond keeps every Gold perk (a free data key)', /const DATA_TIER_DISCOUNT = \{ 4: 1, 3: 1,/.test(SRC) && /row\.og_tier >= OG_TIER\.GOLD/.test(SRC));
   // the sweep also asks a Silver left open to be lifted since 2026-11-17 (og_lift; tests/ogsilver.mjs) — the Gold clause is unchanged
   check('a live Gold account is asked the Diamond question by the sweep, once', /WHERE \(u\.og_tier = 0 OR \(u\.og_tier = 3 AND u\.og_diamond_at IS NULL\) OR \(u\.og_tier = 2 AND u\.og_lift = 1\)\) AND u\.og_revoked = 0/.test(SRC)
-    && /const upgrading = u\.og_tier === OG_TIER\.GOLD && !u\.og_diamond_at;/.test(SRC));
+    && /const upgrading = !requal && u\.og_tier === OG_TIER\.GOLD && !u\.og_diamond_at;/.test(SRC));   // a Gold whose $GWC was found sold is re-decided on $SEND alone first (og_requal)
   // the floor is each coin SUMMED over every linked wallet (2026-11-17) — it used to value only the one wallet that earned the tier
   check('  ...an upgrade needs the same $100 of each a grant does, summed over the wallets, and a failed read is never an answer', /if \(scanFailed\) return OG_TIER\.GOLD;/.test(SRC)
     && /return await grantDiamondUpgrade\(userId, best, held\);/.test(SRC)
     && /if \(!\(ogFloorOk\(held && held\.SEND, sendPx\) && ogFloorOk\(held && held\.GWC, gwcPx\)\)\) \{/.test(SRC) && !/best\.(SEND|GWC)\.balWei/.test(SRC));
-  // revocation is by tier since 2026-11-17 (tests/ogsilver.mjs covers Silver and Bronze): Diamond and Gold still go on a sell-out of EITHER coin
-  check('selling out of either coin still loses Diamond (and Gold) for good', /const OG_TIER_NEEDS = \{ 4: \['SEND', 'GWC'\], 3: \['SEND', 'GWC'\],/.test(SRC)
-    && /if \(sendTok <= OG_DUST \|\| gwcTok <= OG_DUST\) \{[\s\S]{0,300}ogSoldOut\(cur\.og_tier, \{ SEND: sendTok > OG_DUST, GWC: gwcTok > OG_DUST \}\)[\s\S]{0,200}UPDATE users SET og = 0, og_tier = 0, og_revoked = 1/.test(SRC));
+  /* revocation is by tier since 2026-11-17, and since the owner's "Drop to Silver" the same day a sell-out of $SEND ends Diamond
+     (and Gold) for good while a sell-out of $GWC alone drops them to what $SEND alone earns (tests/ogsilver.mjs runs both) */
+  check('Diamond (and Gold) need both coins; selling out of $SEND loses them for good, selling out of $GWC alone drops them (ogLoss)', /const OG_TIER_NEEDS = \{ 4: \['SEND', 'GWC'\], 3: \['SEND', 'GWC'\],/.test(SRC)
+    && /if \(sendTok <= OG_DUST \|\| gwcTok <= OG_DUST\) ogAfterHolderRead\(userId, sendTok, gwcTok\);/.test(SRC)
+    && /const loss = ogLoss\(gone\);\n\s+if \(loss === 'revoke'\) \{\n\s+db\.prepare\('UPDATE users SET og = 0, og_tier = 0, og_revoked = 1, og_requal = 0 WHERE id = \?'\)/.test(SRC)
+    && /return gone\.includes\('SEND'\) \? 'revoke' : 'drop';/.test(SRC));
 
   /* ═══ 2. the decision, on fixed inputs ═══ */
   const m = /\nfunction ogDiamondOk\(complete, best, holdsAny, month\) \{[\s\S]*?\n\}\n/.exec(SRC);

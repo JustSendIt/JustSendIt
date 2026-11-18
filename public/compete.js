@@ -181,8 +181,12 @@
     const cur = tiers.find(([k, t]) => o.tierNow === t);
     let me = '';
     if (!ctx.signedIn) me = 'The badge follows a wallet that got in early and still holds. ' + signInBtn('Sign in to link a wallet');
-    else if (o.mine && o.mine.og && o.mine.tier) me = 'You hold <b>OG ' + esc(o.mine.name) + ' — ' + o.mult[o.mine.tier] + '×</b> on everything you earn. ' + (needs(o.mine.tier).length > 1 ? 'It stays for as long as both coins stay in your wallet.' : 'It stays for as long as $SEND stays in your wallet; this tier doesn’t need $GWC.');
-    // revoked (sold out of a coin the badge needed): the server never grants this account a badge again, so no window is offered
+    else if (o.mine && o.mine.og && o.mine.tier) me = 'You hold <b>OG ' + esc(o.mine.name) + ' — ' + o.mult[o.mine.tier] + '×</b> on everything you earn. ' + (needs(o.mine.tier).length > 1
+      ? (sendOnly ? 'It stays ' + esc(o.mine.name) + ' while both coins stay in your wallet; sell out of $GWC and it drops to Silver or Bronze on $SEND alone, sell out of $SEND and it’s gone.' : 'It stays for as long as both coins stay in your wallet.')
+      : 'It stays for as long as $SEND stays in your wallet; this tier doesn’t need $GWC.');
+    // removed before 2026-11-17 (a sell-out of either coin ended any tier then): re-checked once on $SEND alone (o.mine.recheck)
+    else if (o.mine && o.mine.revoked && o.mine.recheck) me = '<b>OG status removed — being re-checked once.</b> It was removed while OG needed both coins to keep; Silver and Bronze now need only <b>$SEND</b>, so if your linked wallets still hold $SEND and it earns one of them, it comes back (checked on-chain).';
+    // revoked (sold out of $SEND, or re-checked and not restored): the server never grants this account a badge again, so no window is offered
     else if (o.mine && o.mine.revoked) me = '<b>OG status removed.</b> This account sold out of a coin its badge needed, so the badge and its Send Power bonus are gone — and can’t be reclaimed, whichever window is open.';
     else me = !o.open ? 'No badge on this account, and every window has closed.'
       : cur && needs(cur[1]).length === 1 ? 'No badge on this account. The ' + esc(o.name[cur[1]]) + ' window goes to wallets that bought <b>$SEND</b> before it closes and still hold it — $GWC isn’t needed. Link a wallet on your profile to be checked.'
@@ -201,7 +205,7 @@
         : '<b>Four tiers, one rule.</b> Diamond was the first month of $GWC — bought both, and bought more of each than you sold that month — and has closed. Gold closes with the beta, Silver 90 days after that, Bronze when $GWC turns one year old — the same dates for both coins — and your tier is the <b>lower</b> of your two coins, because the rule is that you held both. ')
         + (o.closes ? 'Gold ' + (o.closes.gold <= now ? 'closed ' : 'closes ') + esc(dateShort(o.closes.gold)) + ', Silver ' + esc(dateShort(o.closes.silver)) + ', Bronze ' + esc(dateShort(o.closes.bronze)) + '; after that no badge is granted. ' : '')
         + 'A wallet that dumped its whole holding inside its first month <i>and</i> holds less today than it did then earns nothing. '
-        + (sendOnly ? 'Sell out entirely of a coin your tier needs, ever — either coin for Gold and Diamond, $SEND for Silver and Bronze — and the badge is revoked. ' : 'Sell out of either coin entirely, ever, and the badge is revoked. ')
+        + (sendOnly ? 'Sell out entirely of $SEND, ever, and the badge is revoked; sell out of $GWC alone and a Gold or Diamond drops to Silver or Bronze on $SEND alone. ' : 'Sell out of either coin entirely, ever, and the badge is revoked. ')
         + 'Everything is read from the chain and re-checked; a read that cannot complete is retried, never guessed.',
     });
   }
