@@ -26,7 +26,8 @@
   function initPlayer(tracks) {
     const wrap = document.createElement('div');
     wrap.id = 'music-player';
-    const many = tracks.length > 1;
+    // ♫ when there is a choice, or a maker to credit: on a phone the title is folded away, and the list is where a song's maker is named
+    const listed = (ts) => ts.length > 1 || ts.some((t) => t.by), many = listed(tracks);
     wrap.innerHTML =
       '<button class="mp-btn" id="mp-toggle" data-tip="Plays the music, or pauses it and keeps it off" aria-label="Play the music" aria-pressed="false"><span class="mp-ico" aria-hidden="true"></span></button>' +
       // ♫ sits right beside ▶: the player unfolds (title, volume) as a pointer reaches it, and a ♫ at the far end moved out from under it
@@ -66,15 +67,15 @@
       nameEl.textContent = t.title;
       if (t.by) { byEl.textContent = 'by ' + t.by.name; byEl.href = t.by.url; byEl.setAttribute('data-tip', 'Opens ' + t.by.name + '’s page on X in a new tab'); byEl.hidden = false; }
       else { byEl.hidden = true; byEl.removeAttribute('href'); }
-      setUI(!audio.paused);
-      if (menu && !menu.hidden) paintMenu();
+      setUI(!audio.paused);   // which also draws the open list again
     }
     // a song by its place in the list; t: where in it to start (the place kept from the last visit)
     function load(i, t) {
       cur = i;
       audio.src = tracks[i].src;
       audio.loop = pick !== 'all' || tracks.length === 1;
-      if (t > 0) { try { audio.currentTime = t; } catch {} }
+      // always set, 0 too: with nothing loaded the browser keeps a seek as the start of whatever loads next (the last song's place)
+      try { audio.currentTime = t > 0 ? t : 0; } catch {}
       keepSet('mp-track', tracks[i].id); keepSet('mp-pos', String(t > 0 ? t : 0));   // the place kept is always this song's
       paintNow();
     }
@@ -84,15 +85,16 @@
       const was = want || btn.classList.contains('is-playing'), gone = tracks[cur];
       tracks = tracks.filter((t) => t !== gone);
       if (!tracks.length) { wrap.remove(); if (window.sendToast) sendToast('The music is not available right now.'); return; }
-      if (pick === gone.id) { pick = 'all'; keepSet('mp-pick', 'all'); }
-      if (menu && tracks.length < 2) { songsBtn.remove(); menu.remove(); }
+      if (pick === gone.id) pick = 'all';   // for this page only: the choice kept stays the visitor's (the file may load next time)
+      if (menu && !listed(tracks)) { openMenu(false, false); songsBtn.remove(); menu.remove(); }
       load(Math.min(cur, tracks.length - 1), 0);
-      if (was) audio.play().then(() => { setUI(true); set('1'); }).catch(() => setUI(false));
+      if (was && !wallSongOn() && !(window.AGE && AGE.isOpen)) { setUI(true); audio.play().then(() => { setUI(true); set('1'); }).catch(() => setUI(false)); }
     });
     // every song in order: the next one starts when one ends, and the last hands back to the first
     audio.addEventListener('ended', () => {
       if (audio.loop) return;
       load((cur + 1) % tracks.length, 0);
+      setUI(true);   // ⏸ while the next song loads: a press then is a pause, as it looks
       audio.play().then(() => setUI(true)).catch(() => setUI(false));
     });
     // the place kept belongs to the song mp-track names (a visit from before the list kept the theme's place, with no name)
@@ -108,16 +110,20 @@
       btn.setAttribute('aria-pressed', String(playing));
       const t = tracks[cur], what = t ? t.title + (t.by ? ' by ' + t.by.name : '') : 'the music';
       btn.setAttribute('aria-label', playing ? 'Pause the music: ' + what : 'Play the music: ' + what);
+      if (menu && !menu.hidden) paintMenu();   // its "· playing" mark follows
     }
 
     /* ♫ — the list of songs: "Play all" (the default) and each song, the one playing marked; a song's maker is a link of its own
        beside it (a link cannot sit inside a button). Picking plays: a press there is the visitor choosing music. */
     function paintMenu() {
-      const box = menu.querySelector('.mp-opts');
+      const box = menu.querySelector('.mp-opts'), had = menu.contains(document.activeElement) ? document.activeElement : null;
+      const back = had ? (had.dataset.mpPick ? '[data-mp-pick="' + had.dataset.mpPick + '"]' : had.classList.contains('mp-by') ? '.mp-row:nth-child(' + (Array.prototype.indexOf.call(box.children, had.closest('.mp-row')) + 1) + ') .mp-by' : null) : null;
       const opt = (id, label, tip) => '<button class="np-chip mp-opt" type="button" data-mp-pick="' + escH(id) + '" aria-pressed="' + String(pick === id) + '" data-tip="' + escH(tip) + '">' + label + '</button>';
-      box.innerHTML = opt('all', '🔁 Play all, in order', 'Plays every song in order, then starts again from the first') +
-        tracks.map((t, i) => '<div class="mp-row">' + opt(t.id, escH(t.title) + (t.note ? ' <small>' + escH(t.note) + '</small>' : '') + (i === cur && !audio.paused ? ' <small class="mp-on">· playing</small>' : ''), 'Plays only ' + t.title + ', on repeat') +
+      const playing = btn.classList.contains('is-playing');
+      box.innerHTML = (tracks.length > 1 ? opt('all', '🔁 Play all, in order', 'Plays every song in order, then starts again from the first') : '') +
+        tracks.map((t, i) => '<div class="mp-row">' + opt(t.id, escH(t.title) + (t.note ? ' <small>' + escH(t.note) + '</small>' : '') + (i === cur && playing ? ' <small class="mp-on">· playing</small>' : ''), tracks.length > 1 ? 'Plays only ' + t.title + ', on repeat' : 'Plays ' + t.title + ', on repeat') +
           (t.by ? '<a class="mp-by" href="' + escH(t.by.url) + '" target="_blank" rel="noopener noreferrer" data-tip="Opens ' + escH(t.by.name) + '’s page on X in a new tab">by ' + escH(t.by.name) + '</a>' : '') + '</div>').join('');
+      const again = back && box.querySelector(back); if (again) again.focus({ preventScroll: true });
     }
     /* keys: opened from the keyboard, the chosen song takes the focus; opened with a pointer the focus stays on ♫ — a focus moved
        into the list brings up that song's description (tips.js), which sat over the songs above it and caught the next press */
@@ -138,7 +144,10 @@
       songsBtn.addEventListener('click', (e) => openMenu(menu.hidden, false, e.detail === 0));   // detail 0: Enter or Space, not a press
       menu.addEventListener('click', (e) => { const b = e.target.closest('[data-mp-pick]'); if (b) pickSong(b.dataset.mpPick, e.detail === 0); });
       wrap.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !menu.hidden) { e.stopPropagation(); openMenu(false, true); } });
-      document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !wrap.contains(e.target)) openMenu(false, false); });
+      // a press elsewhere closes it — not one on a description bubble (tips.js puts it over the songs; its own click puts it away)
+      document.addEventListener('pointerdown', (e) => { if (!menu.hidden && !wrap.contains(e.target) && !(e.target.closest && e.target.closest('#tip-bubble'))) openMenu(false, false); });
+      // and so does the keyboard leaving the player (Tab past the songs): an open list is never left over the page with no way to close it
+      wrap.addEventListener('focusout', (e) => { if (!menu.hidden && e.relatedTarget && !wrap.contains(e.relatedTarget) && e.relatedTarget.id !== 'tip-bubble') openMenu(false, false); });
     }
     /* The nudge shows itself once and then leaves. It is a fixed bubble over page content, so a nudge
        that never goes away is a nudge that permanently covers a link somebody wanted. */
@@ -179,11 +188,11 @@
       const song = document.getElementById('wall-song-audio');
       if (song && !song.paused) song.pause();
       want = true;
-      try { await audio.play(); setUI(true); set('1'); hideHint(); if (menu && !menu.hidden) paintMenu(); return true; }
+      try { await audio.play(); setUI(true); set('1'); hideHint(); return true; }
       catch (e) { return e && e.name === 'NotSupportedError' ? null : false; }   // null: the file would not load — the next song is already on its way (above)
     }
     btn.addEventListener('click', async () => {
-      if (audio.paused) { if ((await playChosen()) === false && window.sendToast) sendToast('Browser blocked audio — tap again 🎵'); }
+      if (audio.paused || !btn.classList.contains('is-playing')) { if ((await playChosen()) === false && window.sendToast) sendToast('Browser blocked audio — tap again 🎵'); }
       else { want = false; audio.pause(); setUI(false); set('0'); hideHint(); }
     });
     hint.addEventListener('click', () => playChosen());
@@ -205,10 +214,12 @@
     const AGE = window.AGE;
     const afterAge = (fn) => { if (AGE && AGE.needed) AGE.whenOk(fn); else fn(); };
     document.addEventListener('jsi:age-open', () => { if (!audio.paused) audio.pause(); });
+    document.addEventListener('jsi:age-open', () => { want = false; setUI(false); });
     /* Pause the theme when the wall song claims the page. Do not mark the theme opted out, so the next
        page without a wall song can resume it. tryPlay also refuses while a song is up, including when
        this event was dispatched before the player had finished loading. */
     document.addEventListener('jsi:wall-song', () => { if (!audio.paused) { audio.pause(); setUI(false); } hideHint(); });
+    document.addEventListener('jsi:wall-song', () => { want = false; });
 
     if (state === '0' || !resumeAllowed) {
       // CASE C: opted out (or resume disabled in prefs) — silent, no hint, no arming

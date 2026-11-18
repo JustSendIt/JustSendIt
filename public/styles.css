@@ -1265,6 +1265,13 @@ html.motion-off .trk-token summary, html.motion-off .trk-token summary::before {
 #music-player .mp-opt { min-height: 44px; white-space: normal; text-align: left; }
 #music-player .mp-opt small { font-size: max(var(--text-floor), 0.72rem); font-weight: 600; }
 #music-player .mp-row .mp-by { min-height: 44px; display: inline-flex; align-items: center; padding: 0 0.25rem; }
+/* folded, the maker's line takes no height (the capsule kept the two-line title's height, and changed it with the song); a touch screen
+   gets a 44 px target; the focus ring sits inside the title's clipped box */
+#music-player:not(:hover):not(:focus-within) .mp-title .mp-by { display: none; }
+@media (pointer: coarse) { #music-player .mp-title .mp-by { display: inline-flex; align-items: center; min-height: 44px; } }
+#music-player .mp-title .mp-by:focus-visible { outline-offset: -3px; }
+/* the chosen song (or "Play all") under forced colours, where the fill is replaced: the system's highlight */
+@media (forced-colors: active) { #music-player .mp-opt[aria-pressed="true"] { background: Highlight; color: HighlightText; border-color: Highlight; } }
 /* ===== THE PLAYER KEEPS TO ITSELF ================================================================
    It is a FIXED overlay, so whatever is under it cannot be tapped — and a measured sweep of every page
    at nine widths from 320 to 1440 found that this one control was the ONLY thing on the site covering

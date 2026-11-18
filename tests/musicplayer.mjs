@@ -91,6 +91,8 @@ async function startChrome() {
   const t = await cdp('Target.createTarget', { url: 'about:blank' }, null);
   session = (await cdp('Target.attachToTarget', { targetId: t.targetId, flatten: true }, null)).sessionId;
   await cdp('Page.enable'); await cdp('Runtime.enable'); await cdp('Network.enable');
+  // the player's Audio is never in the page: the walk keeps a handle on each one made, to read where a song starts (test only)
+  await cdp('Page.addScriptToEvaluateOnNewDocument', { source: '(() => { const A = window.Audio; window.__audios = []; window.Audio = function (src) { const a = new A(src); a.__starts = []; a.addEventListener("playing", () => a.__starts.push({ src: a.getAttribute("src"), t: a.currentTime })); window.__audios.push(a); return a; }; window.Audio.prototype = A.prototype; })();' });
   await cdp('Fetch.enable', { patterns: [{ urlPattern: '*/api/config*' }, { urlPattern: '*/assets/justsendit-audio.m4a*' }, { urlPattern: '*/assets/send-it-wisdomprime123.m4a*' }] });
 }
 async function ev(expr) {
@@ -180,10 +182,33 @@ else try {
   check('pausing keeps it off; the next page remembers the choice ("Play all") and the song it was on, and stays quiet',
     !paused.playing && kept && !kept.playing && kept.pick === 'all' && kept.name === paused.name && (await ev('localStorage.getItem("mp-on")')) === '0', JSON.stringify({ paused, kept }));
 
+  // a picked song starts at its own start: the place kept belongs to the song before it (the browser keeps an unread seek as the next start)
+  await open(1280);
+  await ev('localStorage.setItem("mp-track", "theme"); localStorage.setItem("mp-pos", "1.2"); localStorage.setItem("mp-on", "0"), true');
+  await open(1280, true);
+  await press('#mp-songs'); await until('!document.getElementById("mp-menu").hidden');
+  await press('#mp-menu [data-mp-pick="send-it"]');
+  await until('(() => { const s = ' + STATE + '; return s && s.playing && s.name === "SEND IT 🚀" ? s : null; })()');
+  // where it was when it began to play (read at that moment: a 1.6 s tone on repeat is back at 0 soon after)
+  const startAt = await until('(() => { const a = window.__audios[0]; const s = a && a.__starts.find((x) => /send-it/.test(x.src)); return s ? String(s.t) : null; })()');
+  check('a song picked from the list starts at its start — never at the place kept for the song before it (1.2 s into the theme here)', startAt != null && Number(startAt) < 0.3, String(startAt));
+  // the keyboard leaving the open list closes it
+  await press('#mp-toggle'); await sleep(100);
+  await ev('document.getElementById("mp-songs").focus(), true'); await key('Enter', 'Enter', 13, '\r'); await until('!document.getElementById("mp-menu").hidden');
+  for (let i = 0; i < 8 && (await ev('document.getElementById("music-player").contains(document.activeElement)')); i++) { await key('Tab', 'Tab', 9); await sleep(60); }
+  const left = await ev(STATE);
+  check('  ...and Tab out of the open list closes it (never left open over the page with the focus gone)', !left.open && left.exp === 'false', JSON.stringify(left));
+  // folded, the capsule is one height whichever song is current (the maker's line takes no room)
+  const hOf = async () => { await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: 1000, y: 200, button: 'none' }); await ev('document.activeElement && document.activeElement.blur && document.activeElement.blur(), true'); await sleep(350); return ev('Math.round(document.getElementById("music-player").getBoundingClientRect().height)'); };
+  const hSend = await hOf();
+  await open(1280);
+  const hTheme = await hOf();
+  check('  ...folded, the player is the same height whether the song has a maker\'s line or not', hSend === hTheme && hSend > 0, hSend + ' vs ' + hTheme);
+
   // a phone: ▶ and ♫ only; the list fits the screen
   await open(390);
   await press('#mp-songs'); await until('!document.getElementById("mp-menu").hidden');
-  const ph = await ev('(() => { const m = document.getElementById("mp-menu").getBoundingClientRect(), t = document.getElementById("mp-toggle").getBoundingClientRect(), s = document.getElementById("mp-songs").getBoundingClientRect(); return { l: m.left, r: m.right, top: m.top, sw: document.documentElement.scrollWidth, iw: innerWidth, t: [t.width, t.height], s: [s.width, s.height], title: getComputedStyle(document.querySelector("#music-player .mp-title")).display }; })()');
+  const ph = await ev('(() => { const m = document.getElementById("mp-menu").getBoundingClientRect(), t = document.getElementById("mp-toggle"), s = document.getElementById("mp-songs"); return { l: m.left, r: m.right, top: m.top, sw: document.documentElement.scrollWidth, iw: innerWidth, t: [t.offsetWidth, t.offsetHeight], s: [s.offsetWidth, s.offsetHeight], title: getComputedStyle(document.querySelector("#music-player .mp-title")).display }; })()');
   const phm = await ev(MENU);
   check('at 390 px the player is ▶ and ♫ (48 px each, the title folded away) and the list opens inside the screen with every song and the maker\'s link — no sideways scroll',
     ph.l >= 0 && ph.r <= ph.iw && ph.top >= 0 && ph.sw <= ph.iw && ph.t[0] >= 44 && ph.t[1] >= 44 && ph.s[0] >= 44 && ph.s[1] >= 44 && ph.title === 'none'
@@ -207,7 +232,9 @@ else try {
   await press('#mp-toggle');
   const gone = await until('(() => { const s = ' + STATE + '; return s && s.playing && s.name === "SEND IT 🚀" ? s : null; })()', 6000);
   MISSING = new Set();
-  check('a song whose file does not load is dropped: the next song plays instead, and with one song left ♫ goes', gone && !gone.songs && gone.by && gone.by.href === SONG.by.url, JSON.stringify(gone || await ev(STATE)));
+  const lone = gone ? (await press('#mp-songs'), await until('!document.getElementById("mp-menu").hidden'), await ev(MENU)) : [];
+  check('a song whose file does not load is dropped: the next song plays instead; with one song left the list has no "Play all", but ♫ stays to name its maker',
+    gone && gone.songs && gone.by && gone.by.href === SONG.by.url && lone.length === 1 && lone[0].id === 'send-it' && lone[0].by && lone[0].by.href === SONG.by.url, JSON.stringify({ gone: gone || await ev(STATE), lone }));
   check('no script error on the walk', pageErrors.length === 0, pageErrors.slice(0, 3).join(' | '));
 } catch (e) {
   console.error('ERROR', e && e.stack);
