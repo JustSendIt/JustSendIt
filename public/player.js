@@ -121,7 +121,7 @@
       const opt = (id, label, tip) => '<button class="np-chip mp-opt" type="button" data-mp-pick="' + escH(id) + '" aria-pressed="' + String(pick === id) + '" data-tip="' + escH(tip) + '">' + label + '</button>';
       const playing = btn.classList.contains('is-playing');
       box.innerHTML = (tracks.length > 1 ? opt('all', '🔁 Play all, in order', 'Plays every song in order, then starts again from the first') : '') +
-        tracks.map((t, i) => '<div class="mp-row">' + opt(t.id, escH(t.title) + (t.note ? ' <small>' + escH(t.note) + '</small>' : '') + (i === cur && playing ? ' <small class="mp-on">· playing</small>' : ''), tracks.length > 1 ? 'Plays only ' + t.title + ', on repeat' : 'Plays ' + t.title + ', on repeat') +
+        tracks.map((t, i) => '<div class="mp-row">' + opt(t.id, escH(t.title) + (t.note ? ' <small>· ' + escH(t.note) + '</small>' : '') + (i === cur && playing ? ' <small class="mp-on">· playing</small>' : ''), tracks.length > 1 ? 'Plays only ' + t.title + ', on repeat' : 'Plays ' + t.title + ', on repeat') +
           (t.by ? '<a class="mp-by" href="' + escH(t.by.url) + '" target="_blank" rel="noopener noreferrer" data-tip="Opens ' + escH(t.by.name) + '’s page on X in a new tab">by ' + escH(t.by.name) + '</a>' : '') + '</div>').join('');
       const again = back && box.querySelector(back); if (again) again.focus({ preventScroll: true });
     }

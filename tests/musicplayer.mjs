@@ -6,7 +6,7 @@
    muted headless Chrome that blocks sound until a press: the list under ♫, picking a song (on repeat), "Play all" moving on when
    a song ends, the maker's link, Esc and a press outside, a phone's width, an older config answer, no songs, and a song that will
    not load. No rows are written. */
-import { readFileSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
 import path from 'node:path';
@@ -17,6 +17,8 @@ const read = (f) => readFileSync(path.join(ROOT, f), 'utf8');
 const results = [];
 const check = (n, ok, extra) => results.push([n, !!ok, extra === undefined ? '' : String(extra)]);
 const sleep = (ms) => new Promise((ok) => setTimeout(ok, ms));
+// MUSIC_SHOT_DIR=<dir>: also save what the walk looks like at its main moments (for a person to look at; nothing is checked from them)
+const SHOT = process.env.MUSIC_SHOT_DIR || '';
 const SONG = { id: 'send-it', src: '/assets/send-it-wisdomprime123.m4a', title: 'SEND IT 🚀', by: { name: '@WisdomPrime123', url: 'https://x.com/WisdomPrime123' } };
 
 /* ─── 1. the list and what /api/config says ─── */
@@ -114,6 +116,10 @@ async function press(sel) {
   await cdp('Input.dispatchMouseEvent', { type: 'mousePressed', x: at.x, y: at.y, button: 'left', clickCount: 1 });
   await cdp('Input.dispatchMouseEvent', { type: 'mouseReleased', x: at.x, y: at.y, button: 'left', clickCount: 1 });
 }
+async function shot(name) {
+  if (!SHOT) return;
+  try { mkdirSync(SHOT, { recursive: true }); const r = await cdp('Page.captureScreenshot', { format: 'png' }); writeFileSync(path.join(SHOT, name + '.png'), Buffer.from(r.data, 'base64')); } catch {}
+}
 async function key(k, code, vk, text) { await cdp('Input.dispatchKeyEvent', Object.assign({ type: 'keyDown', key: k, code, windowsVirtualKeyCode: vk }, text ? { text } : {})); await cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code, windowsVirtualKeyCode: vk }); }
 // the About page, a first visit (nothing kept), the 18+ answer given
 async function open(width = 1280, keepStorage = false) {
@@ -141,6 +147,7 @@ else try {
     s0 && s0.songs && !s0.open && s0.exp === 'false' && s0.name === 'Just $Send It' && s0.by === null && !s0.playing && s0.label === 'Play the music: Just $Send It', JSON.stringify(s0));
   await press('#mp-songs'); await until('!document.getElementById("mp-menu").hidden');
   const m0 = await ev(MENU), s1 = await ev(STATE);
+  await shot('list-1280');
   const song = m0.find((x) => x.id === 'send-it') || {};
   check('♫ opens the list: "Play all, in order" (chosen — what plays unless a song is picked), the theme and "SEND IT 🚀", each a button that says what it does, 44 px or taller',
     s1.open && s1.exp === 'true' && m0.map((x) => x.id).join() === 'all,theme,send-it' && m0[0].on === 'true' && m0.slice(1).every((x) => x.on === 'false') && /Play all, in order/.test(m0[0].t)
@@ -154,6 +161,7 @@ else try {
     && s2.pick === 'send-it' && s2.track === 'send-it' && s2.label === 'Pause the music: SEND IT 🚀 by @WisdomPrime123', JSON.stringify(s2));
   await sleep(2600);   // longer than the 1.6 s song: a picked song plays on repeat
   const s3 = await ev(STATE);
+  await shot('playing-send-it-1280');
   check('  ...a picked song plays on repeat: after it has run out it is still the one playing', s3.playing && s3.name === 'SEND IT 🚀' && s3.track === 'send-it', JSON.stringify(s3));
   await press('#mp-songs'); await until('!document.getElementById("mp-menu").hidden');
   const onPick = await ev('document.querySelector("#mp-menu [aria-pressed=\\"true\\"]").dataset.mpPick');
@@ -210,6 +218,7 @@ else try {
   await press('#mp-songs'); await until('!document.getElementById("mp-menu").hidden');
   const ph = await ev('(() => { const m = document.getElementById("mp-menu").getBoundingClientRect(), t = document.getElementById("mp-toggle"), s = document.getElementById("mp-songs"); return { l: m.left, r: m.right, top: m.top, sw: document.documentElement.scrollWidth, iw: innerWidth, t: [t.offsetWidth, t.offsetHeight], s: [s.offsetWidth, s.offsetHeight], title: getComputedStyle(document.querySelector("#music-player .mp-title")).display }; })()');
   const phm = await ev(MENU);
+  await shot('list-390');
   check('at 390 px the player is ▶ and ♫ (48 px each, the title folded away) and the list opens inside the screen with every song and the maker\'s link — no sideways scroll',
     ph.l >= 0 && ph.r <= ph.iw && ph.top >= 0 && ph.sw <= ph.iw && ph.t[0] >= 44 && ph.t[1] >= 44 && ph.s[0] >= 44 && ph.s[1] >= 44 && ph.title === 'none'
     && phm.length === 3 && phm.every((x) => x.h >= 44) && phm[2].by && phm[2].by.href === 'https://x.com/WisdomPrime123', JSON.stringify({ ph, phm }));
