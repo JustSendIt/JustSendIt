@@ -16,6 +16,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { DB_PATH, SERVER_JS } from './_paths.mjs';
+import { makeFakeBought } from './_ogfake.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');   // the server writes meanwhile: wait a moment, never fail with "database is locked"
@@ -62,7 +63,7 @@ try {
   // the deadlines as this server computes them (BETA_END can move Gold and Silver): read back, never re-derived here
   const OG_TIER_CLOSE = { 3: C.closes.gold, 2: C.closes.silver, 1: C.closes.bronze };
   check('the floor is $100, and Gold closes when the beta ends', OG_MIN_HOLD_USD === 100 && /const OG_MIN_HOLD_USD = MIN_HOLD_USD;/.test(SRC) && C.closes.gold === C.betaEndsAt, OG_MIN_HOLD_USD);
-  const NAMES = ['ogTierForBuy', 'ogBetterScan', 'ogFloorOk', 'ogAccountTier', 'ogNeeds', 'ogSoldOut', 'ogTierNow', 'ogGrantText', 'ogRevokedText', 'ogDiamondOk', 'ogLiftable', 'ogLiftWhat', 'ogReadDecides',
+  const NAMES = ['ogTierForBuy', 'ogBetterScan', 'ogAccountTier', 'ogNeeds', 'ogSoldOut', 'ogTierNow', 'ogGrantText', 'ogRevokedText', 'ogDiamondOk', 'ogLiftable', 'ogLiftWhat', 'ogReadDecides',
     'ogClaimWallets', 'ogLoss', 'ogCapped', 'ogHeldThrough', 'ogDropText', 'ogRestoreText', 'ogPausedDropText',
     // the 2026-11-18 review: the drop proven by the badge's own grant, the leave outcomes, the pause and every note it sends
     'ogDropPick', 'ogLeaveOutcome', 'ogGoldHeldBack', 'ogPausedShown', 'ogDiamondText', 'ogPausedText', 'ogGwcPausedText', 'ogResumeText', 'ogPauseSilverText', 'ogDropOffText',
@@ -137,14 +138,12 @@ try {
     check('  ...and on both coins, the later of the two coins’ EARLIEST buys', both.tier === 3 && both.buyMs === Math.max(GOLD_TS.SEND, GOLD_TS.GWC) && both.wallets.join() === '0xb,0xd', both.buyMs + ' ' + both.wallets.join());
   }
 
-  /* ═══ 3. the $100 floor, summed over the wallets ═══ */
+  /* ═══ 3. the $100 floor ═══
+     Since "$100 bought" (2026-11-17) the floor is each coin's verdict across every linked wallet — $100 spent on counted buys, $10
+     of it still held at cost (tests/bought.mjs, tests/acquire.mjs) — handed to ogAccountTier as true / false / null; the old
+     priced test (ogFloorOk) is gone with the price. */
   {
-    const px = 0.0001;                                   // $ per token: 600,000 tokens = $60
-    const w60 = 600000n * 10n ** 18n;
-    check('$60 in one wallet is under the floor', L.ogFloorOk(w60, px) === false);
-    check('$60 + $60 in two wallets clears it — the floor sums the wallets', L.ogFloorOk(w60 + w60, px) === true);
-    check('  ...a decimal string sums the same', L.ogFloorOk((w60 * 2n).toString(), px) === true);
-    check('an unreadable price is no answer (null), never a "no"', L.ogFloorOk(w60 * 2n, null) === null && L.ogFloorOk(w60 * 2n, 0) === null);
+    check('the priced floor is gone: no "worth $100 at today\'s price" test is left in server.js', !/function ogFloorOk\(/.test(SRC));
     const best = { SEND: scan('SEND', GOLD_TS.SEND, '0xs1'), GWC: scan('GWC', GOLD_TS.GWC, '0xg1') };
     const shortG = L.ogAccountTier({ best, holdsAny: OK, diamondOk: false, floor: { SEND: true, GWC: false } });
     check('both coins in the Gold window, $GWC under the floor, $SEND over it → Silver on $SEND alone', shortG.tier === 2 && shortG.basis === 'send', JSON.stringify(shortG));
@@ -206,11 +205,16 @@ try {
 
   /* ═══ 7. the wiring: every path runs the rule ═══ */
   {
-    check('checkOg keeps the EARLIEST of equal tiers per coin', /if \(ogBetterScan\(best\[c\.key\], s\)\) best\[c\.key\] = \{ \.\.\.s, wallet: a \};/.test(SRC) && !/s\.tier > best\[c\.key\]\.tier\) best\[c\.key\]/.test(SRC));
-    check('checkOg sums each coin over every linked wallet for the floor', /held\[c\.key\] \+= BigInt\(s\.balWei \|\| '0'\)/.test(SRC)
-      && /const floor = \{ SEND: ogFloorOk\(held\.SEND, sendPx\), GWC: ogFloorOk\(held\.GWC, gwcPx\) \};/.test(SRC));
-    check('  ...and so does the Diamond upgrade (no single-wallet floor is left anywhere)', /return await grantDiamondUpgrade\(userId, best, held, \{ same, monthFrom \}\);/.test(SRC)
-      && /ogFloorOk\(held && held\.SEND, sendPx\) && ogFloorOk\(held && held\.GWC, gwcPx\)/.test(SRC) && !/best\.(SEND|GWC)\.balWei/.test(SRC));
+    /* Since "$100 bought" (2026-11-17) checkOg decides on each coin's verdict for the whole wallet set (ogBoughtFacts): the earliest
+       counted buy across the linked wallets dates the tier and the floor is $100 BOUGHT (lib/acquire.js, tested on real chain data
+       in tests/acquire.mjs) — no wallet-by-wallet scan, and no price, anywhere in it */
+    check('checkOg dates each coin by the verdict\'s tier date — the earliest counted buy across every linked wallet', /const facts = ogBoughtFacts\(userId, COINS, opts, given\);/.test(SRC)
+      && /if \(tier > OG_TIER\.NONE\) f\.best\[c\.key\] = \{ tier, firstBuyMs: s\.tierDateMs, holds: f\.holdsAny\[c\.key\], wallet: \(s\.tierWallets \|\| \[\]\)\[0\] \|\| null \};/.test(SRC)
+      && !/await ogScan\(a, c\.token/.test(SRC));
+    check('checkOg\'s floor is each coin\'s "$100 bought" verdict across every linked wallet, never a price', /const \{ best, holdsAny, floor, failed, spans, monthFrom, sawDq \} = facts;/.test(SRC)
+      && !/ogFloorOk\(held/.test(SRC) && !/guardedPriceUsd\(TOK\.(SEND|GWC)\); gwcPx/.test(SRC));
+    check('  ...and so does the Diamond upgrade (no single-wallet floor, and no price, is left anywhere)', /return await grantDiamondUpgrade\(userId, best, held, \{ same, monthFrom, floor \}\);/.test(SRC)
+      && /if \(!\(floor\.SEND === true && floor\.GWC === true\)\) \{/.test(SRC) && !/best\.(SEND|GWC)\.balWei/.test(SRC));
     check('the grant decides with ogAccountTier and claims only the wallets that earned it', /let pick = ogAccountTier\(\{ best, holdsAny, diamondOk, floor \}\);/.test(SRC)
       && /another account's grant while this scan was running\. A Diamond claims every wallet it rests on \(ogClaimWallets\)\. \*\/\n\s+const claimAddrs = ogClaimWallets\(pick, monthFrom\);/.test(SRC) && /\.run\(tier, buyMs, lift, now\(\), scanFailed \? null : now\(\), resumed \? 0 : \(u\.og_paused_tier \|\| 0\), resumed \? 0 : \(u\.og_paused_at \|\| 0\), userId\)/.test(SRC) && /const buyMs = pick\.buyMs;/.test(SRC)
       && /const lift = ogLiftable\(pick, failed\.SEND, u\.og_cap\) \|\| \(heldBack && pick\.tier === OG_TIER\.SILVER\) \? 1 : 0;/.test(SRC));
@@ -243,13 +247,14 @@ try {
     check('the grant sweep re-tests "did not qualify" accounts every 6 hours (so $SEND-only buyers are picked up on their own), and a Silver that may be lifted',
       /WHERE \(u\.og_tier = 0 OR \(u\.og_tier = 3 AND u\.og_diamond_at IS NULL\) OR \(u\.og_tier = 2 AND u\.og_lift = 1\)\) AND u\.og_revoked = 0 AND u\.system = 0\s+AND u\.og_checked_at < \? AND u\.og_try_at < \?/.test(SRC) && /const OG_RESCAN_MS = 6 \* 3600 \* 1000;/.test(SRC));
     check('checkOg asks a Silver marked og_lift again (liftOgSilver), not only an un-tiered account or an un-asked Gold', /const lifting = !requal && u\.og_tier === OG_TIER\.SILVER && !!u\.og_lift;/.test(SRC)
-      && /if \(u\.og_tier > 0 && !upgrading && !lifting && !requal\) return u\.og_tier;/.test(SRC) && /if \(lifting\) return await liftOgSilver\(userId, u, \{ best, holdsAny, diamondOk, held, failed, spans, same, monthFrom \}\);/.test(SRC)
+      && /if \(u\.og_tier > 0 && !upgrading && !lifting && !requal && !raising\) return u\.og_tier;/.test(SRC) && /if \(lifting\) return await liftOgSilver\(userId, u, \{ best, holdsAny, diamondOk, held, failed, spans, same, monthFrom, floor \}\);/.test(SRC)
       && /"ALTER TABLE users ADD COLUMN og_lift INTEGER NOT NULL DEFAULT 0",/.test(SRC));
     check('  ...a check that arrives mid-scan is not dropped: the running scan goes again as it ends, with the wallets linked then',
       /if \(_ogScanning\.has\(userId\)\) \{ ogAgain\(userId, opts\); return 0; \}/.test(SRC) && /function ogAgain\(userId, opts\) \{ _ogRescan\.add\(userId\); if \(opts && opts\.link\) _ogRescanLink\.add\(userId\); \}/.test(SRC)
       && /if \(_ogRescan\.delete\(userId\)\) \{ const link = _ogRescanLink\.delete\(userId\); setImmediate\(\(\) => \{ checkOg\(userId, link \? \{ link: true \} : \{\}\)\.catch\(\(\) => \{\}\); \}\); \}/.test(SRC));
-    check('  ...and a wallet claimed by another account is never the scan a tier is earned on (it hid every other wallet of that coin)',
-      /const claimedElsewhere = new Set\(addrs\.filter\(/.test(SRC) && /if \(ogDisqualified\(s\) \|\| claimedElsewhere\.has\(a\)\) \{ sawDq = true; continue; \}\s*\n\s*if \(ogBetterScan\(best\[c\.key\], s\)\)/.test(SRC));
+    // a wallet whose badge or verification backs another account adds none of its buys (the verdicts' claims: tests/bought.mjs)
+    check('  ...and a wallet claimed by another account adds nothing to this one\'s verdicts (lib/bought.js claimsFor: og_claims and gate_claims of another account)',
+      /claimedElsewhere: \(uid, wallet\) => \{ const i = bidx\(String\(wallet\)\.toLowerCase\(\)\); return !!\(db\.prepare\('SELECT 1 FROM og_claims WHERE addr_idx = \? AND user_id <> \?'\)/.test(SRC));
   }
 
   /* ═══ 8. the payout and the dashboard, through the API ═══ */
@@ -306,7 +311,8 @@ try {
   {
     const asyncSrc = (name) => { const m = new RegExp('\\n(async function ' + name + '\\([^)]*\\) \\{\\n[\\s\\S]*?\\n\\})\\n').exec(SRC); return m ? m[1] : null; };
     const ASYNC = ['checkOg', 'liftOgSilver', 'grantDiamondUpgrade', 'restoreOg', 'ogLeaveVerdict'];
-    const SYNC = ['ogAfterHolderRead', 'ogRequalSoon', 'ogOnLeave', 'ogRequalify', 'ogRevokedWallets', 'ogRevokedWalletRows', 'ogRestoreSettle', 'ogRestoreState', 'ogAgain', 'ogOnLink'];   // the drop, the pause and the restore (section 11), and Diamond-on-link's re-run
+    const SYNC = ['ogAfterHolderRead', 'ogRequalSoon', 'ogOnLeave', 'ogRequalify', 'ogRevokedWallets', 'ogRevokedWalletRows', 'ogRestoreSettle', 'ogRestoreState', 'ogAgain', 'ogOnLink',
+      'ogBoughtFacts', 'ogRaiseOnLink'];   // the drop, the pause and the restore (section 11), Diamond-on-link's re-run; the bought verdicts' adapter
     const missingA = ASYNC.filter((n) => !asyncSrc(n)).concat(SYNC.filter((n) => !fnSrc(n)));
     check('checkOg, liftOgSilver, grantDiamondUpgrade and the drop, pause and restore steps can be lifted out of server.js', !missingA.length, missingA.join(', '));
     const mem = new DatabaseSync(':memory:');
@@ -342,9 +348,13 @@ try {
         } finally { scanNow--; }
       },
       erc20Balance: async (token, a) => { const v = BAL.get(String(a).toLowerCase() + ':' + (token === TOKS.SEND ? 'SEND' : 'GWC')); if (v === 'fail') throw new Error('rpc: no answer'); return v || 0n; },
-      _ogScanning: new Set(), _ogRescan: new Set(), _ogRescanLink: new Set(),
+      _ogScanning: new Set(), _ogRescan: new Set(), _ogRescanLink: new Set(), OG_DUST_WEI: 1000000000n,
       OG_MONTH_MS: 30 * DAY, OG_DUST: val(constSrc('OG_DUST')), _ogRequalQueue: { tail: Promise.resolve() },
     };
+    /* Since "$100 bought" checkOg reads the member's verdicts, not the explorer: the verdicts here are built from the per-wallet
+       scans this section writes down (tests/_ogfake.mjs — the engine itself runs on real chain data in tests/acquire.mjs) */
+    const FAKE = makeFakeBought({ mem, walletsOf: (uid) => E9.walletAddresses(uid), SCANS, PX, TOKS });
+    E9.BOUGHT = FAKE.BOUGHT;
     const K = new Function(...Object.keys(E9), [...NAMES.map(fnSrc), ...ASYNC.map(asyncSrc), ...SYNC.map(fnSrc)].join('\n') + '\nreturn { checkOg, liftOgSilver, ogAfterHolderRead, ogLeaveVerdict, ogOnLeave, ogRestoreSettle, ogRevokedWallets, ogRestoreState };')(...Object.values(E9));
     // a scan of one coin in one wallet: bought at `ts`, holding `tokens`; month flows only when asked (the Diamond question)
     // ...held from that buy on (heldSpans, as ogScan reports them) — or, holding nothing now, sold out a day after it
@@ -403,24 +413,21 @@ try {
       const t3 = await K.checkOg(id);
       check('  ...$GWC topped up past the floor: Gold on the next ask', t3 === 3 && row(id).og_tier === 3 && claims(id) === '0xa3=3,0xb3=3', JSON.stringify({ t3, r: row(id), claims: claims(id) }));
     }
-    /* (c) a wallet linked while the first scan is running */
+    /* (c) a wallet linked after the verdicts were made: they are for the older wallets — no answer — until they are made again */
     {
       SCANS.set('0xa4:SEND', sc('SEND', GOLD_TS.SEND)); SCANS.set('0xb4:GWC', sc('GWC', GOLD_TS.GWC));
       const id = user(['0xa4']);
-      delayMs = 20;
-      const first = K.checkOg(id);
-      await new Promise((ok) => setTimeout(ok, 5));
+      FAKE.freeze(id);                                      // the verdicts the worker made for 0xa4 alone
       link(id, '0xb4');
-      const second = await K.checkOg(id);
-      const t1 = await first;
-      delayMs = 0;
-      for (let i = 0; i < 40 && row(id).og_tier !== 3; i++) await settle();
-      /* since Diamond-on-link (2026-11-17) the scan of the older wallets writes nothing at all — the wallet set changed under it
-         (checkOg's `same`) — where it used to write a Silver the re-run then lifted: one answer, one note, on the wallets linked now */
+      const w0 = FAKE.wants.length;
+      const t1 = await K.checkOg(id);
+      check('a wallet linked after the verdicts were made: they are for wallets the account no longer has — nothing is written, and the worker is asked for new ones',
+        t1 === 0 && row(id).og_tier === 0 && row(id).og_checked_at === 0 && claims(id) === '' && FAKE.wants.length > w0, JSON.stringify({ t1, r: row(id), wants: FAKE.wants.length - w0 }));
+      FAKE.thaw(id);                                        // made again, for the wallets linked now: the worker hands them to checkOg
+      const t2 = await K.checkOg(id);
       const notesA4 = notes9.filter((n) => n.uid === id);
-      check('a wallet linked mid-scan: the late check is not dropped — the scan of the older wallets writes nothing, runs again as it ends, and the account is Gold',
-        second === 0 && t1 === 0 && row(id).og_tier === 3 && claims(id) === '0xa4=3,0xb4=3' && notesA4.length === 1 && /^OG Gold unlocked! You bought BOTH/.test(notesA4[0].text),
-        JSON.stringify({ second, t1, r: row(id), claims: claims(id), notes: notesA4.length }));
+      check('  ...once they are made again: one answer, one note, on the wallets linked now — Gold',
+        t2 === 3 && row(id).og_tier === 3 && claims(id) === '0xa4=3,0xb4=3' && notesA4.length === 1 && /^OG Gold unlocked! You bought BOTH/.test(notesA4[0].text), JSON.stringify({ t2, r: row(id), claims: claims(id), notes: notesA4.length }));
     }
     /* finding 2: a failed $GWC read cannot hold up a $SEND-only badge */
     {
@@ -661,8 +668,9 @@ try {
       for (const id of odd) K.ogAfterHolderRead(id, 1_000_000, 0);
       await until(() => odd.every((id) => row(id).og_requal === 0));
       delayMs = 0;
-      check('  ...a Gold whose own date proves nothing is marked and read instead — ONE walk of the explorer at a time (ogRequalSoon\'s queue) — and made Silver by the read',
-        odd.every((id) => row(id).og_tier === 2) && scanMax === 1, JSON.stringify({ tiers: odd.map((id) => row(id).og_tier), scanMax }));
+      // since "$100 bought" the read is the member's verdicts, not the explorer: no walk at all (it used to be one at a time)
+      check('  ...a Gold whose own date proves nothing is marked and read instead — one at a time (ogRequalSoon\'s queue), from its verdicts with no walk of the explorer — and made Silver by the read',
+        odd.every((id) => row(id).og_tier === 2) && scanMax === 0, JSON.stringify({ tiers: odd.map((id) => row(id).og_tier), scanMax }));
     }
     /* (c) Gold sells all its $SEND → revoked for good */
     {
@@ -693,23 +701,22 @@ try {
     /* a Gold being asked the Diamond question when its $GWC is found sold: the upgrade does not land on it */
     {
       const m = { monthBoughtWei: '5', monthSoldWei: '1' };
+      /* checkOg reads the verdicts and writes with nothing awaited in between (since "$100 bought"), so the sold $GWC is either seen
+         before it asks or after: seen first, the drop (or, for a row marked before the review, the re-decision) comes first, and
+         Diamond never lands */
       for (const legacy of [false, true]) {
         const a = legacy ? '0xdq3' : '0xdq1', b = legacy ? '0xdq4' : '0xdq2';
         SCANS.set(a + ':SEND', sc('SEND', GOLD_TS.SEND, 1_000_000, m)); SCANS.set(b + ':GWC', sc('GWC', GOLD_TS.GWC, 1_000_000, m));
         const id = user([a, b]);
         mem.prepare('UPDATE users SET og = 1, og_tier = 3, og_buy_ms = ?, og_diamond_at = NULL WHERE id = ?').run(GOLD_BUY, id);
-        delayMs = 20;
-        const asking = K.checkOg(id);
-        await new Promise((ok) => setTimeout(ok, 5));
         if (legacy) mem.prepare('UPDATE users SET og_requal = 1, og_cap = 2 WHERE id = ?').run(id);   // a row marked to be re-decided, as before the review
-        else K.ogAfterHolderRead(id, 1_000_000, 0);                                                    // refreshHolder finds its $GWC sold meanwhile
-        await asking;
-        delayMs = 0;
+        else K.ogAfterHolderRead(id, 1_000_000, 0);                                                    // refreshHolder finds its $GWC sold
         const mid = row(id);
         const t = await K.checkOg(id);
-        check('a Gold whose $GWC is found sold while it is being asked the Diamond question is never made Diamond' + (legacy ? ' (a row marked to wait, as before the review: re-decided on $SEND alone)' : ' (dropped to Silver at once)'),
-          (legacy ? mid.og_tier === 3 && mid.og_requal === 1 && t === 2 : mid.og_tier === 2) && row(id).og_tier === 2, JSON.stringify({ mid, t, r: row(id) }));
+        check('a Gold whose $GWC is found sold before it is asked the Diamond question is never made Diamond' + (legacy ? ' (a row marked to wait, as before the review: re-decided on $SEND alone)' : ' (dropped to Silver at once)'),
+          (legacy ? mid.og_tier === 3 && mid.og_requal === 1 && t === 2 : mid.og_tier === 2) && row(id).og_tier === 2 && !notes9.some((n) => n.uid === id && /Diamond/.test(n.text) && /unlocked/.test(n.text)), JSON.stringify({ mid, t, r: row(id) }));
       }
+      check('  ...and the upgrade itself would refuse one marked so (its write needs og_requal = 0)', /WHERE id = \? AND og_tier = \? AND og = 1 AND og_revoked = 0 AND og_requal = 0'\)\.run\(OG_TIER\.DIAMOND/.test(SRC));
     }
     /* (e) finding 5: a re-decision whose $SEND history can never be read no longer waits forever at 1× */
     {
@@ -939,7 +946,7 @@ try {
       check('  ...$SEND bought into a fresh wallet while paused (a buy that would earn a badge on its own), linked alone: not re-granted on it, not revoked — the wallet that held its $SEND at the pause decides',
         L.ogTierForBuy(BACK, OG_LAUNCH.SEND) > 0 && t5 === 0 && row(id5).og_tier === 0 && row(id5).og === 0 && row(id5).og_revoked === 0 && row(id5).og_paused_tier === 3 && claims(id5) === '',
         JSON.stringify({ t5, r: row(id5), claims: claims(id5), tierOfBuy: L.ogTierForBuy(BACK, OG_LAUNCH.SEND) }));
-      check('  ...and the rule runs before any grant on a paused badge, after the wallet-set check (no await between)', /if \(!u\.og_tier && u\.og_paused_tier > 0\) \{\n\s+const ph = ogPauseHeld\(spans\.SEND, u\.og_paused_at, !!holdsAny\.SEND, failed\.SEND\);/.test(SRC)
+      check('  ...and the rule runs before any grant on a paused badge, after the wallet-set check (no await between)', /if \(!u\.og_tier && u\.og_paused_tier > 0\) \{\n\s+const ph = ogPauseHeld\(spans\.SEND, u\.og_paused_at, !!holdsAny\.SEND, failed\.SEND \|\| facts\.spansMissing\.SEND\);/.test(SRC)
         && SRC.indexOf('const ph = ogPauseHeld(') > SRC.indexOf("if (!same()) return u.og_tier || 0;") && SRC.indexOf('const ph = ogPauseHeld(') < SRC.indexOf('const hist = ogAccountTier({ best, holdsAny, diamondOk });'));
     }
     /* (h) the restore pass: a badge revoked before the rule, re-checked once */
@@ -953,7 +960,7 @@ try {
       check('revoked, still holds $SEND (held without a break since its last check, $1,000 of it), bought before the beta ended → Silver restored, held to Silver, its $SEND wallet claimed, dated by that buy',
         t === 2 && r.og === 1 && r.og_tier === 2 && r.og_revoked === 0 && r.og_recheck === 3 && r.og_cap === 2 && r.og_buy_ms === GOLD_TS.SEND && claims(id) === '0xr1=2', JSON.stringify({ t, r, claims: claims(id) }));
       check('  ...with a notification, whole: "OG Silver restored! …" — honest about why, never "buy"',
-        /^OG Silver restored! It was removed when OG needed both coins; Silver now needs only \$SEND, and the wallets linked then show \$SEND bought before the beta ended, held without a break, \$100\+ today \(checked on-chain\): 5× Send Power\.$/.test(note)
+        /^OG Silver restored! It was removed when OG needed both coins; Silver now needs only \$SEND, and the wallets linked then show \$SEND bought before the beta ended, held without a break, \$100\+ of it bought \(checked on-chain\): 5× Send Power\.$/.test(note)
         && !/\b(buy now|buy more|go buy|you should buy)\b/i.test(note), note);
       const n0 = noteCount(id);
       check('  ...and it runs once: asked again, nothing changes and nothing more is said', await K.checkOg(id, { restore: true }) === 2 && row(id).og_recheck === 3 && noteCount(id) === n0);
@@ -1028,10 +1035,10 @@ try {
       check('  ...but a Silver held without a break is decided with one unread (nothing that wallet holds could lower it or open a gap)', row(id9).og_tier === 2 && row(id9).og_revoked === 0, JSON.stringify(row(id9)));
       SCANS.set('0xrd:SEND', sc('SEND', GOLD_TS.SEND, 1_000_000, { heldSpans: [[GOLD_TS.SEND, null]] }));
       const idA = revoked(['0xrd']);
-      PX.SEND = null;
+      FAKE.patch(idA, 'SEND', { floor: null, complete: false, why: 'transient' });   // a buy whose dollars could not be read yet
       await K.checkOg(idA, { restore: true });
-      PX.SEND = 0.001;
-      check('no $SEND price decides nothing: still to be re-checked', row(idA).og_revoked === 1 && row(idA).og_recheck === 1, JSON.stringify(row(idA)));
+      FAKE.patch(idA, 'SEND', null);
+      check('a $SEND verdict with no answer yet (a buy whose dollars could not be read) decides nothing: still to be re-checked', row(idA).og_revoked === 1 && row(idA).og_recheck === 1, JSON.stringify(row(idA)));
       const idB = revoked(['0xrd']);
       mem.prepare('UPDATE users SET og_recheck = 0 WHERE id = ?').run(idB);
       check('a badge revoked under the new rule (not a candidate, og_recheck 0) is never restored, even when the pass asks', await K.checkOg(idB, { restore: true }) === 0 && row(idB).og_revoked === 1);

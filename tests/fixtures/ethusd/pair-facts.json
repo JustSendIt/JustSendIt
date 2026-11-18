@@ -1,0 +1,81 @@
+{
+ "node": "https://rpc.mainnet.chain.robinhood.com",
+ "userAgent": "JustSendIt/1.0 (+https://sendrh.com)",
+ "at": "2026-11-18T01:34:32Z",
+ "asked": [
+  {
+   "jsonrpc": "2.0",
+   "id": 1,
+   "method": "eth_call",
+   "params": [
+    {
+     "to": "0x8803c117ccae7b5146297876c2a25df135141c4d",
+     "data": "0x0dfe1681"
+    },
+    "latest"
+   ],
+   "what": "token0() of the pair"
+  },
+  {
+   "jsonrpc": "2.0",
+   "id": 2,
+   "method": "eth_call",
+   "params": [
+    {
+     "to": "0x8803c117ccae7b5146297876c2a25df135141c4d",
+     "data": "0xd21220a7"
+    },
+    "latest"
+   ],
+   "what": "token1() of the pair"
+  },
+  {
+   "jsonrpc": "2.0",
+   "id": 3,
+   "method": "eth_call",
+   "params": [
+    {
+     "to": "0x5fc5360d0400a0fd4f2af552add042d716f1d168",
+     "data": "0x313ce567"
+    },
+    "latest"
+   ],
+   "what": "decimals() of USDG"
+  },
+  {
+   "jsonrpc": "2.0",
+   "id": 4,
+   "method": "eth_call",
+   "params": [
+    {
+     "to": "0x8bceaa40b9acdfaedf85adf4ff01f5ad6517937f",
+     "data": "0xe6a439050000000000000000000000000bd7d308f8e1639fab988df18a8011f41eacad730000000000000000000000005fc5360d0400a0fd4f2af552add042d716f1d168"
+    },
+    "latest"
+   ],
+   "what": "the factory getPair(WETH, USDG)"
+  }
+ ],
+ "answer": [
+  {
+   "jsonrpc": "2.0",
+   "id": 1,
+   "result": "0x0000000000000000000000000bd7d308f8e1639fab988df18a8011f41eacad73"
+  },
+  {
+   "jsonrpc": "2.0",
+   "id": 2,
+   "result": "0x0000000000000000000000005fc5360d0400a0fd4f2af552add042d716f1d168"
+  },
+  {
+   "jsonrpc": "2.0",
+   "id": 3,
+   "result": "0x0000000000000000000000000000000000000000000000000000000000000006"
+  },
+  {
+   "jsonrpc": "2.0",
+   "id": 4,
+   "result": "0x0000000000000000000000008803c117ccae7b5146297876c2a25df135141c4d"
+  }
+ ]
+}
