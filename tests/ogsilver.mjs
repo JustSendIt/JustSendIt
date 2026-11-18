@@ -63,7 +63,7 @@ try {
   const OG_TIER_CLOSE = { 3: C.closes.gold, 2: C.closes.silver, 1: C.closes.bronze };
   check('the floor is $100, and Gold closes when the beta ends', OG_MIN_HOLD_USD === 100 && /const OG_MIN_HOLD_USD = MIN_HOLD_USD;/.test(SRC) && C.closes.gold === C.betaEndsAt, OG_MIN_HOLD_USD);
   const NAMES = ['ogTierForBuy', 'ogBetterScan', 'ogFloorOk', 'ogAccountTier', 'ogNeeds', 'ogSoldOut', 'ogTierNow', 'ogGrantText', 'ogRevokedText', 'ogDiamondOk', 'ogLiftable', 'ogLiftWhat', 'ogReadDecides',
-    'ogLoss', 'ogCapped', 'ogHeldThrough', 'ogDropText', 'ogDropLostText', 'ogRestoreText', 'ogPausedDropText'];
+    'ogClaimWallets', 'ogLoss', 'ogCapped', 'ogHeldThrough', 'ogDropText', 'ogDropLostText', 'ogRestoreText', 'ogPausedDropText'];
   const missing = NAMES.filter((n) => !fnSrc(n));
   check('the rule is pure functions of server.js (' + NAMES.join(', ') + ')', !missing.length, missing.join(', '));
   const ENV = { OG_TIER, OG_TIER_CLOSE, OG_TIER_NAME, OG_TIER_MULT, OG_TIER_NEEDS, OG_LAUNCH, OG_MIN_HOLD_USD };
@@ -205,10 +205,10 @@ try {
     check('checkOg keeps the EARLIEST of equal tiers per coin', /if \(ogBetterScan\(best\[c\.key\], s\)\) best\[c\.key\] = \{ \.\.\.s, wallet: a \};/.test(SRC) && !/s\.tier > best\[c\.key\]\.tier\) best\[c\.key\]/.test(SRC));
     check('checkOg sums each coin over every linked wallet for the floor', /held\[c\.key\] \+= BigInt\(s\.balWei \|\| '0'\)/.test(SRC)
       && /const floor = \{ SEND: ogFloorOk\(held\.SEND, sendPx\), GWC: ogFloorOk\(held\.GWC, gwcPx\) \};/.test(SRC));
-    check('  ...and so does the Diamond upgrade (no single-wallet floor is left anywhere)', /return await grantDiamondUpgrade\(userId, best, held\);/.test(SRC)
+    check('  ...and so does the Diamond upgrade (no single-wallet floor is left anywhere)', /return await grantDiamondUpgrade\(userId, best, held, \{ same, monthFrom \}\);/.test(SRC)
       && /ogFloorOk\(held && held\.SEND, sendPx\) && ogFloorOk\(held && held\.GWC, gwcPx\)/.test(SRC) && !/best\.(SEND|GWC)\.balWei/.test(SRC));
     check('the grant decides with ogAccountTier and claims only the wallets that earned it', /const pick = ogAccountTier\(\{ best, holdsAny, diamondOk, floor \}\);/.test(SRC)
-      && /const claimAddrs = \[\.\.\.new Set\(pick\.wallets\.filter\(Boolean\)\)\];/.test(SRC) && /\.run\(tier, buyMs, lift, now\(\), scanFailed \? null : now\(\), userId\)/.test(SRC) && /const buyMs = pick\.buyMs;/.test(SRC)
+      && /another account's grant while this scan was running\. A Diamond claims every wallet it rests on \(ogClaimWallets\)\. \*\/\n\s+const claimAddrs = ogClaimWallets\(pick, monthFrom\);/.test(SRC) && /\.run\(tier, buyMs, lift, now\(\), scanFailed \? null : now\(\), userId\)/.test(SRC) && /const buyMs = pick\.buyMs;/.test(SRC)
       && /const lift = ogLiftable\(pick, failed\.SEND, u\.og_cap\) \? 1 : 0;/.test(SRC));
     // a failed read holds up only an answer it could change (ogReadDecides; section 9 runs it): the old blanket rule stopped every $SEND-only grant
     check('  ...a failed read holds up only an answer it could change (no blanket "any read failed: no $SEND-only badge")', !/if \(scanFailed && pick\.basis !== 'both'\) return 0;/.test(SRC)
@@ -228,10 +228,11 @@ try {
     check('the grant sweep re-tests "did not qualify" accounts every 6 hours (so $SEND-only buyers are picked up on their own), and a Silver that may be lifted',
       /WHERE \(u\.og_tier = 0 OR \(u\.og_tier = 3 AND u\.og_diamond_at IS NULL\) OR \(u\.og_tier = 2 AND u\.og_lift = 1\)\) AND u\.og_revoked = 0 AND u\.system = 0\s+AND u\.og_checked_at < \? AND u\.og_try_at < \?/.test(SRC) && /const OG_RESCAN_MS = 6 \* 3600 \* 1000;/.test(SRC));
     check('checkOg asks a Silver marked og_lift again (liftOgSilver), not only an un-tiered account or an un-asked Gold', /const lifting = !requal && u\.og_tier === OG_TIER\.SILVER && !!u\.og_lift;/.test(SRC)
-      && /if \(u\.og_tier > 0 && !upgrading && !lifting && !requal\) return u\.og_tier;/.test(SRC) && /if \(lifting\) return await liftOgSilver\(userId, u, \{ best, holdsAny, diamondOk, held, failed \}\);/.test(SRC)
+      && /if \(u\.og_tier > 0 && !upgrading && !lifting && !requal\) return u\.og_tier;/.test(SRC) && /if \(lifting\) return await liftOgSilver\(userId, u, \{ best, holdsAny, diamondOk, held, failed, same, monthFrom \}\);/.test(SRC)
       && /"ALTER TABLE users ADD COLUMN og_lift INTEGER NOT NULL DEFAULT 0",/.test(SRC));
     check('  ...a check that arrives mid-scan is not dropped: the running scan goes again as it ends, with the wallets linked then',
-      /if \(_ogScanning\.has\(userId\)\) \{ _ogRescan\.add\(userId\); return 0; \}/.test(SRC) && /if \(_ogRescan\.delete\(userId\)\) setImmediate\(\(\) => \{ checkOg\(userId\)\.catch\(\(\) => \{\}\); \}\);/.test(SRC));
+      /if \(_ogScanning\.has\(userId\)\) \{ ogAgain\(userId, opts\); return 0; \}/.test(SRC) && /function ogAgain\(userId, opts\) \{ _ogRescan\.add\(userId\); if \(opts && opts\.link\) _ogRescanLink\.add\(userId\); \}/.test(SRC)
+      && /if \(_ogRescan\.delete\(userId\)\) \{ const link = _ogRescanLink\.delete\(userId\); setImmediate\(\(\) => \{ checkOg\(userId, link \? \{ link: true \} : \{\}\)\.catch\(\(\) => \{\}\); \}\); \}/.test(SRC));
     check('  ...and a wallet claimed by another account is never the scan a tier is earned on (it hid every other wallet of that coin)',
       /const claimedElsewhere = new Set\(addrs\.filter\(/.test(SRC) && /if \(ogDisqualified\(s\) \|\| claimedElsewhere\.has\(a\)\) \{ sawDq = true; continue; \}\s*\n\s*if \(ogBetterScan\(best\[c\.key\], s\)\)/.test(SRC));
   }
@@ -266,7 +267,7 @@ try {
   {
     const asyncSrc = (name) => { const m = new RegExp('\\n(async function ' + name + '\\([^)]*\\) \\{\\n[\\s\\S]*?\\n\\})\\n').exec(SRC); return m ? m[1] : null; };
     const ASYNC = ['checkOg', 'liftOgSilver', 'grantDiamondUpgrade', 'restoreOg', 'ogLeaveVerdict'];
-    const SYNC = ['ogAfterHolderRead', 'ogRequalSoon', 'ogOnLeave', 'ogRequalify'];   // the drop and the restore (section 11)
+    const SYNC = ['ogAfterHolderRead', 'ogRequalSoon', 'ogOnLeave', 'ogRequalify', 'ogAgain', 'ogOnLink'];   // the drop and the restore (section 11)
     const missingA = ASYNC.filter((n) => !asyncSrc(n)).concat(SYNC.filter((n) => !fnSrc(n)));
     check('checkOg, liftOgSilver, grantDiamondUpgrade and the drop and restore steps can be lifted out of server.js', !missingA.length, missingA.join(', '));
     const mem = new DatabaseSync(':memory:');
@@ -298,7 +299,7 @@ try {
           return r || { tier: 0, firstBuyMs: null, holds: false, balWei: '0', dumped: false, notAccumulator: false, monthBoughtWei: '0', monthSoldWei: '0' };
         } finally { scanNow--; }
       },
-      _ogScanning: new Set(), _ogRescan: new Set(),
+      _ogScanning: new Set(), _ogRescan: new Set(), _ogRescanLink: new Set(),
       OG_MONTH_MS: 30 * DAY, OG_DUST: val(constSrc('OG_DUST')), _ogRequalQueue: { tail: Promise.resolve() },
       holdsToken: async (uid, tok) => { const v = HOLDS.get(uid + ':' + (tok === TOKS.SEND ? 'SEND' : 'GWC')); if (v === 'fail') throw new Error('rpc: no answer'); return !!v; },
     };
@@ -358,8 +359,12 @@ try {
       const t1 = await first;
       delayMs = 0;
       for (let i = 0; i < 40 && row(id).og_tier !== 3; i++) await settle();
-      check('a wallet linked mid-scan: the late check is not dropped — the scan runs again as it ends, and the account is Gold',
-        second === 0 && t1 === 2 && row(id).og_tier === 3 && claims(id) === '0xa4=3,0xb4=3', JSON.stringify({ second, t1, r: row(id), claims: claims(id) }));
+      /* since Diamond-on-link (2026-11-17) the scan of the older wallets writes nothing at all — the wallet set changed under it
+         (checkOg's `same`) — where it used to write a Silver the re-run then lifted: one answer, one note, on the wallets linked now */
+      const notesA4 = notes9.filter((n) => n.uid === id);
+      check('a wallet linked mid-scan: the late check is not dropped — the scan of the older wallets writes nothing, runs again as it ends, and the account is Gold',
+        second === 0 && t1 === 0 && row(id).og_tier === 3 && claims(id) === '0xa4=3,0xb4=3' && notesA4.length === 1 && /^OG Gold unlocked! You bought BOTH/.test(notesA4[0].text),
+        JSON.stringify({ second, t1, r: row(id), claims: claims(id), notes: notesA4.length }));
     }
     /* finding 2: a failed $GWC read cannot hold up a $SEND-only badge */
     {

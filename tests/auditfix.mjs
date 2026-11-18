@@ -149,7 +149,9 @@ try {
   /* ═══════════ 4. one OG badge per wallet, ever ═══════════ */
   {
     check('og_claims exists and is keyed by the wallet', /CREATE TABLE IF NOT EXISTS og_claims[\s\S]*?addr_idx TEXT PRIMARY KEY/.test(SRC));
-    const guard = grab(/const claimAddrs = \[[\s\S]{0,600}?already spent on another account/, 'claim guard');
+    // the grant claims ogClaimWallets(pick, monthFrom) since Diamond-on-link (2026-11-17): the wallets that earned the tier, and for a
+    // Diamond every wallet whose month buys were counted (tests/diamondog.mjs section 5)
+    const guard = grab(/const claimAddrs = ogClaimWallets\(pick, monthFrom\);[\s\S]{0,600}?already spent on another account/, 'claim guard');
     check('a grant refuses a wallet already claimed by another account',
       !!guard && /SELECT user_id FROM og_claims WHERE addr_idx/.test(guard) && /prior\.user_id !== userId/.test(guard));
     check('  ...and the claim is written in the same transaction as the badge',
