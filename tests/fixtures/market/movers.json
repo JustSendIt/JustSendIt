@@ -764,6 +764,7 @@
    }
   }
  ],
+ "stablesOut": true,
  "at": 1793320200000,
  "ranked": "biggest 24 h rise first, only coins that went up",
  "total": {
@@ -796,12 +797,13 @@
   "ok": true
  },
  "definitions": {
-  "rows": "The 10 coins with the biggest 24 h price RISE among CoinGecko's 100 largest by market cap (the bubble map's coins, from the same read): only coins that went up, the biggest rise first — fewer than 10 on a day fewer went up, never a falling coin; CoinGecko's stablecoins left out (a stablecoin's rise is noise around its peg). A coin CoinGecko gives no 24 h change for is left out, never ranked as 0%; ties keep CoinGecko's order.",
+  "rows": "The 10 coins with the biggest 24 h price RISE among CoinGecko's 100 largest by market cap (the bubble map's coins, from the same read): only coins that went up, the biggest rise first — fewer than 10 on a day fewer went up, never a falling coin; CoinGecko's stablecoins left out once its stablecoins category is read (a stablecoin's rise is noise around its peg; see stablesOut). A coin CoinGecko gives no 24 h change for is left out, never ranked as 0%; ties keep CoinGecko's order.",
   "gainers": "The 5 coins of the 100 that rose the most over 24 hours, the biggest rise first — only coins that went up, stablecoins left out, so fewer than 5 on a day few did.",
   "losers": "The 5 coins of the 100 that fell the most over 24 hours, the biggest fall first — only coins that went down.",
   "counts": "How many of the 100 went up, went down, stayed exactly level (CoinGecko's own 0%), or have no 24 h change given; of is how many coins were read.",
   "dominance": "The three largest coins by market cap, each with its share of CoinGecko's total market cap of every coin it lists, in percent (its fig: null with why when it cannot be worked out — see the bubble map's dominance).",
   "total": "CoinGecko's total market cap of every coin it lists.",
+  "stablesOut": "true when CoinGecko's stablecoins category has been read and its coins are left out of the rises and the gainers; false until it is (a stablecoin that rose is then among them, and a note says so).",
   "onchain": "Where the coin's on-chain data is on this site, from CoinGecko's list of every coin's contract addresses (read once a day): \"contract\" — its contract on Robinhood Chain, Ethereum or Solana (preferred in that order), which the Scanner profiles (scannable: true); \"quote\" — its contract there is a base trading asset, a stablecoin or wrapped coin other tokens are priced in (WETH, USDG, USDC, USDT, DAI, WBTC, wrapped SOL), which the Scanner does not profile; \"native\" — no such contract, and the coin is the own coin of a chain Market Data reads (DefiLlama names it), whose chain view has its figures; \"none\" — no contract on those three chains that CoinGecko lists, and not the own coin of a chain Market Data reads. onchain is null, with onchainWhy saying why, until CoinGecko's list (or, for a coin with no contract there, DefiLlama's list of chains) has been read; onchainWhy is null otherwise.",
   "logo": "The coin's picture as CoinGecko gives it, served through this site's own image proxy (/api/market/logo) — never fetched by your browser from CoinGecko; null when CoinGecko gives none, or when it would be Robinhood's artwork (a Robinhood Chain token's picture named after its own address, or a Robinhood Stock Token's).",
   "change24h": "CoinGecko's change in the coin's US-dollar price over the last 24 hours, in percent (−5.27 means down 5.27%); null with why when CoinGecko gives none, never 0."

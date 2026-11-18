@@ -2340,6 +2340,7 @@
       if (MAP.pick && !j.rows.some((r) => r.id === MAP.pick)) MAP.pick = null;
       paintMap();
       if (MAP.pickFocus) { MAP.pickFocus = false; if (MAP.pick) openMapCard(MAP.pick, true); }   // a coin pressed before the map was read
+      openAskedCoin();   // ?coin= from another page, waiting on this read (declared further down; this line runs after an await)
     } catch (e) {
       if (my !== MAP.seq) return;
       // a refresh that failed keeps the map it had, painted again so every age says how old it is now, and the caption says the read failed
@@ -2604,7 +2605,8 @@
     if (tip.dataset.coin !== r.id) { tip.innerHTML = tipHTML(r); tip.dataset.coin = r.id; }
     tip.hidden = false;
     const box = mapEl.fig.getBoundingClientRect(), tw = tip.offsetWidth, th = tip.offsetHeight, G = 16;
-    const nav = document.querySelector('nav.nav'), navB = nav ? Math.max(0, nav.getBoundingClientRect().bottom) : 0;
+    // what is stuck to the top: the nav and the top-gainers strip under it (movers-strip.js)
+    const navB = ['nav.nav', '#mv-strip'].reduce((b, s) => { const el = document.querySelector(s); return el ? Math.max(b, el.getBoundingClientRect().bottom) : b; }, 0);
     // the room: the map's box where it is on the screen; when that is too short for the tooltip, the screen under the nav
     const vh = window.innerHeight, L = Math.max(box.left, 0), R = Math.min(box.right, document.documentElement.clientWidth || window.innerWidth);
     const T0 = Math.max(box.top, navB), B0 = Math.min(box.bottom, vh), roomy = B0 - T0 >= th, T = roomy ? T0 : navB, B = roomy ? B0 : vh;
@@ -2753,7 +2755,12 @@
   // a coin pressed in the strip opens here (its popup, or its card under the map) — the strip leaves the page alone for it
   document.addEventListener('movers:open', (e) => { const id = e.detail && e.detail.id; if (id) openCoin(coinRow(id), id); });
   async function loadMovers() {
-    if (window.SendMovers) { if (window.SendMovers.answer) document.dispatchEvent(new CustomEvent('movers:data', { detail: window.SendMovers.answer })); return; }
+    if (window.SendMovers) {
+      const sm = window.SendMovers;
+      if (sm.answer) document.dispatchEvent(new CustomEvent('movers:data', { detail: sm.answer }));
+      else if (sm.done) openAskedCoin();   // its read failed before this page ran: a coin asked for still opens (the map's read has it)
+      planMovers(); return;   // the most-called tile is read again on this page's own 5 minutes
+    }
     const my = ++MV.seq;
     try {
       const j = await getJSON('/api/market/movers');
@@ -2793,15 +2800,17 @@
     // Robinhood Chain's tile: its 24 h chain view (the page's first view, kept a minute), never the side list's current sort or window
     const rh = S.rhView && S.rhView.stats ? S.rhView.stats : null, mine = window.AUTH && AUTH.user, wl = window.Watchlist && Watchlist.isLoaded && Watchlist.isLoaded() ? Watchlist.tokens.size : null;
     const ct = MV.calls && Array.isArray(MV.calls.rows) ? MV.calls.rows[0] : null;
-    const coinTile = (r, k, tip) => (r && val(r.change24h) != null
+    const coinTile = (r, k, tip, none, noneSub) => (r && val(r.change24h) != null
       ? glTile('coin', r.id, k, esc(r.symbol || coinName(r)) + ' <span class="mkt-gl-c' + moveCls(val(r.change24h)) + '">' + esc(pct(val(r.change24h))) + '</span>', esc(mapPrice(val(r.price)) || 'price not given') + ' · ' + esc(coinName(r)), tip.replace('{n}', coinName(r)))
+      : counts ? glTile('map', '', k, '<span class="mkt-na">' + esc(none) + '</span>', esc(noneSub), 'Opens the bubble map of the 100 largest coins')   // read: none went that way
       : glTile('map', '', k, nr, 'from the bubble map’s reading', 'Opens the bubble map of the 100 largest coins'));
+    const ofN = counts ? 'of the ' + counts.of + ' largest coins in 24 h' : '';
     g.innerHTML = [
       glTile('map', '', '🌐 Crypto market cap', total.v != null ? esc(usd(total.v)) : nr, total.v != null ? srcLine(total) : esc(j.why || 'CoinGecko’s total, read every 30 minutes'), 'Opens the bubble map of the 100 largest coins, sized by market cap'),
       glTile('map', '', '📊 Top 100, last 24 h', counts ? '<span class="mkt-gl-c is-down">▼ ' + (counts.down | 0) + '</span> <span class="mkt-gl-c is-up">▲ ' + (counts.up | 0) + '</span>' : nr,
         counts ? 'down · up' + (counts.flat ? ' · ' + counts.flat + ' unchanged' : '') + (counts.none ? ' · ' + counts.none + ' with no change given' : '') : esc(j.why ? cap1(j.why) : 'how many of the 100 largest moved each way'), 'Opens the bubble map, coloured by each coin’s 24 h move'),
-      coinTile(up, '🚀 Biggest gainer, 24 h', 'Opens {n}’s on-chain data'),
-      coinTile(dn, '🩸 Biggest faller, 24 h', 'Opens {n}’s on-chain data'),
+      coinTile(up, '🚀 Biggest gainer, 24 h', 'Opens {n}’s on-chain data', 'None went up', ofN + (j.stablesOut ? ', stablecoins left out' : '')),
+      coinTile(dn, '🩸 Biggest faller, 24 h', 'Opens {n}’s on-chain data', 'None went down', ofN),
       dom && val(dom.fig) != null
         ? glTile('coin', dom.id, '👑 ' + (dom.symbol || 'Largest coin') + ' dominance', esc(domText(val(dom.fig))), 'its share of the whole market · ' + srcLine(fig(dom.fig)), 'Opens ' + coinName(coinRow(dom.id) || dom) + '’s card and its on-chain data')
         : dom ? glTile('coin', dom.id, '👑 ' + (dom.symbol || 'Largest coin') + ' dominance', NA, esc(cap1(fig(dom.fig).why || 'its share is not worked out')), 'Opens ' + coinName(coinRow(dom.id) || dom) + '’s card and its on-chain data')
@@ -2854,8 +2863,21 @@
   /* ?coin=<CoinGecko id>: a coin pressed in the strip on another page. Taken out of the address at once (it is a press, not a place
      to come back to), and opened as soon as the movers are read — the map's own row when the map has it (openCoin reads it) */
   const askedCoin = (() => { try { const u = new URL(location.href), c = u.searchParams.get('coin'); if (!c) return null; u.searchParams.delete('coin'); history.replaceState(history.state, '', u.pathname + (u.search ? u.search : '') + u.hash); return /^[a-z0-9-]{1,80}$/.test(c) ? c : null; } catch { return null; } })();
-  let askedOpen = false;
-  function openAskedCoin() { if (!askedCoin || askedOpen) return; askedOpen = true; openCoin(coinRow(askedCoin), askedCoin); }
+  let askedOpen = false, askedMap = null;
+  /* opened only once the coin is known: from the movers' answer, else from the map's read (all 100 — asked for quietly when the map is
+     folded away, which leaves it folded). A coin in neither — no longer among the 100 largest, or a link mistyped — says so in a line,
+     instead of unfolding the map onto nothing */
+  function openAskedCoin() {
+    if (!askedCoin || askedOpen) return;
+    const r = coinRow(askedCoin) || (askedMap && askedMap.find((x) => x.id === askedCoin)) || null;
+    if (r) { askedOpen = true; openCoin(r, askedCoin); return; }
+    const rows = (MAP.ans && MAP.ans.rows) || askedMap;
+    if (rows) { askedOpen = true; if (window.sendToast) sendToast('That coin is not among the 100 largest coins just now, so Market Data has no reading of it.', 6000); return; }
+    if (askedMap === null && !MAP.shown) {   // an open map's own read is on its way (loadMap calls this when it lands)
+      askedMap = false;   // asked once
+      getJSON('/api/market/heatmap').then((j) => { askedMap = j && Array.isArray(j.rows) && j.rows.length ? j.rows : false; if (askedMap) openAskedCoin(); }).catch(() => {});
+    }
+  }
   paintGlance(); loadMovers(); loadCallsTop();
   getJSON(RH_VIEW).then((j) => { S.rhView = j; paintSoon(); }).catch(() => {});
 })();

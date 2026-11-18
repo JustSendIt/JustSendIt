@@ -2238,11 +2238,19 @@ try {
       !lists(MN).some((r) => r.id === 'ethena' || r.id === 'hyperliquid') && lists(MN).every((r) => typeof r.change24h.v === 'number') && MN.rows[0].id === 'tron' && MN.gainers[0].id === 'tron' && MN.rows.length === 9 && MN.rows.every((r) => r.change24h.v > 0 && r.stable !== true) && MN.notes.some((n) => /^Only 9 of the 100 \(stablecoins left out\) went up over 24 hours\.$/.test(n))
       && MN.counts.none === 2 && MN.counts.up === 10 && MN.counts.down === 87 && MN.counts.flat === 1 && MN.notes.some((n) => /^2 of the 100 coins have no 24 h change given by CoinGecko: left out of every ranking, never counted as 0%\.$/.test(n))
       && !lists(MN).some((r) => r.id === 'blackrock-usd-institutional-digital-liquidity-fund'), brief({ r0: MN.rows[0].id, g0: MN.gainers[0].id, c: MN.counts }));
+    // CoinGecko's stablecoins category not read yet (built: the same read without it, and TRX's change taken away too, so 9 rose): no
+    // coin is known to be a stablecoin, so none is left out — and the answer says so instead of claiming they were
+    const stNoSt = JSON.parse(JSON.stringify(stNull)); delete stNoSt.stables; stNoSt.coins.list.find((c) => c.id === 'tron').change24h = null;
+    mdV._test.stSet('heatmap', stNoSt); clockV += 20e3; const MS = mdV.movers().body; mdV._test.stSet('heatmap', stH); clockV += 20e3;
+    check('  ...before CoinGecko\'s stablecoins category is read no coin is left out as a stablecoin and the answer says so: stablesOut false, every row\'s stable null, the stablecoin that rose (OUSD) among the 9 rises, a note that which coins are stablecoins is not known yet, and "Only 9 of the 100 went up" — never "(stablecoins left out)"; with it read, stablesOut is true',
+      MS.stablesOut === false && M.stablesOut === true && MN.stablesOut === true && MS.rows.length === 9 && MS.rows.every((r) => r.stable === null) && MS.rows.some((r) => r.id === 'open-usd')
+      && MS.notes.some((n) => /^Which coins are stablecoins is not known yet: CoinGecko's stablecoins category has not been read/.test(n)) && MS.notes.includes('Only 9 of the 100 went up over 24 hours.') && !MS.notes.some((n) => /stablecoins left out/.test(n)),
+      brief({ so: MS.stablesOut, n: MS.rows.length, ids: MS.rows.map((r) => r.id), notes: MS.notes }));
     // the strip's edges, on built rows (the pure rule): a day with no rises, a tie
     const fakeRow = (id, v, i) => ({ id, symbol: id.toUpperCase(), name: id, rank: i + 1, change24h: { v, src: 'coingecko', at: 1 }, dominance: { v: null, src: 'coingecko', at: 1, why: 'x' } });
-    const allDown = MM.moversOf(Array.from({ length: 12 }, (_, i) => fakeRow('d' + i, -1 - i, i))), tie = MM.moversOf([fakeRow('a', -5, 0), fakeRow('b', 5, 1), fakeRow('c', -9, 2), fakeRow('z', 0, 3)]);
+    const allDown = MM.moversOf(Array.from({ length: 12 }, (_, i) => fakeRow('d' + i, -1 - i, i))), tie = MM.moversOf([fakeRow('a', -5, 0), fakeRow('b', 5, 1), fakeRow('c', -9, 2), fakeRow('d', 5, 3), fakeRow('e', -5, 4), fakeRow('z', 0, 5)]);
     check('  ...a day with no rises has no rows and no gainers (never a falling coin called one); a tie keeps CoinGecko\'s order (the larger coin first); a 0% move is level, neither gainer nor loser',
-      allDown.rows.length === 0 && allDown.gainers.length === 0 && allDown.losers.length === 5 && allDown.losers[0].id === 'd11' && tie.rows.map((r) => r.id).join() === 'b' && tie.gainers.map((r) => r.id).join() === 'b' && tie.losers.map((r) => r.id).join() === 'c,a' && tie.counts.flat === 1);
+      allDown.rows.length === 0 && allDown.gainers.length === 0 && allDown.losers.length === 5 && allDown.losers[0].id === 'd11' && tie.rows.map((r) => r.id).join() === 'b,d' && tie.gainers.map((r) => r.id).join() === 'b,d' && tie.losers.map((r) => r.id).join() === 'c,a,e' && tie.counts.flat === 1);
     // keep-last-good: CoinGecko down, an answer cut short, an answer that is not the list, an empty list — the last good map stays, said so
     const before = JSON.stringify(ccRows());
     clockV = at1 + 864e5; clVendor.mode = 'down'; const rF1 = await mdV.runJob('coinPlatforms');

@@ -45,7 +45,8 @@ function findChrome() {
   return c.find((p) => p && existsSync(p)) || null;
 }
 const CHROME = findChrome();
-let MODE = 'ok';   // what /api/market/movers answers: 'ok' (the server's own answer), 'down' (503)
+let MODE = 'ok';   // what /api/market/movers answers: 'ok' (the server's own answer), 'down' (503), or BODY when it is set (a built answer)
+let BODY = null;
 let chrome = null, chromeDir = null, ws = null, session = null, seq = 0;
 const pend = new Map(), pageErrors = [];
 const cdp = (method, params = {}, sid = session) => new Promise((ok, bad) => { const id = ++seq; pend.set(id, { ok, bad, method }); ws.send(JSON.stringify({ id, method, params, ...(sid ? { sessionId: sid } : {}) })); });
@@ -65,7 +66,7 @@ async function startChrome() {
     const d = JSON.parse(typeof m.data === 'string' ? m.data : m.data.toString());
     if (d.id && pend.has(d.id)) { const p = pend.get(d.id); pend.delete(d.id); d.error ? p.bad(new Error(p.method + ' ' + JSON.stringify(d.error))) : p.ok(d.result); }
     else if (d.method === 'Fetch.requestPaused') {
-      const down = MODE === 'down', body = Buffer.from(JSON.stringify(down ? { error: 'The market could not be read just now' } : MOVERS));
+      const down = MODE === 'down', body = Buffer.from(JSON.stringify(down ? { error: 'The market could not be read just now' } : BODY || MOVERS));
       cdp('Fetch.fulfillRequest', { requestId: d.params.requestId, responseCode: down ? 503 : 200, responseHeaders: [{ name: 'Content-Type', value: 'application/json' }, { name: 'Cache-Control', value: 'no-store' }], body: body.toString('base64') }).catch(() => {});
     }
     else if (d.method === 'Runtime.exceptionThrown') pageErrors.push(((d.params.exceptionDetails.exception && d.params.exceptionDetails.exception.description) || d.params.exceptionDetails.text || '').split('\n')[0]);
@@ -119,12 +120,51 @@ else try {
   const phone = {};
   for (const w of [320, 390]) { await open('/', w, 760); await until(READY); phone[w] = await ev(STATE); }
   check('  ...at 320 and 390 px the strip is one row inside the screen and the page has no sideways scroll', [320, 390].every((w) => phone[w].h <= 64 && phone[w].w <= w && phone[w].sw <= phone[w].iw), JSON.stringify(phone).slice(0, 600));
+  // a phone on its side (568 × 320): the strip scrolls away with the page, and --nav-h is the nav alone, so pop-ups keep the room
+  await open('/about', 568, 320); await until(READY);
+  const side = await ev(STATE);
+  await ev('window.scrollTo(0, 600), true'); await sleep(200);
+  const sideScrolled = await ev('Math.round(document.getElementById("mv-strip").getBoundingClientRect().bottom)');
+  check('  ...on a short screen (a phone on its side) the strip does not stick: it scrolls away with the page, and --nav-h counts the nav alone',
+    side.pos === 'relative' && side.after && Math.abs(side.navH - side.bar) <= 1 && sideScrolled <= side.bar, JSON.stringify({ pos: side.pos, navH: side.navH, bar: side.bar, sideScrolled }));
   // a coin pressed on another page goes to Market Data with it
   await open('/about'); await until(READY);
   const first = MOVERS.rows[0].id;
   await ev('document.querySelector("#mv-strip-win .mv-list:not(.mv-dup) [data-mover]").click(), true');
-  const went = await until('location.pathname === "/market" ? location.pathname + location.search : null', 8000);
-  check('  ...a coin pressed on another page opens Market Data, which takes ?coin= out of the address once it has it', went === '/market' || went === '/market?coin=' + first, String(went));
+  const asked = await until('location.pathname === "/market" ? location.pathname + location.search : null', 8000);
+  const went = await until('location.pathname === "/market" && location.search === "" ? location.pathname : null', 8000);
+  check('  ...a coin pressed on another page goes to /market?coin=<id>, and Market Data takes ?coin= out of the address once it has it', (asked === '/market?coin=' + first || asked === '/market') && went === '/market', JSON.stringify({ asked, went }));
+  // two coins on a wide screen: every coin fits, so the row stands still and each coin shows once (never the loop's copy beside it)
+  BODY = Object.assign({}, MOVERS, { rows: MOVERS.rows.slice(0, 2) });
+  await open('/about', 1280); await until(READY);
+  const few = await ev('(() => { const tr = document.querySelector("#mv-strip-win .mv-track"), cs = getComputedStyle(tr); return { still: tr.classList.contains("is-still"), anim: cs.animationName, dup: getComputedStyle(tr.querySelector(".mv-dup")).display, seen: [...document.querySelectorAll("#mv-strip-win [data-mover]")].filter((a) => a.getClientRects().length).length }; })()');
+  await open('/about', 320); await until(READY);
+  const fewPhone = await ev('(() => { const tr = document.querySelector("#mv-strip-win .mv-track"), win = document.getElementById("mv-strip-win"); return { still: tr.classList.contains("is-still"), fits: tr.firstElementChild.scrollWidth <= win.clientWidth }; })()');
+  check('  ...when every coin fits (two on a wide screen) the row stands still, each coin shown once; on a phone where they do not fit it runs as before',
+    few.still && few.anim === 'none' && few.dup === 'none' && few.seen === 2 && fewPhone.still === fewPhone.fits, JSON.stringify({ few, fewPhone }));
+  // a day none rose: one line in the strip's room, worded from the answer (stablecoins left out, coins with no change given)
+  BODY = Object.assign({}, MOVERS, { rows: [], gainers: [], counts: { up: 1, down: 97, flat: 0, none: 2, of: 100 }, stablesOut: true });
+  await open('/about', 1280); await until('/rose in the last 24 h/.test(document.getElementById("mv-strip-win").textContent)');
+  const noneUp = await ev(STATE);
+  BODY = Object.assign({}, MOVERS, { rows: [], gainers: [], counts: { up: 0, down: 0, flat: 0, none: 100, of: 100 }, stablesOut: false });
+  await open('/about', 1280); await until('/No 24 h change/.test(document.getElementById("mv-strip-win").textContent)');
+  const noneGiven = await ev(STATE);
+  BODY = null;
+  check('  ...on a day no coin rose the strip says so from the answer — "(stablecoins left out)" only when they were, how many had no change given — and when no change is given at all it says that instead; the strip\'s height is the same as with coins',
+    noneUp.text === 'None of the 100 largest coins (stablecoins left out) rose in the last 24 h · 2 with no change given.' && noneGiven.text === 'No 24 h change is given for the 100 largest coins just now.' && noneUp.n === 0 && Math.abs(noneUp.h - seen['/about'].h) <= 1 && Math.abs(noneGiven.h - seen['/about'].h) <= 1,
+    JSON.stringify({ a: noneUp.text, b: noneGiven.text, h: [noneUp.h, noneGiven.h, seen['/about'].h] }));
+  // a refresh while the pointer rests on the strip waits, so a coin is never swapped out from under it; it lands when the pointer leaves
+  await open('/about', 1280); await until(READY);
+  const box = await ev('(() => { const r = document.querySelector("#mv-strip-win .mv-list:not(.mv-dup) [data-mover]").getBoundingClientRect(); return { x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2) }; })()');
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x, y: box.y });
+  BODY = Object.assign({}, MOVERS, { rows: MOVERS.rows.slice(3) });
+  await ev('window.SendMovers.refresh().then(() => true)');
+  const held = await ev('document.querySelectorAll("#mv-strip-win .mv-list:not(.mv-dup) [data-mover]").length');
+  await cdp('Input.dispatchMouseEvent', { type: 'mouseMoved', x: box.x, y: 700 });
+  const after = await until('document.querySelectorAll("#mv-strip-win .mv-list:not(.mv-dup) [data-mover]").length === ' + (MOVERS.rows.length - 3) + ' ? ' + (MOVERS.rows.length - 3) + ' : null', 3000);
+  BODY = null;
+  check('  ...a refresh while the pointer rests on the strip waits (the coins under it stay), and lands when the pointer leaves',
+    held === MOVERS.rows.length && after === MOVERS.rows.length - 3, JSON.stringify({ held, after }));
   // the market cannot be read: one honest line in the strip's own room — it never comes and goes
   MODE = 'down';
   await open('/about'); await until('/Can’t read the top gainers just now/.test(document.getElementById("mv-strip-win").textContent)');

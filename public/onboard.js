@@ -23,6 +23,8 @@
   const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
   const reduced = () => !!(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) || document.documentElement.classList.contains('motion-off');
   const phone = () => window.innerWidth < 768 || window.innerHeight < 500;   // a landscape phone too: the card is a sheet (styles.css)
+  // what is stuck to the top of the screen: the menu bar and the top-gainers strip under it (nav.js publishes the two as --nav-h)
+  const navH = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) || 58;
   const sfx = (n) => { try { if (window.SFX) SFX.play(n); } catch {} };
   const me = () => (window.AUTH && AUTH.user) || null;
   const handle = () => (me() ? '@' + me().username : 'friend');
@@ -279,12 +281,12 @@
      side), else near the top under the menu bar, so the card fits below it. A phone puts it in the top half, over the sheet. */
   // every scroll here is 'instant': the site sets scroll-behavior: smooth, and a smooth scroll is still moving when the layout is measured
   function bringIntoView(t) {
-    const H = window.innerHeight, W = window.innerWidth, top0 = 84;
+    const H = window.innerHeight, W = window.innerWidth, nh = navH(), top0 = nh + 24;
     const cr = card.getBoundingClientRect(), ch = cr.height || 260, cw = cr.width || 480;
-    const fits = (r) => r.top - 16 - 76 >= ch || H - r.bottom - 28 >= ch || W - r.right - 28 >= cw || r.left - 28 >= cw;
+    const fits = (r) => r.top - 16 - (nh + 18) >= ch || H - r.bottom - 28 >= ch || W - r.right - 28 >= cw || r.left - 28 >= cw;
     try { t.scrollIntoView({ block: phone() ? 'start' : 'center', inline: 'nearest', behavior: 'instant' }); } catch {}
     let r = t.getBoundingClientRect();
-    if (phone()) { if (r.top < 70 || r.bottom > H * 0.5) window.scrollBy({ top: r.top - 70, behavior: 'instant' }); }
+    if (phone()) { if (r.top < nh + 10 || r.bottom > H * 0.5) window.scrollBy({ top: r.top - (nh + 10), behavior: 'instant' }); }
     else if (!fits(r)) window.scrollBy({ top: r.top - top0, behavior: 'instant' });
     fitAt = { y: t.getBoundingClientRect().top, s: window.scrollY };   // where it was left (refit)
   }
@@ -341,7 +343,7 @@
        does (a big target on a short screen), it is pinned to the edge on the roomier side, away from the target's middle, so it
        covers as little of it as it can. Sendy sits on the card's corner nearest the target: between what he says and what he
        points at. */
-    const top0 = 76;   // under the sticky menu bar
+    const top0 = navH() + 18;   // under the sticky menu bar and the top-gainers strip
     let cx, cy, side;
     if (H - r.bottom - G - M >= ch) { side = 'below'; cy = r.bottom + G; cx = clamp(r.left, M, W - cw - M); }
     else if (r.top - G - top0 >= ch) { side = 'above'; cy = r.top - G - ch; cx = clamp(r.left, M, W - cw - M); }

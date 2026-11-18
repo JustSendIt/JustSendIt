@@ -1837,10 +1837,12 @@ async function browserWalk() {
       FAKE.moversPatch = (j) => Object.assign(j, { rows: [], gainers: [] });
       await go('/market', 1280); await until('!document.getElementById("mv-strip").hidden');
       const noneUp = await textOf('#mv-strip-win');
+      await until('/None went up/.test(document.getElementById("mkt-glance-grid").textContent)', 4000);
+      const noneTile = await ev('[...document.querySelectorAll("#mkt-glance-grid .mkt-gl")].map((t) => t.textContent).find((x) => /gainer/.test(x)) || ""');
       FAKE.moversPatch = null;
-      check('  ...before the 100 are read the strip says so in its own room (it never comes and goes, so the page never jumps) and the breadth tile says "Not read yet" with the server\'s reason — never ▼ 0 ▲ 0; on a day nothing went up the strip says so, never a falling coin',
-        /^Top gainers: the 100 largest coins are not read yet\.$/.test(unread.strip) && /Not read yet/.test(unread.tile) && /has not been read yet/.test(unread.tile) && !/▼ 0|▲ 0/.test(unread.tile) && /^None of the 100 largest coins rose in the last 24 h\.$/.test(noneUp), JSON.stringify({ unread, noneUp }));
-      FAKE.moversDown = true; await go('/market', 1280); await until('/could not be read/.test(document.getElementById("mv-strip-win").textContent)');
+      check('  ...before the 100 are read the strip says so in its own room (it never comes and goes, so the page never jumps) and the breadth tile says "Not read yet" with the server\'s reason — never ▼ 0 ▲ 0; on a day nothing went up the strip says so (stablecoins left out, as they were) and the gainer tile says "None went up" — never "Not read yet" for a read that was made, never a falling coin',
+        /^Top gainers: the 100 largest coins are not read yet\.$/.test(unread.strip) && /Not read yet/.test(unread.tile) && /has not been read yet/.test(unread.tile) && !/▼ 0|▲ 0/.test(unread.tile) && /^None of the 100 largest coins \(stablecoins left out\) rose in the last 24 h\.$/.test(noneUp) && /None went up/.test(noneTile) && /of the 100 largest coins in 24 h, stablecoins left out/.test(noneTile) && !/Not read yet/.test(noneTile), JSON.stringify({ unread, noneUp, noneTile }));
+      FAKE.moversDown = true; await go('/market', 1280); await until('/Can’t read the top gainers/.test(document.getElementById("mv-strip-win").textContent)');
       const down = { strip: await textOf('#mv-strip-win'), h: await ev('Math.round(document.getElementById("mv-strip").getBoundingClientRect().height)'), tile: await ev('[...document.querySelectorAll("#mkt-glance-grid .mkt-gl")].map((t) => t.textContent).find((x) => /gainer/.test(x)) || ""') };
       FAKE.moversDown = false;
       check('  ...a read that fails keeps the strip\'s room (the page never jumps) with one honest line — never an empty strip or a made-up rise — and the glance says it was not read', /^Can’t read the top gainers just now\.$/.test(down.strip) && down.h <= 64 && /Not read yet/.test(down.tile), JSON.stringify(down));
@@ -1915,6 +1917,17 @@ async function browserWalk() {
       await closeModal();
       check('  ...a coin pressed in the strip on any other page arrives as /market?coin=<id>: it opens on arrival (Ethena\'s dashboard), and the address loses ?coin (it is a press, not a place)',
         fromAway.m.open && /Ethena \$ENA/.test(fromAway.m.title) && fromAway.m.dash && fromAway.url === '/market', JSON.stringify(fromAway));
+      // the movers could not be read: a coin asked for still opens, from the map's own read
+      FAKE.moversDown = true; await go('/market?coin=ethena', 1280); await modalReady();
+      const noMovers = { m: await modal(), url: await ev('location.pathname + location.search') };
+      await closeModal(); FAKE.moversDown = false;
+      // a coin that is not among the 100 (gone from them, or a link mistyped): one line says so; no card, no popup, nothing scrolled to
+      await go('/market?coin=not-a-listed-coin', 1280); await until('!!document.querySelector("#mkt-map .mkt-bub")');
+      await until('[...document.querySelectorAll(".toast")].some((t) => /not among the 100 largest/.test(t.textContent))', 4000);
+      const unknown = await ev('({ toast: [...document.querySelectorAll(".toast")].map((t) => t.textContent).join(" | "), card: document.getElementById("mkt-map-card").hidden, modal: !!(document.getElementById("token-modal") && !document.getElementById("token-modal").hidden), url: location.pathname + location.search, y: Math.round(scrollY) })');
+      check('  ...when the movers could not be read the coin asked for still opens (from the map\'s read); a coin that is not among the 100 says so in one line — no card, no popup, the page not scrolled to the map',
+        noMovers.m.open && /Ethena \$ENA/.test(noMovers.m.title) && noMovers.url === '/market' && /^That coin is not among the 100 largest coins just now, so Market Data has no reading of it\.$/.test(unknown.toast) && unknown.card && !unknown.modal && unknown.url === '/market' && unknown.y === 0,
+        JSON.stringify({ noMovers: { open: noMovers.m.open, title: noMovers.m.title, url: noMovers.url }, unknown }));
       // the map folded away and not read: a coin's card from a tile opens the map, reads it, and opens the card from the map's own row
       await ev('localStorage.setItem("jsi:market-map", "hidden"), true');
       const h0 = FAKE.log.filter((x) => x.startsWith('/api/market/heatmap')).length;
@@ -2185,8 +2198,8 @@ async function runSuite() {
     let legendOK = false; try { legendOK = JSON.stringify(vm.runInNewContext(legendJS)) === JSON.stringify(MM.BUCKETS.map((b) => [b.key, b.label])); } catch {}
     const bucketJS = (code.match(/function mapBucket\(v\) \{[\s\S]*?\n  \}/) || [])[0];
     let bucketOK = false; try { const f = vm.runInNewContext('(' + bucketJS + ')'); bucketOK = [null, NaN, 0, 0.0001, 2, 2.01, 5, 5.01, 10, 10.01, 99, -0.0001, -2, -2.01, -5, -5.01, -10, -10.01, -60].every((x) => f(x) === MM.bucketOf(x)); } catch {}
-    check('  ...market.js reads it from /api/market/heatmap alone (getJSON, one answer: Top 50 and the stablecoins are cut from it here), and its legend and steps are lib/marketmap.js\'s — the same nine steps and "no 24 h change given", the same edges (exactly 10% is ">5%", exactly 0 is "0%", no change is never 0%)',
-      /const j = await getJSON\('\/api\/market\/heatmap'\);/.test(code) && (code.match(/\/api\/market\/heatmap/g) || []).length === 4 && legendOK && bucketOK, JSON.stringify({ legendOK, bucketOK }));
+    check('  ...market.js reads it from /api/market/heatmap alone (getJSON, one answer: Top 50 and the stablecoins are cut from it here — the map\'s read, and the same read asked for quietly for a coin pressed on another page while the map is folded), and its legend and steps are lib/marketmap.js\'s — the same nine steps and "no 24 h change given", the same edges (exactly 10% is ">5%", exactly 0 is "0%", no change is never 0%)',
+      /const j = await getJSON\('\/api\/market\/heatmap'\);/.test(code) && (code.match(/\/api\/market\/heatmap/g) || []).length === 5 && /askedMap = false;\s*getJSON\('\/api\/market\/heatmap'\)/.test(code) && legendOK && bucketOK, JSON.stringify({ legendOK, bucketOK }));
     check('  ...one SVG, sized, packed and drawn here — no library, no CDN: the ring (front-chain packing and the smallest enclosing circle, the @lift:pack block) or the column (the @lift:column block), at the box\'s own pixel width with no cap, one role="img" with a summary in words (not 100 tab stops), each bubble a <title>; a bigger market cap a bigger bubble on a compressed scale (its radius the fourth root, so its area the square root) and never under its ticker\'s minimum at the floor, its colour the step\'s class',
       /\/\* @lift:pack /.test(JS) && /\/\* @lift:pack-end \*\//.test(JS) && /function packCircles\(cs\)/.test(code) && /function packEnclose\(cs\)/.test(code)
       && /\/\* @lift:column /.test(JS) && /\/\* @lift:column-end \*\//.test(JS) && /function packColumn\(cs, W\)/.test(code) && /function mapLayout\(items, W, gap\)/.test(code)

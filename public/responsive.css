@@ -725,7 +725,7 @@ p, li, dd, blockquote, .section-sub { text-wrap: pretty; }
   main#main:has(#feed-panel) #composer-signedout { text-align: left !important; }
   /* a visitor's "Sign In To Post" card is short and fixed in size (one line + one button, ~25vh), so it keeps pace with
      the feed instead of leaving the left column empty; the signed-in composer (resizable, can hold media) never sticks */
-  main#main:has(#feed-panel) > .wrap > #composer-card:has(> #composer-signedin[hidden]) { position: sticky; top: calc(64px + 1.2rem); }
+  main#main:has(#feed-panel) > .wrap > #composer-card:has(> #composer-signedin[hidden]) { position: sticky; top: calc(var(--nav-h, 64px) + 1.2rem); }
 
   /* ---- Support: contact note beside the masthead; sort + ask box head the reading column ---- */
   main#main:has(> .wrap > .sup-contact) > .wrap > .sup-contact { margin-bottom: 1.4rem; }

@@ -188,7 +188,8 @@
     function syncNavHeight() {
       var h = nav.getBoundingClientRect().height;
       if (!h) return;
-      var strip = document.getElementById('mv-strip'), sh = strip && !strip.hidden ? strip.getBoundingClientRect().height : 0;
+      // the strip counts only while it sticks (a short screen lets it scroll away with the page: styles.css)
+      var strip = document.getElementById('mv-strip'), sh = strip && !strip.hidden && getComputedStyle(strip).position === 'sticky' ? strip.getBoundingClientRect().height : 0;
       document.documentElement.style.setProperty('--nav-bar-h', Math.round(h) + 'px');
       document.documentElement.style.setProperty('--nav-h', Math.round(h + sh) + 'px');
     }

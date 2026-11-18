@@ -1583,7 +1583,7 @@ details.setting-card > .setting-body { padding: 0 1.3rem 1.3rem; }
 @media (prefers-reduced-motion: reduce) { .tour-spot { transition: none; } }
 
 /* ===== Homepage max-up: reassurance, risk chip, do-grid, mcap delta, gwc tax ===== */
-[id] { scroll-margin-top: 72px; }
+[id] { scroll-margin-top: calc(var(--nav-h, 58px) + 0.9rem); }   /* under the nav and the top-gainers strip (nav.js publishes --nav-h) */
 .risk-chip {
   display: inline-flex; align-items: center; gap: 0.4rem; margin-top: 0.8rem;
   background: var(--gold); border: 1.5px solid var(--gold); color: var(--on-gold);   /* a clickable chip is a control: gold FILL, black type, no wash */
@@ -6307,7 +6307,8 @@ html.motion-off .ob-spot { transition: none; }
    the reduced-motion setting it does not move at all and the row scrolls by hand. */
 .mv-strip { position: sticky; top: var(--nav-bar-h, 58px); z-index: 49; display: flex; align-items: stretch; min-width: 0; max-width: 100%; margin: 0; padding: 0;   /* every <section> is padded like a home-page band (styles.css section): not this one */
  
-  background: var(--ink-1); border-bottom: 1px solid color-mix(in srgb, var(--green) 30%, transparent); }
+  background: var(--ink-1); border-bottom: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
+  font-family: 'Rubik', system-ui, -apple-system, sans-serif; line-height: 1.1; }   /* the site's face, whatever a page sets on its body (the White Paper's serif) */
 .mv-strip[hidden] { display: none; }
 .mv-strip-h { flex: none; display: flex; flex-direction: row; align-items: center; gap: 0.55rem; padding: 0.2rem 0.75rem; min-height: 44px;   /* one line: the strip stays one row of coins tall */
   text-decoration: none; background: var(--ink-2); border-right: 1px solid color-mix(in srgb, var(--green) 30%, transparent);
@@ -6316,11 +6317,16 @@ html.motion-off .ob-spot { transition: none; }
 .mv-strip-sub { color: var(--text-mute); font-size: max(var(--text-floor), 0.68rem); white-space: nowrap; }
 .mv-strip-h:hover .mv-strip-t { text-decoration: underline; text-underline-offset: 2px; }
 .mv-strip-h:focus-visible, .mv-mover:focus-visible { outline: 3px solid var(--focus); outline-offset: -3px; }
-.mv-strip-win { flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; align-items: center; }
+.mv-strip-win { flex: 1 1 auto; min-width: 0; overflow: hidden; display: flex; align-items: center; height: calc(44px + 0.3rem); }   /* one coin row tall whatever it holds, so the page never shifts when the coins arrive */
 .mv-none { margin: 0; padding: 0.4rem 0.8rem; color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); white-space: nowrap; }   /* one line: the strip never grows */
 .mv-strip-win:has(.mv-none) { overflow-x: auto; }   /* a narrow screen scrolls a long line by hand, never cuts it */
 .mv-track { display: flex; width: max-content; animation: mv-strip-run var(--mv-dur, 40s) linear infinite; }
 .mv-list { display: flex; gap: 0.4rem; margin: 0; padding: 0.15rem 0.2rem; list-style: none; }
+.mv-list > li { margin: 0; padding: 0; }   /* a page's own li rules (the White Paper's 8px under each) never reach the coins */
+.mv-list > li::marker { content: none; }
+/* every coin fits (a few on a wide screen): shown once, standing still (movers-strip.js fit()) */
+.mv-track.is-still { animation: none; }
+.mv-track.is-still .mv-dup { display: none; }
 @keyframes mv-strip-run { to { transform: translateX(-50%); } }
 .mv-strip:hover .mv-track, .mv-strip:focus-within .mv-track { animation-play-state: paused; }
 /* reached with the keyboard: a row (as under ⏸), so the browser can bring the focused coin into view instead of a paused loop
@@ -6350,3 +6356,7 @@ html.motion-off .mv-strip-win { overflow-x: auto; overscroll-behavior-x: contain
   .mv-strip-sub { display: none; }   /* the label's tip and the link's page say "24 h · top 100"; the phone keeps the coins in view */
 }
 @media (forced-colors: active) { .mv-mover, .mv-strip-h { border: 1px solid CanvasText; } }
+@media print { .mv-strip { display: none !important; } }
+/* a short screen (a phone on its side): the strip scrolls away with the page instead of sticking — the nav and the strip held at
+   the top would take a third of it, and Sendy's chat and the page's own pop-ups need that room; nav.js then counts only the nav */
+@media (max-height: 500px) { .mv-strip { position: relative; top: auto; } }   /* screen furniture: a printed page (the White Paper's PDF) never carries it */
