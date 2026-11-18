@@ -1501,7 +1501,18 @@ CREATE INDEX IF NOT EXISTS idx_dh_moves_pending ON dh_moves(status, id);
 CREATE INDEX IF NOT EXISTS idx_dh_moves_user ON dh_moves(user_id, status, applied);
 `);
 
-BOUGHT_LIB.migrate(db);   // the tape's tables and the verdicts' (acq_state, buy_claims, hold_migration_log, ethusd_cells, bought_tokens)
+/* the tape's tables and the verdicts' (acq_state, buy_claims, hold_migration_log, ethusd_cells, bought_tokens). The first boot of
+   rule 2 (2026-11-18: rule 1 made its verdicts from a half-read tape) drops rule 1's verdicts, and — once, as the log takes its
+   rule column — what rule 1 marked on the accounts: OG's "decided under the new rule" (the log's og row is then written again,
+   from rule 2's verdicts) and the participation check's reason code (a refusal rule 1 made is asked again under rule 2). */
+{
+  const m = BOUGHT_LIB.migrate(db);
+  if (m && m.logUpgraded) {
+    try { db.prepare('UPDATE users SET og_rule_v2_at = NULL WHERE og_rule_v2_at IS NOT NULL').run(); } catch {}
+    try { db.prepare('UPDATE users SET holder_reason_code = NULL WHERE holder_reason_code IS NOT NULL').run(); } catch {}
+  }
+  if (m && m.dropped) console.log('"$100 bought": ' + m.dropped + ' verdict(s) made under an older rule dropped — made again once each coin is read to the settled head');
+}
 /* A Send Call's (or a Send It's) size paid later (owner's Q5: "spent under the Q1 rule"): a buy counts once its coins were held 24
    hours, so a call made on a fresh buy is paid its base now and its size once the buy counts — or once its verdict first exists.
    paid_spend: the size already paid for; done_at: settled. Calls made before "$100 bought" are never resized. */
@@ -5549,8 +5560,22 @@ function sizeTopupApply(r) {
    stands). What the switch changed is still written down — hold_migration_log, one row per member and feature, the old
    rule's status beside the new one's (no wallet, no figure) — counted on /admin, and every member who loses a status is
    told, with their own figure and what is missing (never "buy"). Gains apply at once and need no note. */
+/* One feature's first decision under the current rule (BOUGHT_LIB.RULE_V): a new row, or a row an older rule wrote (rule 1, on
+   2026-11-18, decided from a half-read tape) replaced — keeping the status the member had before the switch (was) and whether
+   their loss note went out. false when this rule has decided it already; else { note }: true when it is a loss (was 1, became
+   0) nobody has told them of yet — marked told here, so the caller sends it, and no member is ever told twice. */
 function holdLog(uid, feature, was, became, reason) {
-  try { return db.prepare('INSERT OR IGNORE INTO hold_migration_log (user_id, feature, was, became, reason, at) VALUES (?,?,?,?,?,?)').run(uid, feature, was == null ? null : String(was), became == null ? null : String(became), reason || null, now()).changes > 0; } catch { return false; }
+  try {
+    const r = db.prepare(`INSERT INTO hold_migration_log (user_id, feature, was, became, reason, at, rule_v, noted) VALUES (?,?,?,?,?,?,?,0)
+      ON CONFLICT(user_id, feature) DO UPDATE SET was = COALESCE(hold_migration_log.was, excluded.was), became = excluded.became, reason = excluded.reason,
+        at = excluded.at, rule_v = excluded.rule_v WHERE hold_migration_log.rule_v IS NULL OR hold_migration_log.rule_v < excluded.rule_v`)
+      .run(uid, feature, was == null ? null : String(was), became == null ? null : String(became), reason || null, now(), BOUGHT_LIB.RULE_V);
+    if (!r.changes) return false;
+    const row = db.prepare('SELECT was, became FROM hold_migration_log WHERE user_id = ? AND feature = ?').get(uid, feature);
+    const note = !!row && row.was === '1' && row.became === '0'
+      && db.prepare('UPDATE hold_migration_log SET noted = 1 WHERE user_id = ? AND feature = ? AND noted = 0').run(uid, feature).changes > 0;
+    return { note };
+  } catch { return false; }
 }
 // a lost status's note: the rule, the member's own figure and what is missing — within a notification's 240 characters
 function boughtLossText(sym, st, what) {
@@ -5573,13 +5598,13 @@ function boughtAdmin() {
     if (r.f === 'gate') { if (a === 'ok' && w !== 'ok') x.gained += r.n; else x.same += r.n; continue; }
     if (w === '1' && a === '0') x.lost += r.n; else if (w !== '1' && a === '1') x.gained += r.n; else x.same += r.n;
   }
-  const unknown = db.prepare('SELECT reason_code reason, why, COUNT(*) n FROM acq_state WHERE verdict IS NULL GROUP BY 1, 2 ORDER BY n DESC').all();
+  const unknown = db.prepare('SELECT reason_code reason, why, COUNT(*) n FROM acq_state WHERE verdict IS NULL AND rule_v = ? GROUP BY 1, 2 ORDER BY n DESC').all(BOUGHT_LIB.RULE_V);
   const topups = db.prepare('SELECT SUM(done_at IS NULL) open, SUM(done_at IS NOT NULL) done FROM size_topups').get() || {};
   // coins by name (a coin's own address shortened: the overview carries no full address of any kind)
   const short = (x) => String(x || '').replace(/0x([0-9a-f]{4})[0-9a-f]{36}/gi, '0x$1…');
   const label = (t) => (DH_COINS[t] ? '$' + DH_COINS[t] : (() => { const c = db.prepare('SELECT symbol FROM communities WHERE token_addr = ?').get(t); return c ? '$' + c.symbol : short(t); })());
-  const coins = b ? (b.tokens || []).map((x) => ({ label: label(x.token), core: x.core, state: x.state, why: x.why ? short(x.why) : null, head: x.head, headWhy: x.headWhy ? short(x.headWhy) : null, yes: x.yes, no: x.no, unknown: x.unknown })) : [];
-  return { ruleV: b ? b.ruleV : null, coins, queue: b ? b.queue : 0, ethUsd: b ? b.ethUsd : null, claims: b ? b.claims : 0, conflicts: b ? b.conflicts : 0,
+  const coins = b ? (b.tokens || []).map((x) => ({ label: label(x.token), core: x.core, state: x.state, why: x.why ? short(x.why) : null, ready: !!x.ready, head: x.head, target: x.target, headWhy: x.headWhy ? short(x.headWhy) : null, yes: x.yes, no: x.no, unknown: x.unknown })) : [];
+  return { ruleV: b ? b.ruleV : null, coins, queue: b ? b.queue : 0, ethUsd: b ? b.ethUsd : null, claims: b ? b.claims : 0, conflicts: b ? b.conflicts : 0, mismatches: b ? b.mismatches || 0 : 0,
            migration: by, unknown, sizeTopups: { open: topups.open || 0, done: topups.done || 0 } };
 }
 // what "no answer yet" says, wherever it has to (a join, a community start)
@@ -6329,7 +6354,8 @@ async function joinCommunity(me, cid, ip, holds) {
         db.prepare('UPDATE community_members SET qualified=0, qual_check_at=? WHERE community_id=? AND user_id=?').run(now(), cid, m.user_id);
         db.prepare('UPDATE communities SET qual_count = MAX(qual_count-1,0) WHERE id=?').run(cid);
         const st = BOUGHT && BOUGHT.stateOf(m.user_id, c.token_addr);
-        if (holdLog(m.user_id, 'community:' + cid, 1, 0, st && st.reason) && st) notify(m.user_id, '📉', boughtLossText('$' + c.symbol, st, 'community'), 'points', null, '/community?id=' + cid);
+        const lg = holdLog(m.user_id, 'community:' + cid, 1, 0, st && st.reason);
+        if (lg && lg.note && st) notify(m.user_id, '📉', boughtLossText('$' + c.symbol, st, 'community'), 'points', null, '/community?id=' + cid);
       }
     }
     c.qual_count = confirmed;   // only members the chain confirmed right now count toward tipping live
@@ -6531,9 +6557,9 @@ async function sweepCommunityHolders() {
       // no answer yet (no verdict, one for another wallet set, the coin's trades not read): never revoke on an answer we do not have.
       // The row's turn is stamped all the same, so forty unanswered members can never hold the sweep in place.
       if (holds === null) { db.prepare('UPDATE community_members SET qual_check_at=? WHERE community_id=? AND user_id=?').run(t, r.community_id, r.user_id); continue; }
-      // the switch: this slot's first decision under "$100 bought", beside the old rule's (it was qualified); a loss is told, once
+      // the switch: this slot's first decision under "$100 bought", beside the old rule's (it was qualified); a loss is told, once ever
       const firstUnderBought = holdLog(r.user_id, 'community:' + r.community_id, 1, holds ? 1 : 0, holds ? 'ok' : ((BOUGHT && BOUGHT.stateOf(r.user_id, r.token_addr)) || {}).reason);
-      if (!holds && firstUnderBought) { const st = BOUGHT && BOUGHT.stateOf(r.user_id, r.token_addr); if (st) notify(r.user_id, '📉', boughtLossText('$' + r.symbol, st, 'community'), 'points', null, '/community?id=' + r.community_id); }
+      if (!holds && firstUnderBought && firstUnderBought.note) { const st = BOUGHT && BOUGHT.stateOf(r.user_id, r.token_addr); if (st) notify(r.user_id, '📉', boughtLossText('$' + r.symbol, st, 'community'), 'points', null, '/community?id=' + r.community_id); }
       if (holds) { db.prepare('UPDATE community_members SET qual_check_at=? WHERE community_id=? AND user_id=?').run(t, r.community_id, r.user_id); continue; }
       try { // no longer holds → revoke qualification, the go-live count, and the 10× flag
         db.exec('BEGIN');
@@ -8792,6 +8818,16 @@ BOUGHT = BOUGHT_LIB.createBought({
   followed: (uid, token) => { const coin = DH_COINS[String(token).toLowerCase()]; if (!coin) return []; return db.prepare('SELECT addr_enc FROM dh_follow WHERE user_id = ? AND token = ?').all(uid, coin).map((r) => String(decField(r.addr_enc) || '').toLowerCase()).filter((a) => /^0x[0-9a-f]{40}$/.test(a)); },
   refreshLedger: (t) => (DH_COINS[t] ? indexHolders(t) : ensureLedger(t, { wait: true, waitMs: 60000 })),
   ledger: (t) => { const r = db.prepare('SELECT status, first_block, last_block, logs, consistent, decimals FROM holder_index WHERE token_addr = ?').get(t); return r ? { status: r.status, firstBlock: r.first_block, lastBlock: r.last_block, logs: r.logs || 0, consistent: r.consistent !== 0, decimals: r.decimals } : null; },
+  /* the ledger's balance of some wallets, summed, and the block it is complete through (one synchronous read: ledgerApply writes
+     both in one transaction) — what a verdict's held amount must equal (lib/bought.js ledgerCheck) */
+  balances: (t, addrs) => {
+    const ix = db.prepare('SELECT last_block FROM holder_index WHERE token_addr = ?').get(t);
+    if (!ix || !(ix.last_block > 0)) return null;
+    const q = db.prepare('SELECT balance FROM holder_balances WHERE token_addr = ? AND wallet = ?');
+    let wei = 0n;
+    for (const a of addrs) { const r = q.get(t, String(a).toLowerCase()); if (r) wei += BigInt(r.balance); }
+    return { wei, block: ix.last_block };
+  },
   poolsFor: boughtPoolsFor,
   plumbing: () => { const k = { fees: new Set(), routers: new Set() }; try { for (const r of db.prepare('SELECT addr, kind FROM bundle_plumbing').all()) (r.kind === 'router' ? k.routers : k.fees).add(r.addr); } catch {} return k; },
   claimedElsewhere: (uid, wallet) => { const i = bidx(String(wallet).toLowerCase()); return !!(db.prepare('SELECT 1 FROM og_claims WHERE addr_idx = ? AND user_id <> ?').get(i, uid) || db.prepare('SELECT 1 FROM gate_claims WHERE addr_idx = ? AND user_id <> ?').get(i, uid)); },
@@ -8820,7 +8856,8 @@ function boughtOnVerdict(uid, token, before, after, opts) {
     if (after.floor !== null) {
       const h = db.prepare('SELECT send_qual, gwc_qual FROM holder_state WHERE user_id = ?').get(uid);
       const was = h ? (coin === 'SEND' ? h.send_qual : h.gwc_qual) : null, became = after.floor ? 1 : 0;
-      if (holdLog(uid, 'holder:' + coin, was, became, after.reason) && was === 1 && became === 0) notify(uid, '📉', boughtLossText('$' + coin, after, 'boost'), 'points');
+      const lg = holdLog(uid, 'holder:' + coin, was, became, after.reason);
+      if (lg && lg.note) notify(uid, '📉', boughtLossText('$' + coin, after, 'boost'), 'points');
     }
     const ogWas = db.prepare('SELECT og_tier, og_rule_v2_at FROM users WHERE id = ?').get(uid) || {};
     checkOg(uid, { link: !!(opts && opts.link) }).then(() => {
@@ -16436,12 +16473,11 @@ function requeueRuleChangedProofs() {
 }
 /* "$100 bought": every refusal the old rule made (a priced floor, "no market buy", "sold back more") is asked once more under the
    new one — oldest first, at most what the queue has room for (twenty places are always left for members pressing the button
-   themselves), and only once $SEND's tape is read (else every answer would be "still reading"). holder_reason_code is the
-   cursor: a refusal decided under the new rule has one, and is not asked again by this. */
+   themselves), and only once $SEND's tape is read to the settled head (else every answer would be "still reading").
+   holder_reason_code is the cursor: a refusal decided under the new rule has one, and is not asked again by this. */
 function requeueBoughtRuleProofs() {
   try {
-    const row = BOUGHT && BOUGHT.tokenRow(TOK.SEND);
-    if (!row || row.state !== 'ok' || TAPE_LIB.tapeHead(db, TOK.SEND, Object.keys(row.pools || {})).block == null) return;
+    if (!BOUGHT || !BOUGHT.ready(TOK.SEND)) return;
     const room = PROOF_QUEUE_MAX - 20 - proofQueue.length;
     if (room <= 0) return;
     const rows = db.prepare(`SELECT u.id FROM users u WHERE u.holder_verified_at IS NULL AND u.system = 0 AND u.deleted_at IS NULL

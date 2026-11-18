@@ -457,6 +457,8 @@ try {
     const sig = d.prepare("SELECT group_concat(id) s FROM (SELECT id FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY id)").get(uid).s;
     const acq = { user_id: uid, token: KR_TOKEN, feature: 'holder', wallets_sig: sig, ...Object.fromEntries(HOLD_ENC.map((c) => [c, L.encField(HOLD_PLAIN[c])])), at: t };
     for (const c of ['feature', 'wallets_sig']) if (!K.hasCol(d, 'acq_state', c)) delete acq[c];   // plain columns: not this suite's business if the schema step named them otherwise
+    // a row of the rule in force: a boot drops rows of an older rule (no answer — rule 1's were made from a half-read tape)
+    if (K.hasCol(d, 'acq_state', 'rule_v')) acq.rule_v = require(path.join(ROOT, 'lib', 'bought.js')).RULE_V;
     fill(d, 'acq_state', acq);
     fill(d, 'tape_receipts', { tx_idx: L.bidx(KR_TX), body_enc: L.encField(KR_RECEIPT), at: t });
     d.close();

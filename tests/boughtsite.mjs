@@ -10,7 +10,9 @@
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, randomBytes, createHmac, createCipheriv } from 'node:crypto';
 import { readFileSync } from 'node:fs';
-import { DB_PATH, KEY_PATH, SERVER_JS } from './_paths.mjs';
+import { createRequire } from 'node:module';
+import path from 'node:path';
+import { DB_PATH, KEY_PATH, SERVER_JS, ROOT } from './_paths.mjs';
 
 const PORT = process.argv[2], BASE = `http://localhost:${PORT}`;
 const db = new DatabaseSync(DB_PATH); db.exec('PRAGMA busy_timeout = 5000');
@@ -133,11 +135,12 @@ try {
     mem.exec(`CREATE TABLE users (id INTEGER PRIMARY KEY, og_tier INTEGER NOT NULL DEFAULT 0, og_rule_v2_at INTEGER);
       CREATE TABLE holder_state (user_id INTEGER PRIMARY KEY, send_qual INTEGER, gwc_qual INTEGER);
       CREATE TABLE size_topups (id INTEGER PRIMARY KEY, user_id INTEGER, token TEXT, done_at INTEGER);
-      CREATE TABLE hold_migration_log (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, feature TEXT NOT NULL, was TEXT, became TEXT, reason TEXT, at INTEGER NOT NULL, UNIQUE (user_id, feature));`);
+      CREATE TABLE hold_migration_log (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, feature TEXT NOT NULL, was TEXT, became TEXT, reason TEXT, at INTEGER NOT NULL,
+        rule_v INTEGER, noted INTEGER NOT NULL DEFAULT 0, UNIQUE (user_id, feature));`);
     const SEND = '0xsend', GWC = '0xgwc', notes = [], STATES = new Map();
     let raiseTo = null;
     const E = {
-      db: mem, now: () => 1800000000000, MIN_HOLD_USD: 100, BOUGHT_LIB: { LIMITS: { HELD_MIN_USD: 10 } }, TOK: { SEND, GWC }, DH_COINS: { [SEND]: 'SEND', [GWC]: 'GWC' },
+      db: mem, now: () => 1800000000000, MIN_HOLD_USD: 100, BOUGHT_LIB: { LIMITS: { HELD_MIN_USD: 10 }, RULE_V: 2 }, TOK: { SEND, GWC }, DH_COINS: { [SEND]: 'SEND', [GWC]: 'GWC' },
       notify: (uid, icon, text) => notes.push({ uid, text }), sizeTopupApply: () => 0,
       BOUGHT: { stateOf: (uid, t) => STATES.get(uid + ':' + t) || null },
       checkOg: async (uid) => { if (raiseTo != null) mem.prepare('UPDATE users SET og_tier = ? WHERE id = ?').run(raiseTo, uid); return 0; },
@@ -164,6 +167,43 @@ try {
     check('a gain is logged and applies at once, with no note', g && g.was === '0' && g.became === '1' && notes.filter((n) => n.uid === 1).length === 1, JSON.stringify(g));
     const og = mem.prepare("SELECT * FROM hold_migration_log WHERE user_id = 1 AND feature = 'og'").get();
     check('OG, once both coins have a verdict: logged raised (Silver → Gold), and marked decided under the new rule (og_rule_v2_at)', og && og.was === '2' && og.became === '3' && og.reason === 'raised' && mem.prepare('SELECT og_rule_v2_at FROM users WHERE id = 1').get().og_rule_v2_at > 0, JSON.stringify(og));
+    /* The first switch-on (rule 1, 2026-11-18) decided from a half-read tape and told five members their wallets held none; the old
+       code then put their statuses back from their balances. Its rows stay in the log, marked rule 1 (rule_v NULL) and told
+       (noted). Rule 2's first decision replaces each such row — and tells nobody a second time. Member 2's status was lowered by
+       rule 1 and not put back yet (send_qual 0): the row keeps the status from before the switch. */
+    const r1 = (uid, was, became, reason, noted) => mem.prepare('INSERT INTO hold_migration_log (user_id, feature, was, became, reason, at, rule_v, noted) VALUES (?,?,?,?,?,?,NULL,?)').run(uid, 'holder:SEND', was, became, reason, 1, noted);
+    for (const [uid, q] of [[2, 0], [3, 1], [4, 1]]) { mem.prepare('INSERT INTO users (id, og_tier) VALUES (?, 0)').run(uid); mem.prepare('INSERT INTO holder_state (user_id, send_qual, gwc_qual) VALUES (?,?,0)').run(uid, q); }
+    r1(2, '1', '0', 'none-held', 1); r1(3, '1', '0', 'none-held', 1); r1(4, '1', '1', 'ok', 0);
+    const told = (uid) => notes.filter((n) => n.uid === uid).length;
+    K.boughtOnVerdict(2, SEND, null, fresh({ spentUsd: 40, heldCostUsd: 40 }), {});
+    const row2 = mem.prepare("SELECT * FROM hold_migration_log WHERE user_id = 2 AND feature = 'holder:SEND'").get();
+    check('a member rule 1 told "holds none", whose rule-2 verdict is a no too: the row is rule 2\'s now (its reason, the status before the switch kept) — and no second note',
+      row2.rule_v === 2 && row2.was === '1' && row2.became === '0' && row2.reason === 'short-spent' && row2.noted === 1 && told(2) === 0, JSON.stringify({ row2, n: told(2) }));
+    K.boughtOnVerdict(3, SEND, null, fresh({ floor: true, reason: 'ok', spentUsd: 400, heldCostUsd: 400 }), {});
+    const row3 = mem.prepare("SELECT * FROM hold_migration_log WHERE user_id = 3 AND feature = 'holder:SEND'").get();
+    check('  ...one whose rule-2 verdict is a yes: logged kept (became 1), no note', row3.rule_v === 2 && row3.became === '1' && told(3) === 0, JSON.stringify(row3));
+    K.boughtOnVerdict(4, SEND, null, fresh(), {});
+    check('  ...one rule 1 kept and rule 2 refuses: told now, once — it is their first loss', told(4) === 1 && mem.prepare("SELECT noted, became FROM hold_migration_log WHERE user_id = 4").get().noted === 1);
+    K.boughtOnVerdict(2, SEND, null, fresh({ reason: 'short-held', spentUsd: 150, heldCostUsd: 4 }), {}); K.boughtOnVerdict(4, SEND, null, fresh({ spentUsd: 20 }), {});
+    check('  ...and a later rule-2 verdict is the ordinary rule: nothing logged again, nobody told again', told(2) === 0 && told(4) === 1 && mem.prepare("SELECT reason FROM hold_migration_log WHERE user_id = 2").get().reason === 'short-spent');
+    // the log itself, on the first boot of rule 2: its rows get the rule column (NULL: rule 1) and "told" for every loss told then,
+    // and rule 1's verdicts go (their figures came from the half-read tape)
+    const BL = createRequire(import.meta.url)(path.join(ROOT, 'lib', 'bought.js'));
+    const old = new DatabaseSync(':memory:');
+    old.exec(`CREATE TABLE hold_migration_log (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, feature TEXT NOT NULL, was TEXT, became TEXT, reason TEXT, at INTEGER NOT NULL, UNIQUE (user_id, feature));
+      CREATE TABLE acq_state (id INTEGER PRIMARY KEY, user_id INTEGER NOT NULL, token TEXT NOT NULL, wallets_sig TEXT NOT NULL, rule_v INTEGER NOT NULL, block INTEGER, verdict INTEGER, spent_bucket INTEGER, why TEXT, reason_code TEXT,
+        complete INTEGER NOT NULL DEFAULT 0, due_at INTEGER, dirty INTEGER NOT NULL DEFAULT 0, conflicts INTEGER NOT NULL DEFAULT 0, tries INTEGER NOT NULL DEFAULT 0, lots_enc TEXT, cursors_enc TEXT, dates_enc TEXT, wei_enc TEXT, at INTEGER NOT NULL, UNIQUE (user_id, token));`);
+    for (const [u, f, w, b] of [[1, 'holder:SEND', '1', '0'], [2, 'holder:GWC', '1', '1'], [3, 'community:7', '1', '0'], [4, 'gate', 'failed', 'failed'], [5, 'og', '1', '0']]) old.prepare('INSERT INTO hold_migration_log (user_id, feature, was, became, reason, at) VALUES (?,?,?,?,?,1)').run(u, f, w, b, 'x');
+    for (let u = 1; u <= 3; u++) old.prepare("INSERT INTO acq_state (user_id, token, wallets_sig, rule_v, verdict, reason_code, complete, at) VALUES (?, '0xsend', '1', 1, 0, 'none-held', 1, 1)").run(u);
+    const m1 = BL.migrate(old), m2 = BL.migrate(old);
+    const noted = old.prepare('SELECT user_id FROM hold_migration_log WHERE noted = 1 ORDER BY user_id').all().map((r) => r.user_id);
+    check('the first boot of rule 2: the log gets its rule column (rule 1\'s rows NULL) and marks the losses rule 1 told (holder and community slots) — said once, so the server resets what rule 1 marked',
+      m1.logUpgraded === true && m2.logUpgraded === false && JSON.stringify(noted) === '[1,3]' && old.prepare('SELECT COUNT(*) n FROM hold_migration_log WHERE rule_v IS NULL').get().n === 5, JSON.stringify({ m1, m2, noted }));
+    check('  ...and rule 1\'s verdicts are dropped (no answer, and their figures came from the half-read tape)', m1.dropped === 3 && old.prepare('SELECT COUNT(*) n FROM acq_state').get().n === 0);
+    check('  ...the server, on that boot only, clears OG\'s "decided under the new rule" and the door\'s reason codes rule 1 wrote (each decided again under rule 2)',
+      /if \(m && m\.logUpgraded\) \{\n\s+try \{ db\.prepare\('UPDATE users SET og_rule_v2_at = NULL WHERE og_rule_v2_at IS NOT NULL'\)\.run\(\); \} catch \{\}\n\s+try \{ db\.prepare\('UPDATE users SET holder_reason_code = NULL WHERE holder_reason_code IS NOT NULL'\)\.run\(\); \} catch \{\}/.test(SRC));
+    check('  ...every caller sends a loss note only on holdLog\'s say-so (once ever), never on its own reading of was/became',
+      (SRC.match(/lg && lg\.note/g) || []).length === 2 && /firstUnderBought && firstUnderBought\.note/.test(SRC) && !/holdLog\([^\n]*\) && was === 1 && became === 0/.test(SRC));
     const held = K.boughtLossText('$ZQB', fresh({ reason: 'short-held', spentUsd: 250, heldCostUsd: 4 }), 'community');
     check('a community slot lost on the $10-held rule says so, with the figures, within 240 characters', /Your \$ZQB community slot now needs/.test(held) && /\$250\.00 bought, \$4\.00 still held: \$6\.00 short\. The slot is paused\.$/.test(held) && held.length <= 240, held);
     check('the community sweep and the go-live re-check log a slot\'s first decision and tell a loser', (SRC.match(/boughtLossText\('\$' \+ (r|c)\.symbol, st, 'community'\)/g) || []).length === 2);
