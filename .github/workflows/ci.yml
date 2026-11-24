@@ -22,7 +22,9 @@ permissions:
 jobs:
   check:
     runs-on: ubuntu-24.04   # pinned: GitHub moves the ubuntu-latest label to Ubuntu 26 from 2026-10-19 and annotates every run until then
-    timeout-minutes: 20
+    # 30, not 20: the run is ~15 min, and tests/checkinmute.mjs (always last) waits for the server's next 5-minute tick, so a
+    # run whose other suites end just past a tick waits almost 5 more (2026-11-24: 32a2dc0 was cut off at 20:00 inside it)
+    timeout-minutes: 30
     steps:
       # F199: pinned to the commit each tag pointed at (v7.0.1 / v7.0.0, the SHAs Dependabot proposed on 2026-09-17; the v4
       # actions target Node 20, which GitHub now warns is deprecated), so a moved tag cannot swap the code that runs here.
