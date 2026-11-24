@@ -69,7 +69,7 @@
     },
     'market data': {
       keywords: ['market data', 'tvl', 'market cap', 'top tokens', 'top chains', 'chain stats', 'liquidity', 'volume', 'fees'],
-      answer: 'Market Data (/market) has the figures for Robinhood Chain and the other chains — DeFi TVL, DEX volume, liquidity, fees, stablecoins, market caps — and the top tokens of a chain or of every chain, sortable over a time frame. Every figure names its source (DefiLlama, L2BEAT, growthepie, GeckoTerminal, Dexscreener, the chain itself) and when it was read; one nobody could read says why instead of showing a zero.'
+      answer: 'Market Data (/market) has the figures for Robinhood Chain and the other chains — DeFi TVL, DEX volume, liquidity, fees, stablecoins, market caps (a chain\'s is CoinGecko\'s when it has one, cross-checked against CoinLore\'s) — the 🫧 bubble map of the whole crypto market, the top tokens of a chain or of every chain, sortable over a time frame, and the 🏛️ RWAs tab for Robinhood Chain\'s real-world-asset tokens. Every figure names its source (DefiLlama, L2BEAT, growthepie, CoinGecko, CoinLore, GeckoTerminal, Dexscreener, Robinhood\'s Stock Token API, Chainlink\'s feed directory, the chain itself) and when it was read; one nobody could read says why instead of showing a zero.'
     },
     'arcade': {
       keywords: ['arcade', 'competition', 'biggest sender', 'rocket run', 'prize', 'weekly', 'leaderboard'],
@@ -85,7 +85,7 @@
     },
     'account': {
       keywords: ['sign in', 'login', 'log in', 'password', 'two-factor', '2fa', 'delete my account', 'username', 'invite'],
-      answer: 'Your account lives on /profile: username, sign-in methods, two-factor, linked wallets, and the delete control (deleting is permanent). Joining is by invite code, and nobody here will ever ask for your password, a seed phrase or a private key.'
+      answer: 'Your account lives on /profile: username, sign-in methods, two-factor, linked wallets, and the delete control (deleting is permanent). Joining is by invite code. Nobody here — no member, no moderator, not Sendy — will ever ask for your password, a seed phrase or a private key in a message or a chat: you type your password only into the sign-in and confirm-it\'s-you forms on sendrh.com itself.'
     },
     'support': {
       keywords: ['support', 'help', 'question', 'contact', 'email'],
