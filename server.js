@@ -5502,7 +5502,9 @@ function boughtVerdict(uid, tokenAddr, prio) {
 function boughtView(uid, tokenAddr) {
   const s = BOUGHT ? BOUGHT.stateOf(uid, String(tokenAddr || '').toLowerCase()) : null;
   if (!s) return { verdict: null, fresh: false, reason: 'none' };
-  const n = (x) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
+  // figures only from an answer: a partial read (something still unread, no yes yet) shows none — never a made-up $0 (review 2026-11-18)
+  const shown = s.fresh && (s.complete || s.floor === true);
+  const n = (x) => (shown && Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
   return { verdict: s.fresh ? s.floor : null, fresh: !!s.fresh, reason: s.reason, spentUsd: n(s.spentUsd), heldCostUsd: n(s.heldCostUsd), pendingUsd: n(s.pendingUsd),
            maturesAt: s.maturesAtMs || null, firstBuyAt: s.firstBuyMs || null, at: s.at, minUsd: MIN_HOLD_USD, heldMinUsd: BOUGHT_LIB.LIMITS.HELD_MIN_USD };
 }
@@ -5511,6 +5513,7 @@ function boughtView(uid, tokenAddr) {
    { spendUsd, final, known }: known false = no verdict yet (0 is paid for now, and the rest when it exists); final = nothing that
    arrived before atMs can still change it (no buy from before it still inside its 24 hours, and a complete verdict). */
 function boughtSpendAt(uid, tokenAddr, atMs, liqUsd) {
+  const TAPE_LAG_MS = 45 * 60e3;   // the settle margin (5,000 blocks) and the head's slack, with room to spare
   const t = String(tokenAddr || '').toLowerCase();
   const s = BOUGHT ? BOUGHT.stateOf(uid, t) : null;
   if (!s || !s.fresh) { try { if (BOUGHT) BOUGHT.want(uid, t, { prio: 1 }); } catch {} return { spendUsd: 0, final: false, known: false }; }
@@ -5518,7 +5521,9 @@ function boughtSpendAt(uid, tokenAddr, atMs, liqUsd) {
   let spent = 0;
   for (const [a, usd] of s.counted || []) if (a != null && a <= atMs && Number.isFinite(usd)) spent += usd;
   const waiting = (s.pendingLots || []).some(([a]) => a != null && a <= atMs);
-  return { spendUsd: Math.min(Math.round(spent * 100) / 100, cap), final: !!s.complete && !waiting, known: true };
+  // final only from a verdict made well after the call: its tape trails the head by the settle margin and more, so one made just
+  // after a buy-then-call does not have the buy yet (review 2026-11-18: those sizes were settled at nothing)
+  return { spendUsd: Math.min(Math.round(spent * 100) / 100, cap), final: !!s.complete && !waiting && s.at >= atMs + TAPE_LAG_MS, known: true };
 }
 /* A size paid later (size_topups): once the verdict says nothing before the call (or the Send) can still change, the difference
    between the size it earns and the size already paid is paid — the same award, kind and caps as at the time, one ref per call —
@@ -5582,6 +5587,7 @@ function boughtLossText(sym, st, what) {
   const HELD = BOUGHT_LIB.LIMITS.HELD_MIN_USD, $ = (x) => '$' + (Math.round((x || 0) * 100) / 100).toFixed(2);
   const head = (what === 'boost' ? 'Your ' + sym + ' boost' : 'Your ' + sym + ' community slot') + ' now needs $' + MIN_HOLD_USD + ' of ' + sym + ' bought (a buy counts once held 24 h), $' + HELD + ' of it still held at cost. ';
   const tail = what === 'boost' ? ' The streak pauses; it does not reset.' : ' The slot is paused.';
+  if (st.reason === 'conflict') return head + 'The buys in your linked wallets are already counted for another account.' + tail;
   if (st.reason === 'none-held') return head + 'Your linked wallets hold none.' + tail;
   if (st.reason === 'short-held') return head + 'Your wallets show ' + $(st.spentUsd) + ' bought, ' + $(st.heldCostUsd) + ' still held: ' + $(HELD - (st.heldCostUsd || 0)) + ' short.' + tail;
   return head + 'Your wallets show ' + $(st.spentUsd) + ' bought: ' + $(MIN_HOLD_USD - (st.spentUsd || 0)) + ' short.' + tail;
@@ -5622,6 +5628,7 @@ function boughtShortText(uid, tokenAddr, sym, doWhat) {
   const rule = 'To ' + doWhat + ' takes $' + MIN + ' of ' + sym + ' bought from the market across your linked wallets (a buy counts once its coins were held 24 hours), with at least $' + HELD + ' of it still held at what you paid.';
   if (!walletAddresses(uid).length) return rule + ' No wallet is linked to this account yet.';
   if (!s || !s.fresh || s.floor !== false) return rule;
+  if (s.reason === 'conflict') return rule + ' The ' + sym + ' buys in your linked wallets are already counted for another account.';
   if (s.reason === 'none-held') return rule + ' Your linked wallets hold no ' + sym + '.';
   if (s.reason === 'short-held') return rule + ' Your wallets show ' + $(s.spentUsd) + ' bought, but only ' + $(s.heldCostUsd) + ' of it is still held — ' + $(HELD - s.heldCostUsd) + ' short.';
   return rule + ' Your wallets show ' + $(s.spentUsd) + ' bought — ' + $(MIN - (s.spentUsd || 0)) + ' short' + (s.pendingUsd > 0 ? '; another ' + $(s.pendingUsd) + ' counts once it has been held 24 hours' + (s.maturesAtMs ? ' (from ' + new Date(s.maturesAtMs).toISOString().slice(0, 16).replace('T', ' ') + ' UTC)' : '') : '') + '.';
@@ -8857,7 +8864,7 @@ function boughtOnVerdict(uid, token, before, after, opts) {
       const h = db.prepare('SELECT send_qual, gwc_qual FROM holder_state WHERE user_id = ?').get(uid);
       const was = h ? (coin === 'SEND' ? h.send_qual : h.gwc_qual) : null, became = after.floor ? 1 : 0;
       const lg = holdLog(uid, 'holder:' + coin, was, became, after.reason);
-      if (lg && lg.note) notify(uid, '📉', boughtLossText('$' + coin, after, 'boost'), 'points');
+      if (lg && lg.note && after.reason !== 'no-wallet') notify(uid, '📉', boughtLossText('$' + coin, after, 'boost'), 'points');
     }
     const ogWas = db.prepare('SELECT og_tier, og_rule_v2_at FROM users WHERE id = ?').get(uid) || {};
     checkOg(uid, { link: !!(opts && opts.link) }).then(() => {
@@ -16374,8 +16381,10 @@ try {
   if (n) console.log('holder proofs: re-opened ' + n + ' interrupted by the last shutdown');
 } catch {}
 
+const proofWas = new Map();   // userId → the door's state before it was queued ('pending' overwrites it): what the switch log compares
 function queueHolderProof(userId, front) {
   if (proofQueue.includes(userId) || proofQueue.length >= PROOF_QUEUE_MAX) return false;
+  if (!proofWas.has(userId)) { const w = db.prepare('SELECT holder_state FROM users WHERE id = ?').get(userId); proofWas.set(userId, (w && w.holder_state) || 'none'); }
   db.prepare("UPDATE users SET holder_state = 'pending', holder_proof_at = ? WHERE id = ?").run(now(), userId);
   if (front) proofQueue.unshift(userId); else proofQueue.push(userId);   // a member pressing the button goes before the re-asks
   return true;
@@ -16402,14 +16411,17 @@ async function runProofQueue() {
     const unreadable = false;
     let v = holderProofVerdict(st && st.fresh ? st : null, now());
     // the switch: the first decision under "$100 bought" beside the old one (its state), and the reason as a code (re-asked by rule, not by copy)
-    if (!v.unknown) { holdLog(userId, 'gate', u.holder_state || 'none', v.ok ? 'ok' : 'failed', st && st.reason); try { db.prepare('UPDATE users SET holder_reason_code = ? WHERE id = ?').run(v.ok ? 'ok' : (st && st.reason) || 'refused', userId); } catch {} }
     const t = now();
     if (v.ok) {
       /* F021: one wallet, one account. A wallet that already admitted somebody else cannot admit this
          account too, however much it holds — otherwise the bag walks through accounts. */
       const taken = addrs.map((a) => db.prepare('SELECT user_id FROM gate_claims WHERE addr_idx = ?').get(bidx(a))).filter((r) => r && r.user_id !== userId);
-      if (taken.length) v = { ok: false, reason: 'One of these wallets has already verified a different account. A wallet can open the door for one account only — link a wallet that has not been used to verify another account.', detail: v.detail };
+      if (taken.length) v = { ok: false, f021: true, reason: 'One of these wallets has already verified a different account. A wallet can open the door for one account only — link a wallet that has not been used to verify another account.', detail: v.detail };
     }
+    // the switch: the first decision under "$100 bought" beside the old one, and the reason as a code (re-asked by rule, not by copy) —
+    // after F021, and against the door's state before it was queued (review 2026-11-18: always 'pending', and an F021 refusal logged 'ok')
+    const was = proofWas.get(userId) || (u.holder_state === 'pending' ? 'none' : u.holder_state || 'none');
+    if (!v.unknown) { proofWas.delete(userId); holdLog(userId, 'gate', was, v.ok ? 'ok' : 'failed', v.f021 ? 'wallet-taken' : st && st.reason); try { db.prepare('UPDATE users SET holder_reason_code = ? WHERE id = ?').run(v.ok ? 'ok' : v.f021 ? 'wallet-taken' : (st && st.reason) || 'refused', userId); } catch {} }
     if (v.ok) {
       for (const a of addrs) { try { db.prepare('INSERT OR IGNORE INTO gate_claims (addr_idx, user_id, claimed_at) VALUES (?,?,?)').run(bidx(a), userId, t); } catch {} }
       /* The door opens, and the first day is watched. The window runs from the LATEST counted $SEND arrival — a buy, or coins
@@ -16543,21 +16555,24 @@ function holderProofVerdict(st, nowMs) {
   const c = PROOF_COINS[0], detail = {};
   if (!st) return { ok: false, unknown: true, reason: 'We are still reading ' + c.label + '’s trades from the chain for your linked wallets. Nothing has been decided — this check runs again on its own; look back in a few minutes.', detail };
   const big = (x) => { try { return BigInt(x || '0'); } catch { return 0n; } };
-  const held = big(st.heldWei), acquired = big(st.acquired), sold = big(st.sold);
+  const held = big(st.heldWei), acquired = big(st.acquired), sold = big(st.sold), bought = st.bought != null ? big(st.bought) : acquired;
   const $ = (x) => '$' + (Math.round((x || 0) * 100) / 100).toFixed(2);
   detail[c.key] = { basis: 'bought', spentUsd: st.spentUsd == null ? null : st.spentUsd, heldCostUsd: st.heldCostUsd == null ? null : st.heldCostUsd, pendingUsd: st.pendingUsd == null ? null : st.pendingUsd,
-    maturesAtMs: st.maturesAtMs || null, heldWei: held.toString(), acquiredWei: acquired.toString(), soldWei: sold.toString(), firstBuyMs: st.firstBuyMs || null, lastArrivedMs: st.lastArrivedMs || null, reason: st.reason || null };
+    maturesAtMs: st.maturesAtMs || null, heldWei: held.toString(), acquiredWei: acquired.toString(), boughtWei: bought.toString(), soldWei: sold.toString(), firstBuyMs: st.firstBuyMs || null, lastArrivedMs: st.lastArrivedMs || null, reason: st.reason || null };
   const rule = 'It takes $' + MIN_HOLD_USD + ' of ' + c.label + ' bought from the market across your linked wallets (a buy counts once its coins were held 24 hours), with at least $' + BOUGHT_LIB.LIMITS.HELD_MIN_USD + ' of it still held at what you paid — the same floor that counts toward Diamond levels.';
-  /* What the history alone decides comes first: somebody who holds none, or who sold more than they bought, gets the real
-     answer whatever else could not be read. */
+  /* Holding none is the real answer whatever else could not be read. "Sold more than they bought" weighs sales against every
+     market buy of the member's own wallets (round trips and buys inside their 24 hours too: `bought`, not `acquired`), and only
+     on an answer: with something still unread, a buy may be among it (review 2026-11-18: a real holder was read as a seller,
+     and an unknown became a standing no). */
   if (held <= OG_DUST_WEI && st.floor !== null) return { ok: false, reason: 'No ' + c.label + ' found in your linked wallets. ' + rule, detail };
-  if (sold > acquired) return { ok: false, reason: 'Your wallets have sold back more ' + c.label + ' than they bought. This is for holders, not traders.', detail };
+  if (st.floor !== null && sold > bought) return { ok: false, reason: 'Your wallets have sold back more ' + c.label + ' than they bought. This is for holders, not traders.', detail };
   if (st.floor === null) return { ok: false, unknown: true, reason: 'Part of your ' + c.label + ' could not be valued yet (' + ((st.unknown && st.unknown.reasons && st.unknown.reasons[0]) || 'a price or a trade still being read') + '). Nothing has been decided — it is read again on its own.', detail };
   if (st.floor === true) {
     // the first-day watch needs the latest arrival's time; a verdict that could not date it is no answer yet (never "skip the watch")
     if (!st.lastArrivedMs) return { ok: false, unknown: true, reason: 'We are still dating your latest ' + c.label + ' buy on the chain. Nothing has been decided — it is read again on its own.', detail };
     return { ok: true, reason: null, detail };
   }
+  if (st.reason === 'conflict') return { ok: false, reason: 'The ' + c.label + ' buys in your linked wallets are already counted for another account. ' + rule, detail };
   if (st.reason === 'short-held') return { ok: false, short: true, reason: 'Your wallets show ' + $(st.spentUsd) + ' of ' + c.label + ' bought, but only ' + $(st.heldCostUsd) + ' of it is still held, at what you paid. ' + rule, detail };
   return { ok: false, short: true, reason: 'Your wallets show ' + $(st.spentUsd) + ' of ' + c.label + ' bought that counts' + (st.pendingUsd > 0 ? ', and ' + $(st.pendingUsd) + ' more that counts once it has been held 24 hours' : '') + '. ' + rule, detail };
 }
@@ -18134,7 +18149,7 @@ const server = http.createServer(async (req, res) => {
           notify(uid, '🔊', 'Your read-only restriction was lifted by a moderator.', 'restriction');
         } else {
           const until = days ? now() + days * DAY_MS : PERM_UNTIL;
-          db.prepare('UPDATE users SET restricted_until = ?, restrict_level = ?, restrict_reason = ?, redeem_dur = ? WHERE id = ?').run(until, days ? 1 : 3, reason, days ? days * DAY_MS : DAY_MS, uid);
+          db.prepare('UPDATE users SET restricted_until = ?, restrict_level = ?, restrict_reason = ?, redeem_dur = ?, redeem_since = ? WHERE id = ?').run(until, days ? 1 : 3, reason, days ? days * DAY_MS : DAY_MS, now(), uid);   // redeem_since: the buy-out counts buys from now
           oidcRevokeUser(uid);   // a restricted account cannot sign in to apps: what it is signed in to stops now
           notify(uid, '🔇', 'A moderator put your account in read-only mode' + (days ? ' for ' + days + ' day' + (days === 1 ? '' : 's') : ' indefinitely') + ': ' + reason + ' Questions: SendRH@Atomicmail.io', 'restriction');
         }
@@ -18217,7 +18232,8 @@ const server = http.createServer(async (req, res) => {
             points = 0, og = 0, og_tier = 0, og_buy_ms = 0,
             twofa_method = NULL, twofa_secret = NULL, twofa_pending = NULL, twofa_enabled_at = NULL, twofa_last_step = NULL,
             holder_verified_at = NULL, holder_state = 'none', holder_proof = NULL, holder_proof_reason = NULL, holder_proof_at = NULL,
-            gate_wallets = NULL, gate_hold_until = 0, gate_floor = 0, redeem_base_send = 0, redeem_floor = 0,
+            gate_wallets = NULL, gate_hold_until = 0, gate_floor = 0, redeem_base_send = 0, redeem_floor = 0, redeem_since = NULL,
+            holder_reason_code = NULL, og_rule_v2_at = NULL,
             signup_ip = NULL, last_ip = NULL, age_at = NULL, restrict_reason = NULL,
             live_comm_count = 0, ticket_public = 0, deleted_at = ? WHERE id = ?`).run(tombstone, now(), uid);
           db.prepare('DELETE FROM data_history WHERE user_id = ?').run(uid);   // last: the deletion itself was just recorded there, row by row
@@ -18225,7 +18241,10 @@ const server = http.createServer(async (req, res) => {
           db.exec('COMMIT');
         } catch (e) { try { db.exec('ROLLBACK'); } catch {} console.error('account delete', e && e.message); return bad(res, 'could not delete the account right now — try again', 500); }
         for (const n of media) { try { deleteUpload(n, null); } catch {} }
-        forgetHoldings(uid); balCache.delete(uid);
+        for (const k of tokenHoldCache.keys()) if (k.startsWith(uid + ':')) tokenHoldCache.delete(k);
+        try { forgetSquadGates(uid); } catch {}
+        try { if (BOUGHT) BOUGHT.forget(uid); } catch {}   // not touch(): that queued fresh verdicts (and switch notes) for the tombstone
+        balCache.delete(uid);
         return send(res, 200, { ok: true }, { 'Set-Cookie': 'sid=; Path=/; HttpOnly; Max-Age=0' });
       }
       if (p === '/api/account/password' && req.method === 'POST') {
@@ -19833,10 +19852,12 @@ const server = http.createServer(async (req, res) => {
         const st = BOUGHT ? BOUGHT.stateOf(me.id, TOK.SEND) : null;
         if (!st || !st.fresh) { if (BOUGHT) BOUGHT.want(me.id, TOK.SEND, { prio: 3 }); return send(res, 503, { error: boughtCheckingText('$SEND'), code: 'checking' }); }
         const since = me.redeem_since || me.flagged_at || 0;
-        let buyUsd = 0; for (const [a, usd] of st.counted || []) if (a != null && a >= since && Number.isFinite(usd)) buyUsd += usd;
+        /* the member's OWN buys, made since it began, still held — a bag bought earlier and moved in, coins arriving by transfer, or
+           coins bought and sold again lifted it for fees or nothing (review 2026-11-18). By when the buy was made, not when it arrived. */
+        let buyUsd = 0; for (const [, usd, bAt, own, kept] of st.counted || []) if (own === 1 && kept === 1 && bAt != null && bAt >= since && Number.isFinite(usd)) buyUsd += usd;
         const waiting = (st.pendingLots || []).some(([a]) => a != null && a >= since);
         if (buyUsd < need) {
-          return send(res, 400, { error: 'Lifting your ' + (perm ? 'permanent ' : '') + 'read-only takes $' + need + ' of $SEND bought since it began; your linked wallets show $' + buyUsd.toFixed(2) + ' so far' + (waiting ? ', and a buy that counts once its coins have been held 24 hours' : '') + '.', code: 'need_more', addedUsd: Math.round(buyUsd * 100) / 100, needUsd: need });
+          return send(res, 400, { error: 'Lifting your ' + (perm ? 'permanent ' : '') + 'read-only takes $' + need + ' of $SEND bought since it began and still held; your linked wallets show $' + buyUsd.toFixed(2) + ' so far' + (waiting ? ', and a buy that counts once its coins have been held 24 hours' : '') + '.', code: 'need_more', addedUsd: Math.round(buyUsd * 100) / 100, needUsd: need });
         }
         // lift now, but start the hold: keep this $SEND for `dur` or read-only returns (doubled if timed, permanent if it was permanent)
         db.prepare('UPDATE users SET restricted_until=0, redeem_hold_until=?, redeem_floor=?, redeem_base_send=? WHERE id=?').run(now() + dur, newSend, newSend, me.id);

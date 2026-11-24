@@ -1119,7 +1119,7 @@
       const until = r.permanent ? 'indefinitely' : 'until ' + new Date(r.until).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
       live = '<div class="rekt-live" role="status">' +
         '<p><b>Your account is read-only ' + until + '.</b> ' + esc(r.reason) + '</p>' +
-        '<p>Two ways out, and they are different in kind. It lifts once your linked wallets show <b>$' + nf(Math.round(r.redeemUsd)) + '</b> of $SEND bought since it began (a buy counts once its coins were held 24 hours, at what it paid — never a balance at today’s price), and that $SEND is then kept for <b>' +
+        '<p>Two ways out, and they are different in kind. It lifts once your linked wallets show <b>$' + nf(Math.round(r.redeemUsd)) + '</b> of $SEND bought since it began by those wallets themselves and still held (a buy counts once its coins were held 24 hours, at what it paid — never a balance at today’s price, never coins sent in), and that $SEND is then kept for <b>' +
         Math.max(1, Math.round(r.holdMs / 864e5)) + ' day' + (Math.round(r.holdMs / 864e5) === 1 ? '' : 's') + '</b> — sold before that hold is up, it returns, doubled. ' +
         'Or you can <a href="mailto:' + esc(r.appealEmail) + '">appeal to a person at ' + esc(r.appealEmail) + '</a>, which costs nothing, ever. ' +
         'We are not telling you to buy anything: the appeal is a real route and it is free.</p>' +

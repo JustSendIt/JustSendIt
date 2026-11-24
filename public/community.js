@@ -341,8 +341,8 @@
             if (gate && r.status === 403 && C && !C.demo) { // the sandbox has no holder gate: a 403 there is the read-only restriction, already toasted
               const noWallet = !(window.AUTH && AUTH.user && AUTH.user.wallets && AUTH.user.wallets.length);
               gate.hidden = false;
-              gate.innerHTML = '🪙 ' + (j.error ? j.error.replace(/</g, '&lt;') : 'You must hold this token to join.') +
-                (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction; a wallet that can’t sign is proved by a burn of any amount) · <b>Step 2:</b> hold some $' + esc(C.symbol) + ' in it.' : '') +
+              gate.innerHTML = '🪙 ' + (j.error ? j.error.replace(/</g, '&lt;') : 'Joining takes $100 of this token bought from the market, with $10 of it still held.') +
+                (noWallet ? ' <b>Step 1:</b> <a class="linklike" href="/profile#connected-wallet">Connect a wallet →</a> (a free signature — never a transaction; a wallet that can’t sign is proved by a burn of any amount) · <b>Step 2:</b> $100 of $' + esc(C.symbol) + ' bought in it (a buy counts once held 24 hours), $10 of it still held.' : '') +
                 ' <button class="linklike comm-viewtoken" type="button" data-tip="Opens a panel with on-chain detail for this token">Get $' + esc(C.symbol) + ' ↗</button>';
             }
             join.disabled = false; return;

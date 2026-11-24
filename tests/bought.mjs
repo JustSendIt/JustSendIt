@@ -115,14 +115,14 @@ function setup(opts = {}) {
   const bought = BOUGHT.createBought({
     db, now: () => clock, tape, enc, dec, idx, coins: { SEND: COIN }, sys: [ROUTER],
     wallets: (uid) => db.prepare("SELECT id, identifier_enc FROM identities WHERE user_id = ? AND type = 'wallet' ORDER BY id").all(uid).map((r) => ({ id: r.id, addr: dec(r.identifier_enc) })),
-    followed: () => [],
+    followed: opts.followed || (() => []),
     refreshLedger: async () => {},
     ledger: () => ({ status: 'ok', firstBlock: START, lastBlock: LEDGER_HEAD, logs: 10, consistent: true, decimals: 18 }),
     balances: (t, addrs) => (opts.balances ? opts.balances(t, addrs) : ledgerFold(node.st.logs, t, addrs)),
     poolsFor: async () => [{ pool: POOL, tokenIsZero: true, quote: 'WETH' }],
     plumbing: () => ({ fees: new Set(), routers: new Set([ROUTER]) }),
     claimedElsewhere: opts.claimedElsewhere || (() => false),
-    onVerdict: (uid, token, before, after) => verdicts.push({ uid, token, before: before && before.floor, after: after && after.floor }),
+    onVerdict: (uid, token, before, after, o) => verdicts.push({ uid, token, before: before && before.floor, after: after && after.floor, link: !!(o && o.link) }),
   });
   return { db, node, tape, bought, verdicts };
 }
@@ -331,6 +331,22 @@ try {
     await z.bought.tick({ maxReads: 400 });
     await z.bought.work({ max: 20 });
     check('no ledger balance to check against: no answer either (ledger-missing)', z.bought.stateOf(1, COIN) && z.bought.stateOf(1, COIN).floor === null && z.bought.stateOf(1, COIN).reason === 'ledger-missing');
+  });
+
+  // review 2026-11-18: Diamond Hands follows the wallets a member sent coins to — another member's linked wallet too
+  await section('a followed wallet another account has linked', async () => {
+    const base = setup(); await base.bought.tick({ maxReads: 400 }); await base.bought.work({ max: 20 });
+    const f = setup({ followed: (uid) => (uid === 1 ? [C] : []) }); await f.bought.tick({ maxReads: 400 }); await f.bought.work({ max: 20 });
+    const a0 = base.bought.stateOf(1, COIN), a1 = f.bought.stateOf(1, COIN), c1 = f.bought.stateOf(3, COIN);
+    check('coins A sent to C (a wallet linked to another account, which A\'s Diamond Hands follows) count for that account, never for A as well: one buy backs one account', !!(a0 && a1 && c1) && a1.spentUsd === a0.spentUsd && a1.heldWei === a0.heldWei && c1.spentUsd > 0 && !(a1.monthWallets || []).includes(lc(C)) && !(a1.tierWallets || []).includes(lc(C)),
+      JSON.stringify({ a0: a0 && [a0.spentUsd, a0.heldWei], a1: a1 && [a1.spentUsd, a1.heldWei, a1.tierWallets], c: c1 && c1.spentUsd }));
+  });
+  await section('a link\'s flag reaches the verdict', async () => {
+    const { bought, verdicts } = setup(); await bought.tick({ maxReads: 400 });
+    bought.want(1, COIN, { prio: 2 }); bought.want(1, COIN, { prio: 2, link: true }); bought.want(1, COIN, { prio: 1 });
+    await bought.work({ max: 20 });
+    const v = verdicts.find((x) => x.uid === 1 && x.token === COIN);
+    check('a link asked for after a plain request (same priority) and before a lower one keeps its flag to the verdict (raise-on-link needs it)', !!v && v.link === true, JSON.stringify(v));
   });
 
   await section('a coin with no tape', async () => {

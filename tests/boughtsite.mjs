@@ -62,7 +62,7 @@ try {
     };
     const K = new Function(...Object.keys(E), NAMES.map(fnSrc).join('\n') + '\nreturn { boughtSpendAt, sizeTopupApply };')(...Object.values(E));
     const T = '0x' + '7'.repeat(40), H = 3600e3;
-    const st = (o) => ({ fresh: true, complete: true, counted: [], pendingLots: [], ...o });
+    const st = (o) => ({ fresh: true, complete: true, at: clock + 3600e3, counted: [], pendingLots: [], ...o });   // made an hour after the call (its tape has reached it)
     STATES.set('1:' + T, st({ counted: [[clock - 10 * H, 150], [clock - 5 * H, 100], [clock + H, 999]] }));
     const a = K.boughtSpendAt(1, T, clock, null);
     check('a call\'s size counts the counted buys that reached the wallets BEFORE it (a later buy adds nothing), and is final', a.spendUsd === 250 && a.final === true && a.known === true, JSON.stringify(a));
@@ -72,6 +72,10 @@ try {
     check('  ...a buy from before the call still inside its 24 hours: what counts now, and not final (it is paid when it counts)', b.spendUsd === 50 && b.final === false, JSON.stringify(b));
     const c = K.boughtSpendAt(3, T, clock, null);
     check('  ...no verdict yet: $0 for now, not final, and the worker is asked for one', c.spendUsd === 0 && c.final === false && c.known === false && wants.some((w) => w.uid === 3 && w.t === T), JSON.stringify(c));
+    // a verdict made minutes after the call: its tape trails the head (the settle margin), so a buy just before the call may not be in it
+    STATES.set('7:' + T, st({ counted: [[clock - 10 * H, 150]], at: clock + 60e3 }));
+    const late = K.boughtSpendAt(7, T, clock, null);
+    check('  ...a verdict made minutes after the call is not final (its tape may not have reached the call): the size waits for a later one', late.final === false && late.spendUsd === 150 && late.known === true, JSON.stringify(late));
     STATES.set('4:' + T, { ...st({ counted: [[clock - H, 500]] }), fresh: false });
     check('  ...a verdict for another wallet set is no answer', K.boughtSpendAt(4, T, clock, null).known === false);
     // a call made on a buy still maturing: paid 1× now, its size once the buy counts — once

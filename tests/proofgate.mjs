@@ -77,6 +77,14 @@ try {
     check('the floor in the refusal is the same constant Diamond uses, stated as bought', /It takes \$' \+ MIN_HOLD_USD \+ ' of ' \+ c\.label \+ ' bought from the market/.test(SRC));
     const seller = V(st({ floor: false, reason: 'short-spent', spentUsd: 50, sold: (2000n * E18).toString() }));
     check('sold back more than bought → refused as a net seller', !seller.ok && /sold back more/.test(seller.reason), seller.reason);
+    // review 2026-11-18: sales are weighed against every own market buy (`bought`: round trips and buys inside 24 h too), not `acquired`
+    const flipper = V(st({ acquired: (5000n * E18).toString(), bought: (15000n * E18).toString(), sold: (10000n * E18).toString() }));
+    check('  ...a member who flipped 10,000 within an hour and then bought and kept 5,000 ($150) passes: 15,000 bought, 10,000 sold — not a net seller', flipper.ok, flipper.reason);
+    // ...and with something unread it is no answer yet, never a standing "net seller" (an undated buy may be among it)
+    const undecided = V(st({ floor: null, why: 'transient', reason: 'unknown', acquired: '0', bought: '0', sold: (500n * E18).toString(), unknown: { n: 1, reasons: ['a buy not dated yet'] } }));
+    check('  ...a verdict with something still unread is no answer, never a net-seller refusal', !undecided.ok && undecided.unknown === true && !/sold back more/.test(undecided.reason), undecided.reason);
+    const taken = V(st({ floor: false, reason: 'conflict', spentUsd: 0, heldCostUsd: 0 }));
+    check('  ...buys counted for another account are told so — never "$0.00 bought"', !taken.ok && /already counted for another account/.test(taken.reason) && !/\$0\.00/.test(taken.reason), taken.reason);
     const unk = V(null);
     check('no verdict yet (the trades still being read) is NOT recorded as a failure', unk.unknown === true && /Nothing has been decided/.test(unk.reason));
     const open = V(st({ floor: null, complete: false, why: 'transient', reason: 'unknown', unknown: { n: 2, reasons: ['no ETH/USD for this block yet'] } }));
