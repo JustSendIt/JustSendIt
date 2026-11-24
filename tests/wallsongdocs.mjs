@@ -27,9 +27,9 @@ const tech = README.slice(README.indexOf('\n## 5.'), README.indexOf('\n## 6.'));
 try {
   /* ═══ the versions ═══ */
   const tv = (/const TOS_VERSION = '([^']+)';/.exec(SRC) || [])[1];
-  check('TOS_VERSION is 2026-11-17, its comment saying why first, the older history kept after it', tv === '2026-11-17'
-    && /const TOS_VERSION = '2026-11-17';   \/\/ 2026-11-17: wall songs \(§13\(a\) audio, §10\(e\) the wall's report control\) and the sanctions block \(§4\(c\)\); 2026-11-03: §34 says we run sendy\.gg too/.test(SRC), tv);
-  check('  ...and the Terms show that version; the Privacy Policy shows its own, 2026-11-18 ("$100 bought" verdicts and claims — the Terms are unchanged)', /<p class="t-meta">Version 2026-11-17 · \$Send \/ JustSendIt/.test(TERMS) && /<p class="t-meta">Version 2026-11-18 · \$Send \/ JustSendIt/.test(PRIV));
+  check('TOS_VERSION moved past 2026-11-17 (2026-11-24, open sign-up), and its history still says why 2026-11-17 moved it', tv === '2026-11-24'
+    && /const TOS_VERSION = '2026-11-24';   \/\/ 2026-11-24: [^\n]*; 2026-11-17: wall songs \(§13\(a\) audio, §10\(e\) the wall's report control\) and the sanctions block \(§4\(c\)\); 2026-11-03: §34 says we run sendy\.gg too/.test(SRC), tv);
+  check('  ...and the Terms show that version; the Privacy Policy shows its own, 2026-11-18 ("$100 bought" verdicts and claims — the Terms are unchanged)', /<p class="t-meta">Version 2026-11-24 · \$Send \/ JustSendIt/.test(TERMS) && /<p class="t-meta">Version 2026-11-18 · \$Send \/ JustSendIt/.test(PRIV));
 
   /* ═══ the Privacy Policy ═══ */
   const songRow = (/<tr><td>A song for your wall[\s\S]*?<\/tr>/.exec(PRIV) || [''])[0];
