@@ -185,8 +185,8 @@ try {
   const bio = await api('/api/profile', { method: 'POST', sid: B.sid, body: { bio: 'hello from ' + tag } });
   check('a new account can edit its own profile before the $SEND check (it used to be refused)', bio.status === 200 && bio.j && bio.j.user && bio.j.user.bio === 'hello from ' + tag, bio.status + ' ' + JSON.stringify(bio.j && (bio.j.error || bio.j.needsProof)));
   check('  ...but earns no points for it until the check passes', bio.j && bio.j.pointsEarned === 0, bio.j && bio.j.pointsEarned);
-  const post = await api('/api/posts', { method: 'POST', sid: B.sid, body: { text: 'not yet' } });
-  check('  ...posting still waits for the check', post.status === 403 && post.j && post.j.needsProof === true, post.status);
+  const post = await api('/api/posts', { method: 'POST', sid: B.sid, body: { text: 'not yet', image: 'data:image/png;base64,iVBORw0KGgo=' } });
+  check('  ...a post with a picture still waits for the check (a text post on its own wall does not: owner, 2026-11-24)', post.status === 403 && post.j && post.j.needsProof === true, post.status);
   const pic = await api('/api/profile/image', { method: 'POST', sid: B.sid, body: { kind: 'avatar', remove: true } });
   check('  ...and so do profile pictures (uploads, like any other)', pic.status === 403 && pic.j && pic.j.needsProof === true, pic.status);
 
@@ -215,8 +215,8 @@ try {
   /* ═══ 3. signing in with a wallet the site has never seen, ticket in hand: pick a name, no second signature ═══ */
   const W2 = Wallet.createRandom(); made.addrs.push(W2.address.toLowerCase());
   s = await signFor(W2, 'signin');
-  const noPass = await api('/api/auth/wallet/verify', { method: 'POST', body: { ...s, intent: 'signin' } });
-  check('without a ticket, an unknown wallet gets the ticket — not a name prompt', noPass.status === 403 && noPass.j && noPass.j.code === 'need_invite', JSON.stringify(noPass.j));
+  const noPass = await api('/api/auth/wallet/verify', { method: 'POST', pass: 'jsi_age=18', body: { ...s, intent: 'signin' } });
+  check('without a ticket (open sign-up, 2026-11-24), an unknown wallet is asked for a @username — no invite needed, no account made yet', noPass.status === 200 && noPass.j && noPass.j.needUsername === true && noPass.j.signup && !noPass.sid, JSON.stringify(noPass.j));
   const passC = freshPass();
   s = await signFor(W2, 'signin');
   const ask = await api('/api/auth/wallet/verify', { method: 'POST', pass: passC, body: { ...s, intent: 'signin' } });

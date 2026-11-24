@@ -85,7 +85,7 @@
     },
     'account': {
       keywords: ['sign in', 'login', 'log in', 'password', 'two-factor', '2fa', 'delete my account', 'username', 'invite'],
-      answer: 'Your account lives on /profile: username, sign-in methods, two-factor, linked wallets, and the delete control (deleting is permanent). Joining is by invite code. Nobody here — no member, no moderator, not Sendy — will ever ask for your password, a seed phrase or a private key in a message or a chat: you type your password only into the sign-in and confirm-it\'s-you forms on sendrh.com itself.'
+      answer: 'Your account lives on /profile: username, sign-in methods, two-factor, linked wallets, and the delete control (deleting is permanent). Anyone 18 or over can make an account with an email or a wallet. Nobody here — no member, no moderator, not Sendy — will ever ask for your password, a seed phrase or a private key in a message or a chat: you type your password only into the sign-in and confirm-it\'s-you forms on sendrh.com itself.'
     },
     'support': {
       keywords: ['support', 'help', 'question', 'contact', 'email'],

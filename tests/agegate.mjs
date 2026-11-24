@@ -83,16 +83,22 @@ try {
   check('  ...the hold floor is MIN_HOLD_USD', r && r.holdMinUsd === minUsd, r && r.holdMinUsd + ' vs ' + minUsd);
   check('  ...the coin is $SEND', r && Array.isArray(r.coins) && r.coins.includes('$SEND'), r && r.coins);
   check('  ...and the sell window is the one the check uses', r && r.sellWindowHours === 24 && /const PROOF_SELL_WINDOW_MS = DAY_MS;/.test(SRC), r && r.sellWindowHours);
-  const medianHours = Number((/const PRICE_MEDIAN_HOURS = (\d+)/.exec(SRC) || [])[1]);
-  check('  ...and the price median window the valuation uses', r && r.priceMedianHours === medianHours && medianHours > 0, r && r.priceMedianHours);
-  check('the ticket says reading is free for adults, matching the age gate', /Reading the site is free for everyone 18 and over/.test(INVITE) && !/free and open to everyone/.test(INVITE));
+  // since 2026-11-17 ("$100 bought") the floor is dollars BOUGHT — no price window values it any more
+  check('  ...and its basis: dollars bought, with $10 of it still held at cost, a buy counting once held 24 hours, valued from the chain\'s own WETH/USDG pool', r && r.basis === 'bought' && r.heldMinUsd === 10 && r.buyCountsAfterHours === 24
+    && /WETH\/USDG/.test(r.ethUsdSource || '') && r.priceMedianHours === undefined, JSON.stringify(r));
+  check('the ticket says joining is open to adults, matching the age gate (open sign-up, 2026-11-24)', /Anyone 18 or over can join/.test(INVITE) && !/free and open to everyone/.test(INVITE));
   check('the gate state no longer hands out a coin\'s banner art', st0.j && st0.j.brand === undefined && !/coinBrandUrls/.test(SRC));
   const rules = (/function rulesHtml\(\) \{[\s\S]*?\n  \}/.exec(INVITE) || [''])[0];
   check('the referral gate states how to get in', /How to get in/.test(rules) && /Redeem an invite code/.test(rules));
-  check('the rules say how the bag is valued (lower of the current price and the median), not "priced live"', /Valued at the lower of the current price and its <span data-rule="median">\d+-hour<\/span> median/.test(rules) && !/Priced live/.test(INVITE));
+  // since 2026-11-17 the floor is $100 BOUGHT: the rules say what counts (a buy held 24 hours, $10 of it still held at cost), and no
+  // price values it — neither "priced live" nor the lower-of-live-and-median the ticket used to state
+  check('the rules say the floor is dollars bought since 2026-11-17 (a buy counts once held 24 hours, $10 still held), never a price', /Spent on market buys across every wallet you link, at what each buy paid: a buy counts once its coins have been held <span data-rule="after">\d+ hours<\/span>, at least <span data-rule="held">\$\d+<\/span> of it has to be still held/.test(rules)
+    && /Today’s price never decides it\./.test(rules) && !/Priced live/i.test(INVITE) && !/data-rule="median"|lower of the current price/.test(INVITE));
   check('  ...connect a wallet, read-only', /Connect your wallet — read-only/.test(rules) && /moves nothing, approves nothing and costs no gas/.test(rules));
-  check('  ...and hold the floor in $SEND for full access', /Hold <span data-rule="min">\$\d+<\/span> of <span data-rule="coin">\$SEND<\/span>/.test(rules) && /full access/.test(rules));
-  check('  ...and that under it the account is read-only until it holds enough', /stays <b>read-only<\/b> until your wallets hold/.test(rules));
+  check('  ...and the floor in $SEND, bought, for full access', /<span data-rule="min">\$\d+<\/span> of <span data-rule="coin">\$SEND<\/span> bought<\/b>/.test(rules) && /full access/.test(rules));
+  check('  ...and that under it the account is read-only until its wallets show enough bought', /stays <b>read-only<\/b> until your wallets show <span data-rule="min">\$\d+<\/span> of <span data-rule="coin">\$SEND<\/span> bought/.test(rules));
+  check('  ...and the bought rule\'s figures are painted from the gate state too ($10 held, 24 hours)', /root\.querySelectorAll\('\[data-rule="held"\]'\)/.test(INVITE) && /root\.querySelectorAll\('\[data-rule="after"\]'\)/.test(INVITE)
+    && /const held = Number\(r\.heldMinUsd\);/.test(INVITE) && /const after = Number\(r\.buyCountsAfterHours\);/.test(INVITE));
   const literals = [...INVITE.matchAll(/data-rule="min">\$(\d+)</g)].map(m => Number(m[1]));
   check('  ...every placeholder figure matches the server until the live one replaces it', literals.length >= 4 && literals.every(n => n === minUsd), literals.join(','));
   check('  ...and the live one does replace it', /function paintRules\(\)/.test(INVITE) && /paintRules\(\);\n\s+paintTicket\(\);/.test(INVITE));
