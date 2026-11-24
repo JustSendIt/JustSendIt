@@ -155,6 +155,12 @@ function scrubRule(t, list) {
   const prevEnv = process.env.JSI_DATA_DIR; process.env.JSI_DATA_DIR = '/tmp/x';
   check('a test run (JSI_DATA_DIR set) can never write a keyring under /Volumes', (() => { try { K.writeRing('/Volumes/JustSendItKey/data_key', w2, {}); return false; } catch (x) { return /refusing/.test(x.message); } })());
   if (prevEnv === undefined) delete process.env.JSI_DATA_DIR; else process.env.JSI_DATA_DIR = prevEnv;
+  // 2026-11-24: rule 1's "$100 bought" verdicts (2026-11-18) sat under a data key a rotation dropped, and the census refused to start
+  // the live site; they are deleted before the census reads the database (and lib/bought.js migrate would delete them after it)
+  check('the first switch\'s leftover verdicts (rule 1) are deleted BEFORE the key census reads the database', (() => {
+    const del = SRC.indexOf("DELETE FROM acq_state WHERE rule_v IS NULL OR rule_v < 2"), census = SRC.indexOf('KEYLIB.prefixCensus(db)');
+    return del > 0 && census > 0 && del < census;
+  })());
   check('the registry covers every column the server encrypts with encField/encBlob', (() => {
     const cols = new Set(K.ENC_FIELDS.map(([t, c]) => c).concat(K.ENC_BLOBS.map(([t, c]) => c)));
     const need = ['identifier_enc', 'address_enc', 'holder_proof', 'tracker_prefs', 'site_prefs', 'twofa_secret', 'twofa_pending', 'gate_wallets', 'msg', 'wallet', 'report', 'hist'];

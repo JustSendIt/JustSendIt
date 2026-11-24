@@ -771,6 +771,11 @@ CREATE INDEX IF NOT EXISTS idx_holder_bal_tok ON holder_balances(token_addr, pos
      · every data key the stored values name must be in the keyring, and for each one some of its values must open;
      · the index key must match this database's index epoch (its canary), and lookups must find what they index.
    A fresh database has nothing stored, and passes. It runs before the first migration that writes an encrypted value. */
+/* The first "$100 bought" switch (2026-11-18, rule 1, rolled back the same day) left 20 verdicts — 60 encrypted values — that the
+   code running after the rollback did not register for rotation, so a later rotation dropped their key with them still here, and
+   the census below refused to start the site (2026-11-24). Rule 1's verdicts are deleted at boot by lib/bought.js migrate anyway
+   (they were made from a half-read tape, and no key opens them now): they go first, here, before the census counts them. */
+try { db.prepare('DELETE FROM acq_state WHERE rule_v IS NULL OR rule_v < 2').run(); } catch {}
 (() => {
   const refuse = (m) => {
     console.error('\n🔴 REFUSING TO START: ' + m + '\n   Key source: ' + (KEY_RING_FILE ? 'keyring ' + KEY_RING_FILE : DATA_KEY_SOURCE === 'file' || DATA_KEY_SOURCE === 'file-same-volume' ? 'DATA_KEY_FILE ' + process.env.DATA_KEY_FILE : DATA_KEY_SOURCE) + '\n');
