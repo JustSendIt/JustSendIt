@@ -500,6 +500,7 @@
     await refresh();
     // land on the step that is actually next for this person
     if (state.signedIn) show('step-codes');
+    else if (o.step && state.access && !state.redeemed) show(o.step);   // a step asked for by name (the ticket itself, with its OG rail)
     else if (o.code && !state.redeemed) show('step-code');   // open sign-up: a member's code, entered on purpose so they are credited
     else if (state.access) show('step-join');
     else if (state.redeemed) show(state.tosAccepted ? 'step-join' : 'step-tos');
