@@ -101,7 +101,7 @@ try {
   const mint = await api('/api/data/key', { method: 'POST', sid: A.sid, body: {} });
   const mintPastProof = mint.status !== 401 && !(mint.j && (mint.j.needsProof || mint.j.code === 'need_verify'));
   check('  ...and then every change goes through without asking again', setup.status === 200 && mintPastProof, setup.status + ' / data key ' + mint.status + ' ' + (mint.j && mint.j.error));
-  check('  ...and using the window never extends it (a stolen cookie cannot keep it alive)', sessionRow(A.sid).sudo_until === until1);
+  check('  ...and using the window never extends it (only the Settings keep-alive does, up to its cap)', sessionRow(A.sid).sudo_until === until1);
   if (mint.j && mint.j.key) { try { db.prepare('DELETE FROM api_keys WHERE user_id = ?').run(uA.id); } catch {} }
 
   // a second device signs in with the password

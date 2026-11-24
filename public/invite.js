@@ -876,7 +876,7 @@
       // opened in a new tab from inside the click, so the popup blocker treats it as user-initiated
       window.open(j.intent, '_blank', 'noopener,noreferrer');
       const note = $('inv-copy-note');
-      if (note) note.innerHTML = '𝕏 opened with your ticket attached as a card. Your ticket page is <a href="' + esc(j.url) + '" target="_blank" rel="noopener">' + esc(j.url) + '</a> — anyone with that link sees the card. You can unpublish it any time from your dashboard.';
+      if (note) note.innerHTML = '𝕏 opened with your ticket attached as a card. Your ticket page is <a href="' + esc(j.url) + '" target="_blank" rel="noopener">' + esc(j.url) + '</a> — anyone with that link sees the card.';
     } catch (e) {
       const err = $('inv-codes-sub');
       if (err) err.textContent = '⚠️ ' + ((e && e.message) || 'could not publish your ticket');
