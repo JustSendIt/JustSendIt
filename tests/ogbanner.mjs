@@ -11,7 +11,8 @@
         Arcade's OG card (and its line for a revoked member), the About page's state line, the badge tooltips, the ticket, and
         the home page's banner.
      2. In a muted headless Chrome against the runner's throwaway server (the real calendar: the beta ended 2026-11-17):
-          · the home page's banner, as a signed-out visitor: at 320 and 1280 px it shows "OG Silver is open · 5× Send Power"
+          · the home page's banner, as a signed-out visitor: at 320 and 1280 px it is a strip (closed, one button at most
+            64px tall from 760px and 110px on a phone; its head opens the details, owner 2026-11-24) and shows "OG Silver is open · 5× Send Power"
             in silver with the countdown to Silver's close, the beta line, no other coin named, its link at least 44px, every
             word at the text floor and nothing past the screen's edge; with the PAGE's clock moved (Date.now shifted; the
             server's stays real) it is hidden before the beta ended (Gold needed both coins), promotes Bronze in bronze
@@ -221,7 +222,12 @@ async function openHome(width, shift) {
 }
 const HOME_LOOK = `(() => {
   const $ = (id) => document.getElementById(id);
-  const box = $('lp-og'), go = box.querySelector('.lp-og-go');
+  const box = $('lp-og'), go = box.querySelector('.lp-og-go'), head = $('lp-og-head'), more = $('lp-og-more');
+  // the strip as it first stands (closed; a visit that left it open finds it open, so close it first), then opened by its head
+  if (head.getAttribute('aria-expanded') === 'true') head.click();
+  const closed = { h: Math.round(box.getBoundingClientRect().height), more: more.hidden, exp: head.getAttribute('aria-expanded'), text: box.innerText, tip: head.getAttribute('data-tip') || '', hh: Math.round(head.getBoundingClientRect().height) };
+  head.click();
+  const opened = { more: !more.hidden, exp: head.getAttribute('aria-expanded') };
   const probe = document.createElement('span'); probe.style.fontSize = 'var(--text-floor)'; document.body.appendChild(probe);
   const floor = parseFloat(getComputedStyle(probe).fontSize); probe.remove();
   const tok = (name) => { const p = document.createElement('span'); p.style.color = 'var(' + name + ')'; document.body.appendChild(p); const v = getComputedStyle(p).color; p.remove(); return v; };
@@ -236,7 +242,7 @@ const HOME_LOOK = `(() => {
   const g = go.getBoundingClientRect();
   return { shown: !box.hidden && box.getClientRects().length > 0, og: box.getAttribute('data-og'), medal: $('lp-og-medal').textContent, name: $('lp-og-name').textContent, mult: $('lp-og-mult').textContent,
     left: $('lp-og-left').textContent, beta: !$('lp-og-beta').hidden, text: box.innerText, color: getComputedStyle($('lp-og-left')).color, silver: tok('--silver'), bronze: tok('--bronze'),
-    go: { w: Math.round(g.width), h: Math.round(g.height), href: go.getAttribute('href'), tip: go.getAttribute('data-tip') || '' }, floor, out: out.slice(0, 6), small: small.slice(0, 6),
+    go: { w: Math.round(g.width), h: Math.round(g.height), href: go.getAttribute('href'), tip: go.getAttribute('data-tip') || '' }, closed, opened, floor, out: out.slice(0, 6), small: small.slice(0, 6),
     doc: document.documentElement.scrollWidth, iw: innerWidth };
 })()`;
 const fitsWhy = (L) => JSON.stringify({ out: L.out, small: L.small, doc: L.doc, iw: L.iw, ovSW: L.ovSW, ovCW: L.ovCW, floor: L.floor });
@@ -272,8 +278,11 @@ if (!CHROME) {
           check(w + 'px: the home page\'s banner promotes Silver now the beta has ended: "OG Silver is open · 5× Send Power", 🥈, the countdown to Silver\'s close, in silver',
             H.shown && H.og === 'silver' && H.medal === '🥈' && H.name === 'Silver' && H.mult === camp.mult[2] + '×' && COUNT.test(H.left) && H.color === H.silver,
             JSON.stringify({ shown: H.shown, og: H.og, name: H.name, mult: H.mult, left: H.left, color: H.color, silver: H.silver }));
+          check('  ...a strip, not a billboard: closed it is one button ' + (w >= 760 ? 'at most 64px tall' : 'at most 110px tall') + ' (name, "on $SEND alone", countdown), the details hidden; its head (a 44px target with a tip) opens them',
+            H.closed.more && H.closed.exp === 'false' && H.closed.h <= (w >= 760 ? 64 : 110) && H.closed.hh >= 44 && H.closed.tip.length >= 8 && /OG Silver is open · \d+× Send Power/.test(H.closed.text.replace(/\s+/g, ' ')) && /on \$SEND alone/.test(H.closed.text) && /closes in \d/i.test(H.closed.text.replace(/\s+/g, ' ')) && !/Not a reason to buy/.test(H.closed.text) && H.opened.more && H.opened.exp === 'true',
+            JSON.stringify({ closed: H.closed, opened: H.opened }));
           check('  ...on $SEND alone (no other coin named), with the beta line (a $SEND buy from during the beta counts as Silver) and "Not a reason to buy"',
-            H.beta && /OG badge · on \$SEND alone/i.test(H.text) && /during the beta counts as Silver too/.test(H.text) && /Not a reason to buy\./.test(H.text) && !/gwc|generational/i.test(H.text), H.text);
+            H.beta && /on \$SEND alone/.test(H.text) && /during the beta counts as Silver too/.test(H.text) && /Not a reason to buy\./.test(H.text) && !/gwc|generational/i.test(H.text), H.text);
           check('  ...its one way on is the OG rules, a 44px target with a tip', H.go.href === '/about#og-rules' && H.go.h >= 44 && H.go.w >= 44 && H.go.tip.length >= 8, JSON.stringify(H.go));
           check('  ...every word at the text floor (' + H.floor + 'px), nothing past the screen\'s edge, no sideways scroll', !H.out.length && !H.small.length && H.doc <= H.iw, JSON.stringify({ out: H.out, small: H.small, doc: H.doc, iw: H.iw }));
         } catch (e) { check('the home banner at ' + w + 'px ran to the end', false, e && e.message); }

@@ -17,37 +17,53 @@ body.lp .ticker-track span::before { content: '// '; color: var(--text-mute); }
 
 /* ---------- the OG banner: the window open now, on $SEND alone (home.js shows it from /api/og/campaign) ----------
    A strip in the open window's medal colour (the site's own --silver and --bronze), at the top of the page where Gold's
-   stood: the medal and the name, the countdown, one sentence, and the one way on. On a phone the sentence runs the full
-   width under the name; from 760px the name and the countdown share the top row, and the sentence and then the link run
-   the width under the name. */
+   stood, and like Gold's a strip, not a billboard: the head is one button (the medal, the name with "on $SEND alone"
+   under it, the countdown, a drawn chevron), about 60px tall from 760px; a tap opens what earns the badge and the one way
+   on. On a phone the countdown runs the width under the name, so the closed strip is a few short lines. */
 body.lp .lp-og {
   --og: var(--silver);
-  position: relative; display: grid; grid-template-columns: auto minmax(0, 1fr);
-  grid-template-areas: "medal head" "line line" "clock clock" "go go";
-  align-items: center; gap: 0.5rem 0.8rem;
-  width: min(var(--page-max, 1040px), calc(100% - 2.5rem)); margin: 1rem auto 0; padding: 0.8rem 1rem;   /* the hero's own column: its 1.25rem sides, the page's width */
+  position: relative; display: block;
+  width: min(var(--page-max, 1040px), calc(100% - 2.5rem)); margin: 1rem auto 0;   /* the hero's own column: its 1.25rem sides, the page's width */
   border: 1px solid color-mix(in srgb, var(--og) 45%, var(--hair)); border-radius: var(--r-1);
   background: linear-gradient(90deg, color-mix(in srgb, var(--og) 14%, var(--ink-2)), var(--ink-2) 75%);
   box-shadow: inset 0 1px 0 color-mix(in srgb, var(--text) 6%, transparent), 0 0 var(--glow-2) color-mix(in srgb, var(--og) 16%, transparent);
 }
 body.lp .lp-og[hidden] { display: none; }
 body.lp .lp-og[data-og="bronze"] { --og: var(--bronze); }
-body.lp .lp-og-medal { grid-area: medal; font-size: max(var(--text-floor), 2.1rem); line-height: 1; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--og) 60%, transparent)); }
-body.lp .lp-og-head { grid-area: head; margin: 0; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; }
-body.lp .lp-og-k { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--og); font-size: max(var(--text-floor), 0.75rem); }
-body.lp .lp-og-title { font-family: var(--font-body); font-weight: 800; color: var(--text); font-size: max(var(--text-floor), 1.15rem); line-height: 1.25; overflow-wrap: anywhere; }
-body.lp .lp-og-line { grid-area: line; margin: 0; min-width: 0; color: var(--text-dim); font-size: max(var(--text-floor), 0.9rem); line-height: 1.45; }
-body.lp .lp-og-clock { grid-area: clock; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.15rem 0.5rem; min-width: 0; }
-body.lp .lp-og-clock-k { font-family: var(--font-mono); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; color: var(--text-mute); font-size: max(var(--text-floor), 0.72rem); }
+body.lp .lp-og-head {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "medal what chev" "clock clock clock";
+  align-items: center; gap: 0.15rem 0.6rem; width: 100%; min-height: 44px; margin: 0; padding: 0.4rem 0.7rem; line-height: 1.2;
+  background: none; border: 0; border-radius: inherit; color: var(--text); font: inherit; text-align: left; cursor: pointer;
+}
+body.lp .lp-og-head:focus-visible { outline: 3px solid var(--og); outline-offset: -3px; }
+body.lp .lp-og-medal { grid-area: medal; font-size: max(var(--text-floor), 1.45rem); line-height: 1; filter: drop-shadow(0 0 8px color-mix(in srgb, var(--og) 60%, transparent)); }
+body.lp .lp-og-what { grid-area: what; min-width: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.1rem 0.6rem; }
+body.lp .lp-og-k { font-weight: 600; color: var(--og); font-size: max(var(--text-floor), 0.9rem); }
+body.lp .lp-og-title { font-family: var(--font-body); font-weight: 800; color: var(--text); font-size: max(var(--text-floor), 1.05rem); line-height: 1.2; overflow-wrap: anywhere; }
+body.lp .lp-og-clock { grid-area: clock; margin: 0; display: flex; flex-wrap: wrap; align-items: baseline; gap: 0 0.4rem; min-width: 0; }
+body.lp .lp-og-clock-k { color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); }
 body.lp .lp-og-left {
   font-family: var(--font-mono); font-weight: 600; font-variant-numeric: tabular-nums slashed-zero; white-space: nowrap;
-  color: var(--og); font-size: max(var(--text-floor), 1.3rem); text-shadow: 0 0 var(--glow-2) color-mix(in srgb, var(--og) 40%, transparent);
+  color: var(--og); font-size: max(var(--text-floor), 1.05rem); text-shadow: 0 0 var(--glow-2) color-mix(in srgb, var(--og) 40%, transparent);
 }
-body.lp .lp-og-go { grid-area: go; justify-self: start; min-height: 44px; max-width: 100%; }
+/* drawn, not a ▾ character, so it sits dead centre in its disc on every font (see the text-centring notes) */
+body.lp .lp-og-chev {
+  grid-area: chev; position: relative; flex: none; width: 30px; height: 30px; border-radius: 50%;
+  background: color-mix(in srgb, var(--og) 14%, transparent); border: 1.5px solid color-mix(in srgb, var(--og) 40%, transparent); transition: transform 0.2s ease;
+}
+body.lp .lp-og-chev::before { content: ''; position: absolute; left: 50%; top: 52%; translate: -50% -50%; width: 11px; height: 7px; background: var(--og); clip-path: polygon(0 0, 100% 0, 50% 100%); }
+body.lp .lp-og-head[aria-expanded="true"] .lp-og-chev { transform: rotate(180deg); }
+body.lp .lp-og-head:hover .lp-og-chev { border-color: var(--og); }
+body.lp .lp-og-more { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; padding: 0 0.8rem 0.75rem; }
+body.lp .lp-og-more[hidden] { display: none; }
+body.lp .lp-og-line { margin: 0; min-width: 0; max-width: 72ch; color: var(--text-dim); font-size: max(var(--text-floor), 0.9rem); line-height: 1.45; }
+body.lp .lp-og-go { min-height: 44px; max-width: 100%; }
 @media (min-width: 760px) {
-  body.lp .lp-og { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "medal head clock" ". line line" ". go go"; gap: 0.45rem 1.2rem; padding: 0.85rem 1.2rem; }
-  body.lp .lp-og-clock { flex-direction: column; align-items: flex-end; text-align: right; gap: 0; }
+  body.lp .lp-og-head { grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "medal what clock chev"; gap: 0 1rem; padding: 0.35rem 1rem; }
+  body.lp .lp-og-clock { flex-wrap: nowrap; justify-content: flex-end; }
+  body.lp .lp-og-more { padding: 0 1rem 0.8rem calc(1rem + 1.45rem + 1rem); }   /* under the name, past the medal */
 }
+@media (prefers-reduced-motion: reduce) { body.lp .lp-og-chev { transition: none; } }
 @media (forced-colors: active) { body.lp .lp-og { border-color: CanvasText; } }
 
 /* ---------- the hero: a blueprint grid under a soft top light ---------- */

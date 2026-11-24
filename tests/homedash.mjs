@@ -44,7 +44,7 @@ try {
   const og = I.slice(I.indexOf('<aside class="lp-og"'), I.indexOf('</aside>') + 8);
   check('the $SEND-only OG banner: medal, words, countdown and the rules link, no other coin, and nothing it says tells anyone to buy',
     !!og && /<aside class="lp-og" id="lp-og" aria-label="OG badge window" hidden>/.test(og) && ['lp-og-medal', 'lp-og-name', 'lp-og-mult', 'lp-og-beta', 'lp-og-left'].every((id) => (I.match(new RegExp('id="' + id + '"', 'g')) || []).length === 1 && og.includes('id="' + id + '"'))
-    && /OG badge · on \$SEND alone/.test(og) && /Not a reason to buy\./.test(og) && !/\b(buy now|should buy|go buy|buy more)\b/i.test(text(og)) && !gwc.test(og));
+    && /<span class="lp-og-k">on \$SEND alone<\/span>/.test(og) && /Not a reason to buy\./.test(og) && !/\b(buy now|should buy|go buy|buy more)\b/i.test(text(og)) && !gwc.test(og));
   check('  ...home.js fills it from the campaign alone (its windows, names, multipliers and needs), and keeps it hidden unless the window open now needs $SEND alone',
     /fetch\('\/api\/og\/campaign', \{ credentials: 'same-origin' \}\)/.test(HOME) && /\$\('lp-og-name'\)\.textContent = name;/.test(HOME) && /\$\('lp-og-mult'\)\.textContent = mult \+ '×';/.test(HOME)
     && /if \(!w \|\| !sendAlone\(w\.t\) \|\| !name \|\| !mult\) \{ box\.hidden = true; return; \}/.test(HOME) && /\$\('lp-og-beta'\)\.hidden = w\.t !== 2;/.test(HOME));

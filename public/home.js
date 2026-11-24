@@ -448,6 +448,14 @@ document.getElementById('add-chain-btn').addEventListener('click', addRobinhoodC
     .then((c) => { if (c && c.closes) { camp = c; paint(); } })
     .catch(() => {});
   setInterval(() => { if (camp && !document.hidden) paint(); }, 30000);   // minutes on the clock: a 30-second tick keeps it right
+  /* a strip, like Gold's was (owner, 2026-11-24): the head opens the details; left open, it stays open for the visit */
+  const head = $('lp-og-head'), more = $('lp-og-more');
+  if (head && more) {
+    const setOpen = (on) => { more.hidden = !on; head.setAttribute('aria-expanded', String(on)); try { sessionStorage.setItem('jsi:lp-og-more', on ? '1' : ''); } catch {} };
+    let was = false; try { was = sessionStorage.getItem('jsi:lp-og-more') === '1'; } catch {}
+    if (was) setOpen(true);
+    head.addEventListener('click', () => setOpen(more.hidden));
+  }
 })();
 
 /* ===== The home page's sections have addresses of their own: /guide, /swap, /tokens, /beta, /rocketize =====
