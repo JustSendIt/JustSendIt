@@ -876,7 +876,9 @@
       // opened in a new tab from inside the click, so the popup blocker treats it as user-initiated
       window.open(j.intent, '_blank', 'noopener,noreferrer');
       const note = $('inv-copy-note');
-      if (note) note.innerHTML = '𝕏 opened with your ticket attached as a card. Your ticket page is <a href="' + esc(j.url) + '" target="_blank" rel="noopener">' + esc(j.url) + '</a> — anyone with that link sees the card.';
+      if (note) note.innerHTML = '𝕏 opened with your ticket attached as a card. Your ticket page is <a href="' + esc(j.url) + '" target="_blank" rel="noopener">' + esc(j.url) + '</a> — anyone with that link sees the card. You can unpublish it any time from the <a href="/profile#invites">🎟️ Invites tab on your dashboard</a>.';
+      // a dashboard already on the page (the ticket opened over /profile) shows the new state without a reload
+      document.dispatchEvent(new CustomEvent('jsi:ticketshare', { detail: { shared: true, url: j.url } }));
     } catch (e) {
       const err = $('inv-codes-sub');
       if (err) err.textContent = '⚠️ ' + ((e && e.message) || 'could not publish your ticket');
@@ -1008,7 +1010,10 @@
     host.classList.add('inv-dash');
     host.innerHTML = '<div class="inv-dash-head"><h3>🎟️ Your invite codes</h3><span class="inv-dash-count" id="inv-dash-count">loading…</span></div>' +
       '<ul class="inv-codes" id="inv-dash-codes"></ul>' +
-      '<p class="inv-note" id="inv-dash-note"></p>';
+      '<p class="inv-note" id="inv-dash-note"></p>' +
+      '<p class="inv-note" id="inv-dash-share" tabindex="-1" hidden></p>';
+    const shareBox = host.querySelector('#inv-dash-share');
+    document.addEventListener('jsi:ticketshare', (e) => paintShare(shareBox, true, e.detail && e.detail.url));
     try {
       const j = await api('/api/gate/invites');
       const t = j.ticket;
@@ -1023,10 +1028,44 @@
       state.ticket = t;
       const dl = host.querySelector('#inv-dash-dl');
       if (dl) dl.addEventListener('click', downloadTicket);
+      paintShare(shareBox, !!t.shared, t.shareUrl);
     } catch (e) {
       host.querySelector('#inv-dash-count').textContent = '';
       host.querySelector('#inv-dash-note').textContent = '⚠️ ' + e.message;
     }
+  }
+
+  /* Whether the ticket page is public, and the one control that takes it down (DELETE /api/gate/ticket/share). What
+     Unpublish reaches is said where it is pressed: the page and its card are a not-found page at once, a copy already
+     fetched lasts until it expires (5 minutes for the page, 10 for the card), and a post on X keeps the picture X saved. */
+  function paintShare(box, shared, url, said) {
+    if (!box) return;
+    box.hidden = false;
+    box.innerHTML = shared && url
+      ? '🌐 <b>Your ticket page is public:</b> <a href="' + esc(url) + '" target="_blank" rel="noopener">' + esc(url) + '</a> — anyone with that link sees your card. ' +
+        '<button class="linklike" type="button" id="inv-dash-unpub" data-tip="Takes your ticket page and its card down: the link then shows a not-found page">Unpublish it 🙈</button>'
+      : (said || '🔒 Your ticket page is not public: its link and its card show a not-found page.');
+    const b = box.querySelector('#inv-dash-unpub');
+    if (!b) return;
+    b.addEventListener('click', async () => {
+      b.disabled = true; b.textContent = 'Unpublishing…';
+      try {
+        await api('/api/gate/ticket/share', { method: 'DELETE' });
+        if (state.ticket) { state.ticket.shared = false; state.ticket.shareUrl = null; }
+        paintShare(box, false, null, '🔒 <b>Unpublished.</b> Your ticket page and its card now show a not-found page. A copy already fetched can last up to 10 minutes, ' +
+          'and a post you made on 𝕏 may keep the picture 𝕏 saved — delete that post on 𝕏 to take it down there.');
+        box.focus();   // the button it replaced is gone: focus stays here, where the result is
+        if (window.announce) announce('Unpublished. Your ticket page now shows a not-found page.');
+        if (window.SFX) SFX.play('success');
+      } catch (e) {
+        b.disabled = false; b.textContent = 'Unpublish it 🙈';
+        const msg = '⚠️ ' + ((e && e.message) || 'could not unpublish your ticket') + ' — try again.';
+        if (window.announce) announce(msg);
+        const old = box.querySelector('.inv-err'); if (old) old.remove();   // a second failure replaces the first, never stacks
+        b.insertAdjacentHTML('afterend', ' <span class="inv-err">' + esc(msg) + '</span>');
+        if (window.SFX) SFX.play('error');
+      }
+    });
   }
 
   /* Open straight on the participation check. This is what a refused write calls: the person was trying
