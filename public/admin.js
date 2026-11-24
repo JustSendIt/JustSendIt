@@ -84,9 +84,33 @@
             stat('Backups folder', esc(st.backupDir)) + stat('Backups on their own volume', st.backupsOutsideDataDir ? '✅ yes' : '⚠️ no — on the database\'s volume') +
             stat('Backups kept', st.backupsKept) + stat('Newest backup', newest ? esc(newest.file) + ' · ' + bytes(newest.bytes) + ' · ' + esc(when(newest.at)) : '⚠️ none found') + '</div>' +
           keysPanel(st.keys) +
+          boughtPanel(o.bought) +
         '</div>';
     } catch (e) { ovBody.innerHTML = '<p class="empty-wall">⚠️ ' + esc(e.message || 'could not load the overview') + '</p>'; }
     finally { ovBody.removeAttribute('aria-busy'); }
+  }
+  /* ----- "$100 bought" (owner, 2026-11-17): the coin tapes, the verdicts, and what the switch changed — counts only, nobody named ----- */
+  const FEATURE_WORDS = { 'holder:SEND': 'Holder boost — $SEND', 'holder:GWC': 'Holder boost — $GWC', og: 'OG badges', gate: 'Participation check (old refusals re-asked)', community: 'Community slots' };
+  function boughtPanel(b) {
+    if (!b) return '';
+    if (b.error) return '<div><h3 class="adm-h3">$100 bought</h3><p class="modal-note">⚠️ ' + esc(b.error) + '</p></div>';
+    const tapes = (b.coins || []).map((t) => stat(esc(t.label || '?') + (t.core ? '' : ' (taken on)'),
+      t.state === 'ok' ? (t.ready && t.head != null ? 'read to the settled head: verdicts at block ' + esc(t.head) : '⏳ no verdicts until every stream is read to the settled head — ' + esc(t.headWhy || 'being read')) + ' · ' + t.yes + ' yes · ' + t.no + ' no · ' + t.unknown + ' no answer yet'
+        : '⚠️ ' + esc(t.state) + (t.why ? ': ' + esc(t.why) : ''))).join('');
+    const mig = Object.entries(b.migration || {}).map(([f, x]) => stat(esc(FEATURE_WORDS[f] || f),
+      f === 'og' ? (x.raised || 0) + ' raised (' + (x.raisedGoldDiamond || 0) + ' to Gold or Diamond) · ' + x.same + ' unchanged' : x.gained + ' gained · ' + x.lost + ' lost (told why) · ' + x.same + ' unchanged')).join('');
+    const unk = (b.unknown || []).map((u) => esc(u.reason || '?') + (u.why ? ' (' + esc(u.why) + ')' : '') + ': ' + u.n).join(' · ');
+    const e = b.ethUsd || {};
+    return '<div><h3 class="adm-h3">$100 bought</h3>' +
+      '<p class="modal-note adm-ov-sub">Coin tapes (read from the chain, paced; a coin with no answer yet decides nothing)</p>' + (tapes || stat('Coins', 'none yet')) +
+      stat('ETH/USD history', e.through != null ? 'read to block ' + esc(e.through) + ' · ' + esc(e.cells) + ' cells' : '⏳ not read yet') +
+      '<p class="modal-note adm-ov-sub">What the switch changed (first decision under the new rule, per member)</p>' + (mig || stat('Decided so far', 'none yet')) +
+      stat('No answer yet, by reason', unk || 'none') +
+      stat('Held amounts that disagreed with the ledger (no answer given)', esc(b.mismatches || 0)) +
+      stat('Buys counted for one account only (claims)', esc(b.claims)) + stat('Verdicts that met a buy another account counted', esc(b.conflicts)) +
+      stat('Send Call sizes still to settle', esc((b.sizeTopups || {}).open || 0) + ' open · ' + esc((b.sizeTopups || {}).done || 0) + ' settled') +
+      stat('Verdicts waiting to be made', esc(b.queue)) +
+      '</div>';
   }
   /* ----- key rotation: ids, ages and counts from the server (never a key), and the two "rotate now" buttons ----- */
   const ageOf = (t) => { if (!t) return ''; const h = (Date.now() - t) / 3600e3; return h < 1 ? Math.max(1, Math.round(h * 60)) + ' min ago' : h < 48 ? Math.round(h) + ' h ago' : Math.round(h / 24) + ' days ago'; };

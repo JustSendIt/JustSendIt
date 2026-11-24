@@ -57,10 +57,12 @@ try {
   const gateHtml = await gateOld.text();
   check('the old gate page is now a noindex pointer at the real site', /noindex/.test(gateHtml) && /invite=1/.test(gateHtml), gateOld.status);
 
-  // ═══ but joining does not ═══
+  // ═══ joining needs no invite either (open sign-up, owner 2026-11-24): the one question left is 18+ ═══
   const noCode = await api('/api/auth/register', { method: 'POST', body: { username: '__gt_nocode__', email: 'gtnc@example.com', password: 'password123' } });
-  check('signing up with no invite is refused', noCode.status === 403 && noCode.j.code === 'need_invite', noCode.status + ' ' + (noCode.j && noCode.j.code));
-  check('  ...and says so in a way the ticket can act on', /invite code/i.test(noCode.j.error || ''), noCode.j && noCode.j.error);
+  check('signing up with no invite is not refused for want of one — only the 18+ answer is asked for', noCode.status === 403 && noCode.j.code === 'need_age', noCode.status + ' ' + (noCode.j && noCode.j.code));
+  check('  ...and the refusal says what to do', /18 or older/.test(noCode.j.error || ''), noCode.j && noCode.j.error);
+  const openState = await api('/api/gate/state');
+  check('  ...and the gate state says the door is open to everyone (access, no invite required)', openState.j.access === true && openState.j.inviteRequired === false, JSON.stringify([openState.j.access, openState.j.inviteRequired]));
 
   // ═══ redeem ═══
   const bad1 = await api('/api/gate/redeem', { method: 'POST', body: { code: 'NOPE' } });
@@ -72,7 +74,7 @@ try {
   check('  ...HttpOnly', /HttpOnly/i.test(red.setCookie || ''));
 
   const halfWay = await api('/api/auth/register', { method: 'POST', cookie: pass, body: { username: '__gt_notos__', email: 'gtnt@example.com', password: 'password123' } });
-  check('a code alone is NOT enough — the terms come first', halfWay.status === 403 && halfWay.j.code === 'need_tos', halfWay.status + ' ' + (halfWay.j && halfWay.j.code));
+  check('a member\'s code asks no terms step of its own: the only question left is 18+ (open sign-up)', halfWay.status === 403 && halfWay.j.code === 'need_age', halfWay.status + ' ' + (halfWay.j && halfWay.j.code));
 
   const acc = await api('/api/gate/accept', { method: 'POST', cookie: pass, body: {} });
   check('accepting the terms opens the door', acc.status === 200 && acc.j.access);
@@ -98,8 +100,10 @@ try {
     const tk = sidM ? await api('/api/gate/invites', { cookie: 'sid=' + sidM[1] }) : null;
     check('  ...and its ticket prints that number', !!(tk && tk.j && tk.j.ticket && tk.j.ticket.sendId === maxNoBefore + 1 && tk.j.ticket.number === maxNoBefore + 1), tk && JSON.stringify(tk.j && tk.j.ticket && [tk.j.ticket.sendId, tk.j.ticket.number]));
   }
-  const spent = await api('/api/auth/register', { method: 'POST', cookie: passAge, body: { username: '__gt_twice__', email: 'gt2@example.com', password: 'password123' } });
-  check('  ...but that same code cannot make a SECOND account', spent.status === 403 && spent.j.code === 'code_spent', spent.status + ' ' + (spent.j && spent.j.code));
+  // a code is no longer needed, so a second sign-up on it is just a sign-up — what matters is that it credits ONE account (no extra
+  // account is made here: the run shares one address's sign-up budget)
+  const credited = joined.j && joined.j.username ? db.prepare("SELECT u.username FROM invite_codes c JOIN users u ON u.id = c.user_id WHERE c.code = '12345'").get() : null;
+  check('  ...and the code is credited to the account it was entered for, once', !!credited && credited.username === joined.j.username, credited && credited.username);
 
   const reuse = await api('/api/gate/redeem', { method: 'POST', body: { code: '12345' } });
   check('a used code cannot be used again', reuse.status !== 200 && /already been used/i.test(reuse.j.error || ''), reuse.j && reuse.j.error);

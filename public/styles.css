@@ -6360,3 +6360,7 @@ html.motion-off .mv-strip-win { overflow-x: auto; overscroll-behavior-x: contain
 /* a short screen (a phone on its side): the strip scrolls away with the page instead of sticking — the nav and the strip held at
    the top would take a third of it, and Sendy's chat and the page's own pop-ups need that room; nav.js then counts only the nav */
 @media (max-height: 500px) { .mv-strip { position: relative; top: auto; } }   /* screen furniture: a printed page (the White Paper's PDF) never carries it */
+
+/* the sign-in dialog's "Read more" / "How it works" folds (auth.js) — long text closed by default (owner, 2026-11-24) */
+.auth-more { margin: 0.25rem 0 0.5rem; }
+.auth-more > summary { min-height: 44px; display: flex; align-items: center; color: var(--text-dim); }

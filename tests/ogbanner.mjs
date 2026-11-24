@@ -184,7 +184,7 @@ async function openTicket(width, shift) {
   await cdp('Emulation.setDeviceMetricsOverride', { width, height: width < 768 ? 760 : 900, deviceScaleFactor: 1, mobile: width < 768 });
   await cdp('Page.navigate', { url: BASE + '/about' });
   await until('document.readyState === "complete" && window.AUTH && AUTH.openInvite', 15000);
-  await ev('AUTH.openInvite(), true');
+  await ev('AUTH.openInvite({ step: "step-ticket" }), true');   // open sign-up (2026-11-24): the ticket is asked for by name
   if (!await until('document.querySelector("#invite-overlay[data-open] #step-ticket[data-active]")', 10000)) throw new Error('the ticket did not open');
   if (!await until('!!document.querySelector("#invite-overlay #tk-launch[data-og]")', 10000)) throw new Error('the rail was never painted from the campaign');
   await sleep(800);   // the rocket's 600ms glide to where it belongs

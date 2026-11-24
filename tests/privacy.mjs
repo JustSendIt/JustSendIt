@@ -125,10 +125,10 @@ try {
     check('  ...a code already used to join stays, as the record of who came in on it; another account’s codes are untouched', !!codeRow(cUsed) && codeRow(cUsed).user_id === joiner.id && !!codeRow(cOthers) && !codeRow(cOthers).used_at);
     const redeem = await api('/api/gate/redeem', { method: 'POST', body: { code: cUnused } });
     check('  ...so the unused one no longer opens the door', redeem.status === 400 && /not one of ours/.test((redeem.j && redeem.j.error) || ''), redeem.status + ' ' + JSON.stringify(redeem.j));
-    const lateJoin = await fetch(BASE + '/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: BASE, Cookie: 'jsi_pass=' + passTok + '; jsi_age=18' },
-      body: JSON.stringify({ username: '__pv_late_' + hex(2), email: 'pv.late.' + hex(3) + '@example.com', password: 'late-pass-' + hex(3) }) });
-    const lateJ = await lateJoin.json().catch(() => null);
-    check('  ...and the redeemed one no longer makes an account', lateJoin.status === 403 && lateJ && lateJ.code === 'need_invite', lateJoin.status + ' ' + JSON.stringify(lateJ));
+    // open sign-up (2026-11-24): nobody needs a code to join, so what matters is that the redeemed one no longer counts — its pass
+    // is gone, and an account made with it would credit nobody (no sign-up here: the run shares one address's sign-up budget)
+    const lateState = await fetch(BASE + '/api/gate/state', { headers: { Cookie: 'jsi_pass=' + passTok + '; jsi_age=18' } }).then((r) => r.json()).catch(() => null);
+    check('  ...and the redeemed one no longer counts: the pass it gave is gone, so it credits nobody', !!lateState && lateState.redeemed === false, JSON.stringify(lateState && [lateState.redeemed, lateState.access]));
     check('  ...accounts deleted before this rule get the same at boot', /DELETE FROM invite_codes WHERE user_id IS NULL AND (?:admin = 0 AND )?owner_id IN \(SELECT id FROM users WHERE deleted_at IS NOT NULL\)/.test(SRC)
       && /DELETE FROM invite_codes WHERE owner_id = \? AND user_id IS NULL/.test(SRC));
     const pub = await api('/api/users/deleted-' + u.id);
@@ -185,7 +185,7 @@ try {
     // the one script from another company is Cloudflare's Web Analytics beacon (the two hosts Cloudflare's own CSP guidance names), and the privacy page says so
     check('  ...the only script host beside this site is Cloudflare\'s analytics beacon, its report endpoint the only other connect host, and no inline script', /script-src 'self' https:\/\/static\.cloudflareinsights\.com(;|$)/.test(csp) && /connect-src 'self' https:\/\/rpc\.mainnet\.chain\.robinhood\.com https:\/\/cloudflareinsights\.com(;|$)/.test(csp) && !/unsafe-inline'[^;]*;?[^;]*script|script-src[^;]*(nonce|unsafe-inline)/.test(csp), csp);
     const privHtml = readFileSync(path.join(PUB, 'privacy.html'), 'utf8');
-    check('  ...and the privacy page tells visitors about the beacon in Cloudflare\'s own words, and no longer claims there are no analytics scripts', /Cloudflare Web Analytics/.test(privHtml) && /does not use any client-side state, such as cookies or localStorage/.test(privHtml) && /Version 2026-11-17/.test(privHtml) && !/no analytics scripts/.test(privHtml));
+    check('  ...and the privacy page tells visitors about the beacon in Cloudflare\'s own words, and no longer claims there are no analytics scripts', /Cloudflare Web Analytics/.test(privHtml) && /does not use any client-side state, such as cookies or localStorage/.test(privHtml) && /Version 2026-11-18/.test(privHtml) && !/no analytics scripts/.test(privHtml));
     const pages = readdirSync(PUB).filter((f) => f.endsWith('.html'));
     const google = pages.filter((f) => /fonts\.(googleapis|gstatic)\.com/.test(readFileSync(path.join(PUB, f), 'utf8').replace(/<p>[\s\S]*?<\/p>/g, '')));
     check('no page loads Google Fonts', google.length === 0, google.join(','));

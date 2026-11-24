@@ -56,8 +56,12 @@ try {
      which stopped listing $GWC. Both coins are now priced from their own pools, guarded, at every payout gate. */
   {
     check('no payout gate reads a price through the Dexscreener lookup any more', !/tokenPriceUsdOf\(/.test(SRC));
-    check('the OG badge prices BOTH coins from their pools', /sendPx = await guardedPriceUsd\(TOK\.SEND\); gwcPx = await guardedPriceUsd\(TOK\.GWC\);/.test(SRC));
-    check('  ...and so does the hold-streak floor', /\[sendPx, gwcPx\] = await Promise\.all\(\[guardedPriceUsd\(TOK\.SEND\), guardedPriceUsd\(TOK\.GWC\)\]\)/.test(SRC));
+    /* since 2026-11-17 ("$100 bought") no badge or floor is decided by a price at all: the OG badge and the hold streak read the
+       bought verdicts (tests/bought.mjs, tests/diamondog.mjs); the hold streak still reads both pools for what a bag is worth now */
+    check('the OG badge reads no price: its floor is the bought verdict', !/guardedPriceUsd\(TOK\.(SEND|GWC)\)/.test((/\nasync function checkOg\(userId, opts = \{\}\) \{[\s\S]*?\n\}\n/.exec(SRC) || [''])[0])
+      && /const \{ best, holdsAny, floor, failed, spans, monthFrom, sawDq \} = facts;/.test(SRC));
+    check('  ...and the hold streak still shows what the bag is worth now, from both pools (it decides nothing)', /\[sendPx, gwcPx\] = await Promise\.all\(\[guardedPriceUsd\(TOK\.SEND\), guardedPriceUsd\(TOK\.GWC\)\]\)/.test(SRC)
+      && /const sendQual = qualOf\(boughtVerdict\(userId, TOK\.SEND, 1\), prev \? prev\.send_qual : null\);/.test(SRC));
   }
 
   /* ═══════════ 2. the $100 hold floor, every token on the site ═══════════ */
@@ -67,7 +71,7 @@ try {
     check('MIN_HOLD_USD is $100', minHold === 100, minHold);
     check('the community gate uses the same floor', /const MIN_COMMUNITY_HOLD_USD = MIN_HOLD_USD/.test(SRC));
     check('the OG value floor uses the same floor', /const OG_MIN_HOLD_USD = MIN_HOLD_USD/.test(SRC));
-    check('starting a community is priced against it too', /holdsToken\(me\.id, token, MIN_HOLD_USD/.test(SRC));
+    check('starting a community takes it too (bought, since 2026-11-17)', /const holdsC = boughtVerdict\(me\.id, token, 3\);/.test(SRC));
 
     // holderMultiplier must count only bags that cleared the floor
     const qual = grab(/const qualSendBp = [\s\S]*?const qualGwcBp = [^\n]*\n/, 'qual helpers');
@@ -185,16 +189,17 @@ try {
     check('  ...while a real kind still works', ok.status === 200, ok.status);
   }
 
-  /* ═══════════ 6. "bought from the pool" nets what you sent back ═══════════ */
+  /* ═══════════ 6. a Send Call's size: what was BOUGHT, never a paper position ═══════════
+     Since "$100 bought" (owner, 2026-11-17; Q5) the size is the caller's spent on counted buys before the call (lib/acquire.js: a buy
+     counts once held 24 hours, so buy-and-sell-back adds $0; a skim, an LP removal or a donation is never a buy; a transfer in counts
+     only as its traced original buy — tests/acquire.mjs), capped at the pool's liquidity, read from the verdict (no chain read). */
   {
-    const wtp = grab(/async function walletTokenPosition\(userId, tokenAddr, pairAddr, priceUsd, liqUsd\) \{[\s\S]*?\n\}/, 'walletTokenPosition');
-    check('transfers INTO the pair are subtracted from what the pair sent you',
-      !!wtp && /if \(from === me\) outRaw \+= to === pair \? v : routedPos\.take\(it, 'in', v\);/.test(wtp) && /inRaw > outRaw \? inRaw - outRaw : 0n/.test(wtp));
-    check('  ...so skim() and burn() net to zero rather than paying the size multiplier', !!wtp && /netRaw/.test(wtp));
-    check('  ...and the position can never be worth more than the pool it is priced against',
-      !!wtp && /Math\.min\(tok \* priceUsd, cap\)/.test(wtp));
-    check('  ...and the transfer history is the whole history (explorer or chain), not a single page', !!wtp && /items = await ogTransfers\(a, tokenAddr, \{ noTime: true/.test(wtp));
-    check('a Send Call passes the pool liquidity in', /callSpendUsd\(me\.id, token, p2\.pair\.address, price, liq\)/.test(SRC));
+    const bsa = grab(/function boughtSpendAt\(uid, tokenAddr, atMs, liqUsd\) \{[\s\S]*?\n\}/, 'boughtSpendAt');
+    check('the size is the caller\'s counted buys before the call, from the verdict — no explorer walk on the request', !!bsa && /for \(const \[a, usd\] of s\.counted \|\| \[\]\) if \(a != null && a <= atMs/.test(bsa)
+      && !/async function walletTokenPosition\(/.test(SRC));
+    check('  ...and it can never be worth more than the pool it is priced against', !!bsa && /return \{ spendUsd: Math\.min\(Math\.round\(spent \* 100\) \/ 100, cap\)/.test(bsa));
+    check('a Send Call passes the pool liquidity in', /const sz = boughtSpendAt\(me\.id, token, t, liq\);/.test(SRC));
+    check('  ...and a buy still inside its 24 hours is paid when it counts (size_topups), one award per call', /if \(!sz\.final\) db\.prepare\('INSERT OR IGNORE INTO size_topups/.test(SRC) && /'callsize:' \+ c\.id/.test(SRC));
   }
 
   /* ═══════════ 7. the milestone ladder's two-sample rule actually runs ═══════════ */
@@ -371,7 +376,8 @@ try {
     check('  ...to a real address', /const APPEAL_EMAIL = 'SendRH@Atomicmail\.io';/.test(SRC));
     const AJS = readFileSync(ROOT + '/public/auth.js', 'utf8');
     check('  ...and the banner puts it in front of the person it concerns', /appeal it<\/b> — email/.test(AJS));
-    check('a restriction buy-out is priced with the spike-protected median', /price = \(await sendPriceUsd\(\)\) \|\| 0;/.test(SRC));
+    // since "$100 bought" (owner's Q8) a buy-out is the $SEND BOUGHT since the restriction, valued at its own block: no price to spike
+    check('a restriction buy-out counts the member\'s own buys made since it began and still held (never a balance at today\'s price, never coins sent in)', /const since = me\.redeem_since \|\| me\.flagged_at \|\| 0;/.test(SRC) && /if \(own === 1 && kept === 1 && bAt != null && bAt >= since && Number\.isFinite\(usd\)\) buyUsd \+= usd;/.test(SRC));
     check('opening a Send Call refuses a stale cached price', /lookupTokenPair\(token, \{ maxAgeMs: PRICE_MAX_AGE_MS \}\)/.test(SRC));
   }
 

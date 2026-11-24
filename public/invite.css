@@ -257,3 +257,8 @@ html.motion-off .inv-close::before, html.motion-off .inv-browse::before, html.mo
 .inv-rules h3 { font-family: 'Luckiest Guy', cursive; font-weight: 400; letter-spacing: 0.02em; color: var(--g-green-hi, #c6f000); }
 .inv-rules-list .inv-tick { color: var(--g-text, #f2f6ec); border-color: color-mix(in srgb, var(--g-green, #a8ce00) 45%, transparent); }
 .inv-rules .inv-note b { color: var(--g-text, #f2f6ec); }
+
+/* the check panel's "Read more" (invite.js step-proof): the long notes closed by default (owner, 2026-11-24) */
+.inv-more { margin: 0.4rem 0 0.6rem; }
+.inv-more > summary { cursor: pointer; color: var(--g-text, #f2f6ec); font-weight: 700; min-height: 44px; display: flex; align-items: center; font-size: max(var(--text-floor), 0.9rem); }
+.inv-more > summary:focus-visible { outline: 2px solid var(--g-green, var(--green)); outline-offset: 2px; }
