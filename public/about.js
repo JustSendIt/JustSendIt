@@ -16,11 +16,13 @@
   /* --- 2. Sign-in / connect CTAs: open the auth modal, or fall back to the profile page --- */
   function openAuth(e) {
     if (e) e.preventDefault();
-    if (window.AUTH && typeof window.AUTH.open === 'function') window.AUTH.open();
+    // "Create account": the sign-in dialog set up for a new account (its email form on Create account, not Sign in)
+    if (window.AUTH && typeof window.AUTH.startJoin === 'function') window.AUTH.startJoin();
+    else if (window.AUTH && typeof window.AUTH.open === 'function') window.AUTH.open();
     else location.href = '/profile';
   }
-  /* The two JOIN buttons open the sign-in panel, which is what they say. The two CONNECT buttons connect
-     a wallet, which is what THEY say — they used to open the same panel and leave the reader to find the
+  /* The two JOIN buttons open the sign-in dialog for a new account, which is what they say. The two CONNECT buttons
+     connect a wallet, which is what THEY say — they used to open the same panel and leave the reader to find the
      wallet tab, so a button labelled "Connect a wallet →" did not connect a wallet. */
   ['gs-join', 'join-signin'].forEach(function (id) {
     var b = $(id); if (b) b.addEventListener('click', openAuth);

@@ -132,7 +132,7 @@
           '</div>' +
           '<div class="inv-actions">' +
             '<button class="g-btn g-btn-primary" id="inv-join" type="button" data-tip="Asks your wallet to sign a free message and makes your account — nothing moves">Sign in with wallet — read-only 🦊</button>' +
-            '<button class="g-btn g-btn-ghost" id="inv-join-emailbtn" type="button" data-tip="Opens the email sign-up form with what you typed here — you press Create Account there">Use email instead</button>' +
+            '<button class="g-btn g-btn-ghost" id="inv-join-emailbtn" type="button" data-tip="Opens the email sign-up form with what you typed here — you press Create account there">Use email instead</button>' +
           '</div>' +
           '<button class="inv-browse" id="inv-browse3" type="button" data-tip="Closes this without making an account — your code is already used">Later — keep browsing →</button>' +
         '</div>' +
@@ -940,7 +940,7 @@
       if (window.AUTH && AUTH.gate) { try { await AUTH.gate(true); } catch {} }
       // this closes FIRST (see close()): nothing awaits between the two, so no frame shows the page alone
       close();
-      if (window.AUTH && AUTH.openSignup) AUTH.openSignup({ tab: 'email', fromTicket: true, username: f.username, email: f.email, password: f.password, setup2fa: f.setup2fa });
+      if (window.AUTH && AUTH.openSignup) AUTH.openSignup({ tab: 'email', fromTicket: true, username: f.username, email: f.email, password: f.password, password2: f.password2, setup2fa: f.setup2fa });
       else if (window.AUTH && AUTH.open) AUTH.open();
     });
     on('inv-join', async () => {

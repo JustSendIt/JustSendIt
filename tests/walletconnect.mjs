@@ -38,8 +38,8 @@ try {
     check('  ...signed in, it links without a detour through the panel', /if \(AUTH\.user\) return AUTH\.linkWallet\(opts\.note\)/.test(AUTH_C));
     check('  ...signed out, it opens the panel already running the wallet sign-in',
       /openModal\(\);[\s\S]{0,320}?#btn-wallet-signin[\s\S]{0,60}?click\(\)/.test(AUTH_C));
-    check('  ...and selects the wallet tab if a previous visit left Email showing',
-      /#tab-wallet[\s\S]{0,120}?classList\.contains\('active'\)/.test(AUTH_C));
+    check('  ...on the ways in, whatever step a previous visit left showing (openModal resets to them)',
+      /if \(AUTH\._reset2fa\) AUTH\._reset2fa\(\);/.test(AUTH_C) && /AUTH\._reset2fa = function \(\) \{[\s\S]{0,200}?showStep\('choose'\);/.test(AUTH_C));
     /* The signed-out path deliberately reuses the modal's handler: it already deals with a brand-new
        account, an address linked elsewhere, an invite the server wants first, and a wallet that is only
        the first factor. A second copy of that would drift from the first. */
@@ -214,12 +214,23 @@ try {
       && !/WALLET\.connect\(\)/.test(AUTH_C) && !/WALLET\.connect\(\)/.test(PROF_C));
     check('GMGN is in the main list wherever a wallet is being proved, and its row opens Burn Verification', /!detected\.has\(k\.key\) && \(!k\.burn \|\| pickOpts\.burn\)/.test(WALLET_C) && /if \(k\.burn\) \{[\s\S]{0,900}?toBurn\(k\.key\)/.test(WALLET_C)
       && /\{ key: 'phantom'[^\n]*\n(?:[^\n]*\n){0,3}\s+\{ key: 'gmgn'/.test(WALLET) && /burn: !!k\.burn/.test(WALLET_C));
-    check('the sign-in panel\'s main options are Connect wallet, Burn Verification and Email, in that order',
-      /id="tab-wallet"[^>]*>🦊 Connect wallet<\/button>\s*<button[^>]*id="tab-burn"[^>]*>🔥 Burn Verification<\/button>\s*<button[^>]*id="tab-email"[^>]*>✉️ Email<\/button>/.test(AUTH)
-      && /<div id="pane-burn" role="tabpanel" aria-labelledby="tab-burn" hidden>/.test(AUTH));
+    /* owner, 2026-11-24: "as intuitive as possible all the way through clicking the button to getting an account" — it was three
+       tabs, each with its own two-button choice labelled three ways: six choices before anything happened */
+    check('the sign-in dialog opens on the ways in, the same for new and returning people: Continue with wallet, Continue with email, any social sign-in, then Burn Verification',
+      /<div id="pane-choose" class="auth-step">[\s\S]*?id="btn-wallet-signin"[^>]*>Continue with wallet 🦊<\/button>[\s\S]*?id="btn-email-go"[^>]*>Continue with email ✉️<\/button>[\s\S]*?id="oauth-row"[\s\S]*?id="btn-burn-alt"[^>]*>Burn Verification 🔥<\/button>[\s\S]*?<div id="pane-wallet" class="auth-step" hidden>/.test(AUTH)
+      && /<div id="pane-burn" class="auth-step" hidden>/.test(AUTH) && /<div id="pane-email" class="auth-step" hidden>/.test(AUTH));
+    check('  ...nothing asks "sign in or sign up?" before the wallet connects: no tabs, no wallet segment, the one press signs in or starts the account',
+      !/role="tablist"|id="tab-|id="wseg-|auth-tab\b/.test(AUTH) && /const body = Object\.assign\(\{ address, signature, intent: fields \? 'signup' : 'signin' \}, fields \|\| \{\}\);/.test(AUTH_C)
+      && /wBtn\.addEventListener\('click', async \(\) => \{\s*const status = q\('#wallet-status'\);\s*try \{ await walletProve\(status, null, false\); \}/.test(AUTH_C));
+    check('  ...the same two labels everywhere: "Sign in" and "Create account" (no Log in, Sign up, I have an account or Create Account)',
+      !/>Log in<|>Sign up<|I have an account|Create Account|Sign In 🚪/.test(AUTH_C) && />Sign in<\/button>/.test(AUTH) && />Create account<\/button>/.test(AUTH)
+      && /b\.textContent = 'Sign in 🚪';\s*b\.setAttribute\('data-tip', '[^']{8,}'\);/.test(AUTH_C) && !/invite code or a wallet/.test(AUTH_C));
+    check('  ...every step past the ways in has a Back to them (described), focused on the way it came from',
+      (AUTH.match(/<button type="button" class="auth-back" data-back data-tip="[^"]{8,}">← Back<\/button>/g) || []).length === 3
+      && /const cameFrom = \{ wallet: '#btn-wallet-signin', email: '#btn-email-go', burn: '#btn-burn-alt' \};/.test(AUTH_C));
     /* owner, 2026-10-22: "Fix the sign-up process for the burn verification so that its fluid" — one form, not three */
     check('  ...Burn Verification is one form: a new account (username, email, password twice) or a sign-in, plus the wallet, and one press',
-      /<form id="burn-form" novalidate>/.test(AUTH) && /id="b-username"/.test(AUTH) && /id="b-pw2"/.test(AUTH) && /id="b-addr"/.test(AUTH) && /id="bseg-signup"[^>]*>Create account</.test(AUTH) && /id="bseg-login"[^>]*>I have an account</.test(AUTH)
+      /<form id="burn-form" novalidate>/.test(AUTH) && /id="b-username"/.test(AUTH) && /id="b-pw2"/.test(AUTH) && /id="b-addr"/.test(AUTH) && /id="bseg-signup"[^>]*>Create account</.test(AUTH) && /id="bseg-login"[^>]*>Sign in</.test(AUTH)
       && /if \(!AUTH\.user && AUTH\._showBurnTab\) \{/.test(AUTH_C) && !/id="burn-join"|burnGo/.test(AUTH_C));
     check('  ...that press makes the account (or signs in), starts the hour — a sign-in handing over its password as "confirm it\'s you" — and opens the burn step on the wallet',
       /j = await api\('\/api\/auth\/register', \{ method: 'POST', body: \{ username: v\.username, email: v\.email, password: v\.pw \} \}\);/.test(AUTH_C)
@@ -239,10 +250,12 @@ try {
     check('  ...the picker lists every wallet, none behind a toggle', /for \(const k of undetected\) footEl\.appendChild\(row\(k\)\);/.test(WALLET_C) && !/wc-more|showAll/.test(WALLET_C));
     check('  ...the wallet this browser used before is marked "Last used" and focused first', /<span class="wc-badge wc-last">Last used<\/span>/.test(WALLET_C) && /overlay\.querySelector\('\.wc-item\[data-last\]'\) \|\| overlay\.querySelector\('\.wc-item'\)/.test(WALLET_C));
     check('the sign-in and sign-up screen itself names the wallets that work here, from the same registry, every one a press away — the signing ones counted as such, GMGN apart',
-      /<details class="w-works" id="w-works" hidden>/.test(AUTH_C) && /'Works with ' \+ signing\.length \+ ' wallets — '/.test(AUTH_C) && /' by Burn Verification'/.test(AUTH_C) && /WALLET\.known\(\)/.test(AUTH_C));
+      /<details class="w-works" id="w-works" hidden>/.test(AUTH_C) && /'Works with ' \+ signing\.length \+ ' wallets'/.test(AUTH_C) && /' by a burn'/.test(AUTH_C) && /<small>· by Burn Verification<\/small>/.test(AUTH_C) && /WALLET\.known\(\)/.test(AUTH_C));
     check('  ...but the home "Get a wallet" guide lists only wallets to get and connect: never GMGN', /\.filter\(\(k\) => !k\.burn\)\.map\(\(k, i\) => Object\.assign\(\{\}, k, \{ featured: i < 8 \}\)\)/.test(strip(HOME)) && !/verifies by a burn/.test(HOME));
-    check('  ...a sign-up opened on Burn Verification stays on its own form, and the picker\'s GMGN row leaves the focus on that option',
-      /if \(opts && opts\.tab === 'burn'\) \{ const t = modal\.querySelector\('#tab-burn'\); if \(t\) t\.click\(\); \}\s*if \(AUTH\._burnMode\) AUTH\._burnMode\(true\);/.test(AUTH_C) && /tabs\.burn\.click\(\); tabs\.burn\.focus\(\);[^\n]*\n\s*return true;/.test(AUTH_C));
+    check('  ...a sign-up opened on Burn Verification stays on its own form, and the picker\'s GMGN row leaves the focus in that form (its first field)',
+      /const to = opts\.tab === 'burn' \? 'burn' : opts\.tab === 'email' \? 'email' : opts\.username \? 'wallet' : 'choose';\s*if \(AUTH\._goStep\) AUTH\._goStep\(to\);/.test(AUTH_C)
+      && /AUTH\._showBurnTab = \(\) => \{\s*if \(step === '2fa' \|\| step === 'confirm'\) return false;[^\n]*\n\s*goStep\('burn'\);[^\n]*\n\s*return true;/.test(AUTH_C)
+      && /function goStep\(name\) \{ showStep\(name\); focusStep\(name\); \}/.test(AUTH_C));
     check('  ...the home guide shows the best-fitting eight first and the rest behind "Show all"',
       /const FEATURED = 8;/.test(WALLET_C) && /featured: i < FEATURED/.test(WALLET_C) && /k\.featured \|\| has\(k\) \|\| showAll/.test(strip(HOME)) && /'Show all ' \+ all\.length \+ ' wallets ▾'/.test(strip(HOME)));
     check('  ...and every entry goes through the one read-only path: no wallet SDK, no WalletConnect, no transaction', !/walletconnect|@walletconnect|sdk|eth_sendTransaction/i.test(WALLET_C));
@@ -255,15 +268,35 @@ try {
   {
     const INV = readFileSync(path.join(PUB, 'invite.js'), 'utf8');
     const INV_C = strip(INV);
-    check('the wallet sign-up button cannot submit a form (a submit reloaded the page instead of signing)',
-      /<button type="button" class="btn btn-primary" id="btn-wallet-signin"/.test(AUTH));
-    check('a handoff from the ticket is trusted, so the segment clicks do not bounce back to it',
-      /if \(opts\.fromTicket\) signupTrusted = 2;/.test(AUTH_C) && /function signupTrust\(\)/.test(AUTH_C)
-      && /if \(signupTrust\(\)\) return;/.test(AUTH_C));
+    check('the wallet button cannot submit a form (a submit reloaded the page instead of signing); the name step\'s form is its own, and its submit is held',
+      /<button type="button" class="btn btn-primary auth-go" id="btn-wallet-signin"/.test(AUTH) && /<form id="w-form" novalidate>/.test(AUTH)
+      && /wForm\.addEventListener\('submit', async \(e\) => \{\s*e\.preventDefault\(\);/.test(AUTH_C));
+    check('a sign-up the site opened (startJoin, or the ticket handing over) is trusted, so choosing Create account never bounces back to the ticket; a plain open is not',
+      /openModal\(\);\s*joinTrusted = true;/.test(AUTH_C) && /if \(joinTrusted\) return;/.test(AUTH_C) && /AUTH\._resetModes = \(\) => \{ setRegMode\(false\); joinTrusted = false;/.test(AUTH_C)
+      && !/signupTrust/.test(AUTH_C));
     check('connecting a wallet to finish sign-up re-reads the ticket before it would close, then still asks the wallet to sign',
       /const g = await gate\(true\);/.test(AUTH_C)
-      && /openInvite\(\{ then: \(\) => AUTH\.openSignup\(\{ tab: 'wallet', fromTicket: true \}\) \}\)/.test(AUTH_C)
+      && /openInvite\(\{ then: \(\) => AUTH\.openSignup\(\{ tab: 'wallet', fromTicket: true, username: fields\.username \}\) \}\)/.test(AUTH_C)
       && /setStatus\(status, 'Choose your wallet… 👛'\);\s*const \{ provider, address \} = await WALLET\.connect\(\{ burn: true \}\)/.test(AUTH_C));
+    /* connect first: one picker and one signature, whichever way the name comes */
+    check('a new wallet is asked for its @username in the same dialog, its proof carried over — naming the account costs no second signature',
+      /if \(j\.needUsername\) \{[\s\S]{0,200}?pendingSignup = j\.signup; pendingAddr = address;[\s\S]{0,120}?paintWalletStep\(\);\s*showStep\('wallet'\);/.test(AUTH_C)
+      && /if \(pendingSignup\) \{[\s\S]{0,200}?api\('\/api\/auth\/wallet\/signup', \{ method: 'POST', body: Object\.assign\(\{ signup: pendingSignup \}, fields\) \}\)/.test(AUTH_C)
+      && (AUTH_C.match(/purpose=signin/g) || []).length === 1);
+    check('  ...the name step shows the wallet it connected (short, the whole address in its title) and focuses the name',
+      /addr\.textContent = proved \? pendingAddr\.slice\(0, 6\) \+ '…' \+ pendingAddr\.slice\(-4\) : '';/.test(AUTH_C) && /if \(proved\) addr\.title = pendingAddr;/.test(AUTH_C)
+      && /const u = q\('#w-username'\); u\.focus\(\);/.test(AUTH_C));
+    check('  ...an expired proof (401) starts again from the wallet, the name kept, the button ready — never a dead end',
+      /if \(err\.status === 401 && pendingSignup\) \{\s*pendingSignup = null; pendingAddr = ''; paintWalletStep\(\);/.test(AUTH_C)
+      && /wCreate\.textContent = proved \? 'Create my account ✨' : 'Connect wallet & create account 🦊';/.test(AUTH_C));
+    check('  ...a closed picker or a declined signature is no error, and an answer for an attempt already left behind (Back, a reset) changes nothing',
+      /setStatus\(status, err\.message === 'cancelled' \? '' : /.test(AUTH_C) && /if \(err\.message === 'cancelled'\) \{ setStatus\(status, ''\); return; \}/.test(AUTH_C)
+      && /const run = \+\+wRun;/.test(AUTH_C) && /if \(moved\(\)\) return;   \/\/ a cancel or a refusal/.test(AUTH) && /if \(from === 'wallet'\) \{ wRun\+\+; pendingSignup = null; pendingAddr = ''; \}/.test(AUTH_C));
+    check('  ...an error is said beside the button, and the focus goes to the field it is about (its fold opened)',
+      /function fieldFail\(status, msg, field, fallback\) \{[\s\S]{0,400}?fold\.open = true;[\s\S]{0,200}?f\.setAttribute\('aria-invalid', 'true'\); f\.focus\(\);/.test(AUTH_C)
+      && /<p class="modal-note auth-status" id="w-create-status" aria-live="polite"><\/p>/.test(AUTH) && /<p class="modal-note auth-status" id="email-status" aria-live="polite"><\/p>/.test(AUTH));
+    check('  ...an email sign-up types its new password twice, as the other two sign-up forms do',
+      /id="f-password2" type="password" autocomplete="new-password"/.test(AUTH) && /if \(v\.pw !== v\.pw2\) throw fErr\('the two passwords don’t match', 'f-password2'\);/.test(AUTH_C));
     check('a failed re-read does not wipe a ticket already confirmed',
       /catch \{ if \(!gateState\) gateState = \{ access: false, signedIn: false \}; \}/.test(AUTH_C));
     check('the last step of create-account is a read-only wallet sign-in, and an email is optional',
@@ -291,8 +324,8 @@ try {
       /<label class="w-opt" id="inv-join-2fa-opt"><input type="checkbox" id="inv-join-2fa"> Set up two-factor right after <span class="f-hint">\(optional\)<\/span><\/label>/.test(INV)
       && /setup2fa: !!\(\$\('inv-join-2fa'\) && \$\('inv-join-2fa'\)\.checked\)/.test(INV_C) && (INV_C.match(/setup2fa: f\.setup2fa/g) || []).length === 2);
     check('  ...which the dialog sets on its own boxes BEFORE its button is pressed (that press reads #w-2fa in the same instant)',
-      /if \(opts\.setup2fa !== undefined\) \{\s*for \(const id of \['w-2fa', 'f-2fa'\]\) \{ const b = modal\.querySelector\('#' \+ id\); if \(b\) b\.checked = !!opts\.setup2fa; \}\s*\}[\s\S]*?if \(opts\.connect\) \{\s*const go = modal\.querySelector\('#btn-wallet-signin'\);\s*if \(go\) go\.click\(\);/.test(AUTH_C)
-      && /const setup2fa = wRegMode && modal\.querySelector\('#w-2fa'\)\.checked;/.test(AUTH_C));
+      /if \(opts\.setup2fa !== undefined\) \{\s*for \(const id of \['w-2fa', 'f-2fa'\]\) \{ const b = modal\.querySelector\('#' \+ id\); if \(b\) b\.checked = !!opts\.setup2fa; \}\s*\}[\s\S]*?if \(opts\.connect\) \{\s*const go = modal\.querySelector\(opts\.username \? '#w-create' : '#btn-wallet-signin'\);\s*if \(go\) go\.click\(\);/.test(AUTH_C)
+      && /const status = q\('#w-create-status'\);\s*const setup2fa = q\('#w-2fa'\)\.checked;/.test(AUTH_C) && /q\('#w-2fa'\)\.checked = false; q\('#f-2fa'\)\.checked = false;/.test(AUTH_C));
 
     /* SU-4: a hidden panel's fields are ALL disabled, or show() focuses one of them and the focus lands nowhere */
     check('the burn continuation disables every field of the hidden panel, so focus starts on Continue',
@@ -306,11 +339,13 @@ try {
     check('closing the ticket empties its password fields and its "Opening your wallet…" line',
       /function close\(\) \{[\s\S]*?for \(const id of \['inv-join-pw', 'inv-join-pw2'\]\) \{ const i = \$\(id\); if \(i\) i\.value = ''; \}\s*const je = \$\('inv-join-err'\); if \(je\) je\.textContent = '';[\s\S]*?jsi:modalclose/.test(INV_C));
     /* SU-7 */
-    check('"Use email instead" says what it does (it opens the form; Create Account there makes the account)',
-      /id="inv-join-emailbtn" type="button" data-tip="Opens the email sign-up form with what you typed here — you press Create Account there">Use email instead</.test(INV)
+    check('"Use email instead" says what it does (it opens the form; Create account there makes the account)',
+      /id="inv-join-emailbtn" type="button" data-tip="Opens the email sign-up form with what you typed here — you press Create account there">Use email instead</.test(INV)
       && !/Makes the account with an email and a password instead/.test(INV));
-    check('  ...and the dialog moves focus to the tab it switched to (openModal focused the one selected before)',
-      /const picked = \['wallet', 'burn', 'email'\]\.includes\(opts\.tab\) && modal\.querySelector\('#tab-' \+ opts\.tab\);\s*if \(picked && picked\.classList\.contains\('active'\)\) picked\.focus\(\);/.test(AUTH_C));
+    check('  ...and the dialog moves focus to the step it opened on, its first empty field or its button (openModal focused the wallet button before)',
+      /if \(AUTH\._goStep\) AUTH\._goStep\(to\);/.test(AUTH_C)
+      && /const empty = \[\.\.\.pane\.querySelectorAll\('input\.addr-input'\)\]\.find\(\(el\) => shown\(el\) && !el\.value\);\s*const target = empty \|\| pane\.querySelector\('\.auth-go'\);/.test(AUTH_C)
+      && /password2: f\.password2/.test(INV_C));
   }
 } catch (e) {
   console.error('ERROR', e.message, e.stack && e.stack.split('\n').slice(1, 3).join('\n'));
