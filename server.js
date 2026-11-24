@@ -13252,6 +13252,12 @@ function purgeCdn(urls) {
     body: JSON.stringify({ files: urls.slice(0, 30) }), signal: AbortSignal.timeout(8000),
   }).then((r) => { if (!r.ok) console.warn('[cdn] purge failed: HTTP ' + r.status); }).catch((e) => console.warn('[cdn] purge failed:', e && e.message));
 }
+/* A ticket taken down (Unpublish, or the account deleted): its page and card, dropped from the edge the same way. A copy a
+   browser already fetched lasts until its own max-age runs out — 5 minutes for /t/<id>, 10 for the card — and a post already
+   made on X keeps whatever picture X saved; the dashboard says both. */
+function purgeTicketCdn(sendNo) {
+  if (sendNo) purgeCdn([SITE_ORIGIN + '/t/' + sendNo, SITE_ORIGIN + '/t/' + sendNo + '.png']);
+}
 function deleteUpload(name, ownerId) {
   if (!name) return;
   try { purgeCdn([SITE_ORIGIN + '/uploads/' + name]); } catch {}
@@ -16094,6 +16100,10 @@ function ticketFor(u) {
     goldEndsAt: (camp && camp.closes && camp.closes.gold != null) ? camp.closes.gold : null,
     goldOpen: !!(camp && camp.tierNow === 3),
     tosVersion: TOS_VERSION,
+    // whether /t/<sendId> and its card are public right now: only the owner's Share sets it, and Unpublish on the
+    // dashboard (DELETE /api/gate/ticket/share) or deleting the account clears it
+    shared: !!u.ticket_public,
+    shareUrl: u.ticket_public ? SITE_ORIGIN + '/t/' + sendNoOf(u) : null,
   };
 }
 
@@ -17342,10 +17352,13 @@ const server = http.createServer(async (req, res) => {
         return send(res, 200, { ok: true, url, text,
           intent: 'https://x.com/intent/post?text=' + encodeURIComponent(text) + '&url=' + encodeURIComponent(url) });
       }
-      // ...and un-publish it. Consent that cannot be withdrawn is not consent.
+      /* ...and un-publish it (the dashboard's 🎟️ Invites → Unpublish). Consent that cannot be withdrawn is not consent.
+         The same bucket as sharing: each unpublish of a public ticket asks the CDN to drop its copies (purgeTicketCdn). */
       if (p === '/api/gate/ticket/share' && req.method === 'DELETE') {
         if (!me) return bad(res, 'sign in first', 401);
+        if (!rateLimit('tshare:' + me.id, 30, 6e5)) return bad(res, 'slow down', 429);
         db.prepare('UPDATE users SET ticket_public = 0 WHERE id = ?').run(me.id);
+        if (me.ticket_public) purgeTicketCdn(sendNoOf(me));
         return send(res, 200, { ok: true, shared: false });
       }
 
@@ -18256,6 +18269,7 @@ const server = http.createServer(async (req, res) => {
           db.exec('COMMIT');
         } catch (e) { try { db.exec('ROLLBACK'); } catch {} console.error('account delete', e && e.message); return bad(res, 'could not delete the account right now — try again', 500); }
         for (const n of media) { try { deleteUpload(n, null); } catch {} }
+        if (me.ticket_public) { try { purgeTicketCdn(me.send_no); } catch {} }   // the ticket page went with the account (ticket_public = 0 above)
         for (const k of tokenHoldCache.keys()) if (k.startsWith(uid + ':')) tokenHoldCache.delete(k);
         try { forgetSquadGates(uid); } catch {}
         try { if (BOUGHT) BOUGHT.forget(uid); } catch {}   // not touch(): that queued fresh verdicts (and switch notes) for the tombstone

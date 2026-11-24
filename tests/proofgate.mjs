@@ -271,9 +271,13 @@ try {
     const uNo = sendNoOf(db, u.id);   // the ticket lives at its Send ID, not its row id
     const before = await api('/t/' + uNo);
     check('a ticket page 404s until its owner shares it', before.status === 404, before.status);
+    const tk0 = await api('/api/gate/invites', { sid: u.sid });
+    check('  ...and the dashboard\'s ticket says it is not public, with no link', tk0.status === 200 && tk0.j.ticket && tk0.j.ticket.shared === false && tk0.j.ticket.shareUrl === null, JSON.stringify(tk0.j.ticket && { shared: tk0.j.ticket.shared, shareUrl: tk0.j.ticket.shareUrl }));
     const sh = await api('/api/gate/ticket/share', { method: 'POST', sid: u.sid, body: {} });
     check('sharing publishes it and returns the X composer link', sh.status === 200 && /x\.com\/intent\/post/.test(sh.j.intent || ''), sh.status);
     check('  ...with the tagline filled in', /I%20just%20got%20my%20ticket%20to%20Send/.test(sh.j.intent || ''));
+    const tk1 = await api('/api/gate/invites', { sid: u.sid });
+    check('  ...and the dashboard\'s ticket then says it is public, with the same link the share gave', tk1.j.ticket && tk1.j.ticket.shared === true && tk1.j.ticket.shareUrl === sh.j.url && new RegExp('/t/' + uNo + '$').test(tk1.j.ticket.shareUrl || ''), JSON.stringify(tk1.j.ticket && { shared: tk1.j.ticket.shared, shareUrl: tk1.j.ticket.shareUrl, url: sh.j.url }));
     const card = await fetch(BASE + '/t/' + uNo + '.png');
     const buf = Buffer.from(await card.arrayBuffer());
     check('the card is a real PNG this server drew', card.status === 200 && buf.slice(1, 4).toString() === 'PNG', card.status);
@@ -293,9 +297,30 @@ try {
     const evil = await (await fetch(BASE + '/t/' + uNo)).text();
     check('a handle full of markup is escaped on the share page', !/<script>a<\/script>/.test(evil) && /&lt;script&gt;/.test(evil));
     db.prepare('UPDATE users SET username = ? WHERE id = ?').run('__pg_share__', u.id);
+    const anon = await api('/api/gate/ticket/share', { method: 'DELETE' });
+    const still = await api('/t/' + uNo);
+    check('un-sharing needs the owner signed in: signed out it is refused and the page stays up', anon.status === 401 && still.status === 200, anon.status + ' / ' + still.status);
     const un = await api('/api/gate/ticket/share', { method: 'DELETE', sid: u.sid });
     const after = await api('/t/' + uNo);
     check('un-sharing takes it down again', un.status === 200 && after.status === 404, after.status);
+    const cardAfter = await fetch(BASE + '/t/' + uNo + '.png'); await cardAfter.arrayBuffer();
+    check('  ...the card with it', cardAfter.status === 404, cardAfter.status);
+    const tk2 = await api('/api/gate/invites', { sid: u.sid });
+    check('  ...and the dashboard\'s ticket says it is not public again', tk2.j.ticket && tk2.j.ticket.shared === false && tk2.j.ticket.shareUrl === null, JSON.stringify(tk2.j.ticket && { shared: tk2.j.ticket.shared }));
+    const again = await api('/api/gate/ticket/share', { method: 'DELETE', sid: u.sid });
+    check('  ...and un-sharing a ticket that is not public is a harmless yes', again.status === 200 && again.j.shared === false, again.status);
+    // what takes it down: the server route asks the CDN to drop both URLs (only for a ticket that was public), and so does deleting the account
+    check('Unpublish asks the CDN to drop the page and the card, only when the ticket was public',
+      /function purgeTicketCdn\(sendNo\) \{\n  if \(sendNo\) purgeCdn\(\[SITE_ORIGIN \+ '\/t\/' \+ sendNo, SITE_ORIGIN \+ '\/t\/' \+ sendNo \+ '\.png'\]\);/.test(SRC)
+      && /ticket_public = 0 WHERE id = \?'\)\.run\(me\.id\);\n\s+if \(me\.ticket_public\) purgeTicketCdn\(sendNoOf\(me\)\);/.test(SRC)
+      && /if \(me\.ticket_public\) \{ try \{ purgeTicketCdn\(me\.send_no\); \} catch \{\} \}/.test(SRC));
+    // the control itself, on the dashboard's 🎟️ Invites tab (invite.js mountDashboard), and the share note that points there
+    const INV = readFileSync(new URL('../public/invite.js', import.meta.url), 'utf8');
+    const paint = (INV.match(/function paintShare\(box, shared, url, said\) \{[\s\S]*?\n  \}\n/) || [''])[0];
+    check('the dashboard paints the ticket\'s public state from the server\'s answer, and Unpublish there sends DELETE /api/gate/ticket/share',
+      /paintShare\(shareBox, !!t\.shared, t\.shareUrl\);/.test(INV) && /id="inv-dash-unpub" data-tip="[^"]+">Unpublish it/.test(paint) && /api\('\/api\/gate\/ticket\/share', \{ method: 'DELETE' \}\)/.test(paint));
+    check('  ...and says what Unpublish cannot reach: a copy already fetched (up to 10 minutes) and the picture X saved', /A copy already fetched can last up to 10 minutes/.test(paint) && /may keep the picture 𝕏 saved/.test(paint));
+    check('  ...and the share note promises only that control, by where it is', /You can unpublish it any time from the <a href="\/profile#invites">🎟️ Invites tab on your dashboard<\/a>/.test(INV) && !/from your dashboard\.';/.test(INV));
   }
 
   /* ═══ the brand proxy: a third party's picture, from our origin ═══ */
