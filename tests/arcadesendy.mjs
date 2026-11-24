@@ -1,5 +1,5 @@
 /* ===== The Arcade's sendy.gg card (owner, 2026-11-03: "Preview play now on Sendy.GG on the Arcade page on SendRH.com") =====
-   sendy.gg is the owner's 3D game, Send: Diamond Forge (also called Sendy's Metaverse). It cannot be framed (it sends
+   sendy.gg is the owner's 3D game, Send: Diamond Forge (also called Sendy's Universe). It cannot be framed (it sends
    X-Frame-Options: DENY and frame-ancestors 'none'), so the Arcade previews it with one still, served from this site, and
    links out. The game's welcome video is NOT here, in git or on the site, until the game re-renders it from a public save and
    re-voices it: its narration is a macOS system voice, which Apple licenses for personal, non-commercial use only, and this

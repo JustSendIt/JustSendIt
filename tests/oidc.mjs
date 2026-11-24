@@ -826,7 +826,7 @@ try {
   await tryLook('a Cyrillic ѕ in the name', { name: 'Juѕt Send It' });
   await tryLook('the button\'s own words', { name: 'Sign in with Send' });
   await tryLook('the account\'s', { name: 'Send Account Login' });
-  await tryLook('the first app\'s name', { name: 'Sendy\'s Metaverse' });
+  await tryLook('the first app\'s name', { name: 'Sendy\'s Universe' });
   await tryLook('staff words', { name: 'Official Send Support' });
   await tryLook('an admin', { name: 'Admin Rewards' });
   await tryLook('a homograph homepage', { homepage: 'https://ѕendrh.com' });
@@ -876,7 +876,7 @@ try {
   const SENDY = { clientId: 'sendy.gg', redirect: 'https://sendy.gg/api/sendrh/callback' };
   const sRow = db.prepare("SELECT * FROM oauth_clients WHERE client_id = 'sendy.gg'").get();
   check('sendy.gg is seeded at boot from CONNECT_SENDY_SECRET_HASH: confidential, reviewed, owned by no member, its secret known only as the SHA-256 given, its one address the default',
-    !!SENDY_SECRET && sRow && sRow.owner_id === null && sRow.kind === 'confidential' && sRow.reviewed_at > 0 && sRow.secret_hash === sha(SENDY_SECRET) && sRow.name === 'Sendy\'s Metaverse' && sRow.redirect_uris === JSON.stringify([SENDY.redirect]), JSON.stringify(sRow && { ...sRow, secret_hash: !!sRow.secret_hash }));
+    !!SENDY_SECRET && sRow && sRow.owner_id === null && sRow.kind === 'confidential' && sRow.reviewed_at > 0 && sRow.secret_hash === sha(SENDY_SECRET) && sRow.name === 'Sendy\'s Universe' && sRow.redirect_uris === JSON.stringify([SENDY.redirect]), JSON.stringify(sRow && { ...sRow, secret_hash: !!sRow.secret_hash }));
   const GAME_UA = { 'User-Agent': 'SendDiamondForge/1.0 (+https://sendy.gg)' };
   const sc1 = await getCode(alice, SENDY, { scopes: ['send.handle', 'send.id', 'send.power'], tick: ['send.handle', 'send.id', 'send.power'] });
   const sTok = await tokenReq({ grant_type: 'authorization_code', code: sc1.code, redirect_uri: SENDY.redirect, code_verifier: sc1.verifier }, { basic: ['sendy.gg', SENDY_SECRET], headers: GAME_UA, ip: NET + '61' });
@@ -917,8 +917,8 @@ try {
     send() {}, bad() {}, readBody: async () => ({}), blockSanctioned: () => false, isAdmin: () => false, ownershipRefusal: async () => null, verifyNeeds: () => ({}), origin: () => 'https://site.example', escHtml: (v) => String(v), assetVer: () => '',
     secHeaders: {}, levelForXp: () => 1, titleFor: () => 't', effectiveMult: () => ({ total: 1 }), restrictionOf: () => null, sendNoOf: () => 1, nameKey: (v) => String(v).toLowerCase(), reservedKeys: () => ['justsendit'], rotateDays: () => 0, log: () => {} });
   const ownerCol = mdb.prepare('PRAGMA table_info(oauth_clients)').all().find((c) => c.name === 'owner_id');
-  const s1 = mo.seedFirstParty({ clientId: 'sendy.gg', name: 'Sendy\'s Metaverse', homepage: 'https://sendy.gg', redirect: 'https://sendy.gg/api/sendrh/callback', secretHash: sha('s1') });
-  const s2 = mo.seedFirstParty({ clientId: 'sendy.gg', name: 'Sendy\'s Metaverse', homepage: 'https://sendy.gg', redirect: 'https://sendy.gg/api/sendrh/callback', secretHash: '' });
+  const s1 = mo.seedFirstParty({ clientId: 'sendy.gg', name: 'Sendy\'s Universe', homepage: 'https://sendy.gg', redirect: 'https://sendy.gg/api/sendrh/callback', secretHash: sha('s1') });
+  const s2 = mo.seedFirstParty({ clientId: 'sendy.gg', name: 'Sendy\'s Universe', homepage: 'https://sendy.gg', redirect: 'https://sendy.gg/api/sendrh/callback', secretHash: '' });
   let s3 = null; try { mo.seedFirstParty({ clientId: 'evil.example', secretHash: sha('x') }); s3 = 'seeded'; } catch (e) { s3 = e.message; }
   check('  ...an old table (owner_id NOT NULL) is rebuilt with its rows; with no hash the app is not seeded and one seeded before loses its secret (it signs nobody in); only the first-party ID can be seeded',
     ownerCol.notnull === 0 && mdb.prepare("SELECT name FROM oauth_clients WHERE client_id = 'sapp_aaaaaaaaaaaaaaaaaaaaaaaa'").get().name === 'Kept' && s1.seeded === true && s2.seeded === false
@@ -1106,7 +1106,7 @@ try {
     noRowid && /no such column/.test(rowidErr) && m2sql.every((x) => /WITHOUT ROWID$/.test(x)) && m2.prepare('SELECT COUNT(*) n FROM oauth_tokens').get().n === 3 && m2.prepare('SELECT used_at FROM oauth_tokens WHERE token_hash = ?').get('h1').used_at === 1
     && m2.prepare('SELECT COUNT(*) n FROM oauth_codes').get().n === 1 && m2idx === 'idx_oauth_codes_exp,idx_oauth_tokens_client,idx_oauth_tokens_exp,idx_oauth_tokens_grant,idx_oauth_tokens_user', JSON.stringify({ noRowid, rowidErr, m2idx }));
   // (o) the admin's "Mark not reviewed" on the first-party app survives a restart (a fresh seed)
-  const seedSpec = { clientId: 'sendy.gg', name: 'Sendy\'s Metaverse', homepage: 'https://sendy.gg', redirect: 'https://sendy.gg/api/sendrh/callback', secretHash: sha('s1') };
+  const seedSpec = { clientId: 'sendy.gg', name: 'Sendy\'s Universe', homepage: 'https://sendy.gg', redirect: 'https://sendy.gg/api/sendrh/callback', secretHash: sha('s1') };
   mo2.seedFirstParty(seedSpec);
   const firstReviewed = m2.prepare("SELECT reviewed_at FROM oauth_clients WHERE client_id = 'sendy.gg'").get().reviewed_at;
   m2.prepare("UPDATE oauth_clients SET reviewed_at = NULL, reviewed_by = NULL WHERE client_id = 'sendy.gg'").run();

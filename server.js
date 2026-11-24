@@ -17213,7 +17213,7 @@ const OIDC = OIDC_LIB.createOidc({
    never comes here; unset, the client is not seeded (and one seeded before signs nobody in). CONNECT_SENDY_REDIRECT is its
    one redirect address. */
 try {
-  OIDC.seedFirstParty({ clientId: 'sendy.gg', name: 'Sendy\'s Metaverse', homepage: 'https://sendy.gg',
+  OIDC.seedFirstParty({ clientId: 'sendy.gg', name: 'Sendy\'s Universe', homepage: 'https://sendy.gg',
     description: 'The Send game world: your handle, Send ID and Send Power, carried into the game.',
     redirect: String(process.env.CONNECT_SENDY_REDIRECT || '').trim() || 'https://sendy.gg/api/sendrh/callback',
     secretHash: String(process.env.CONNECT_SENDY_SECRET_HASH || '').trim() });
