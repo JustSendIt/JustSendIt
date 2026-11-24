@@ -1045,7 +1045,8 @@ footer .nav-foot { margin-top: 1.2rem; display: flex; gap: 1.1rem; justify-conte
   font-size: max(var(--text-floor), 0.83rem); line-height: 1.55; color: var(--text-dim); text-align: center; }
 #auth-modal[hidden] { display: none; }
 /* the title keeps clear of the ✕ in the corner (at 320px it ran under it and lost its last word), and breaks evenly when it wraps */
-#auth-title { padding: 0 1.9rem; text-wrap: balance; overflow-wrap: anywhere; }
+#auth-title { padding: 0 2.3rem; margin: 0 0 0.6rem; text-wrap: balance; overflow-wrap: anywhere; color: var(--green-bright); text-align: center; font-size: max(var(--text-floor), 1.6rem); }
+@media (max-width: 400px) { #auth-title { font-size: max(var(--text-floor), 1.35rem); } }   /* beside a 44px ✕ a phone has room for short words only */
 .modal-backdrop { position: absolute; inset: 0; background: rgba(4,6,10,0.78); backdrop-filter: blur(6px); }
 .modal-card {
   position: relative; width: min(420px, 100%); max-height: 92vh; overflow-y: auto;
@@ -1061,14 +1062,38 @@ footer .nav-foot { margin-top: 1.2rem; display: flex; gap: 1.1rem; justify-conte
 .modal-x:hover { background: var(--red); color: var(--on-red); }
 .modal-sub { text-align: center; color: var(--text-dim); font-size: max(var(--text-floor), 0.9rem); margin: 0.4rem 0 1.2rem; }
 .modal-note { color: var(--text-dim); font-size: max(var(--text-floor), 0.85rem); line-height: 1.5; margin: 0.7rem 0; }
-/* the three ways in — Connect wallet, Burn Verification, Email — as one stacked menu: three labels this long never fit side by side at the text floor */
-.auth-tabs { display: grid; grid-template-columns: 1fr; gap: 0.45rem; margin-bottom: 1.1rem; }
-.auth-tab {
-  background: var(--ctl-fill-lo); border: 2px solid var(--ctl-fill-lo); color: var(--ctl-ink);
-  padding: 0.65rem; border-radius: 12px; font-weight: 800; font-size: max(var(--text-floor), 0.95rem); cursor: pointer;
-  font-family: 'Rubik', sans-serif;
+/* The sign-in dialog in steps (auth.js, 2026-11-24): the ways in first — Continue with wallet, Continue with email, any
+   social sign-in, Burn Verification — one under the other, full width; each way a step of its own with a Back. */
+.auth-go { width: 100%; padding-inline: 0.9rem; }
+#btn-email-go { margin-top: 0.35rem; }
+/* the page's text grows with a wide screen (19pt floor at 1280px), so the card does too: words, not a column of them */
+#auth-modal .modal-card { width: min(clamp(420px, 40vw, 600px), 100%); }
+.auth-status { margin: 0.5rem 0 0; }
+.auth-status:empty { margin: 0; }
+.auth-lead { text-align: center; margin: 0.5rem 0 0.55rem; }
+#pane-choose .w-works { margin-bottom: 0.6rem; }
+.auth-back {
+  display: inline-flex; align-items: center; gap: 0.35rem; min-height: 44px; margin: 0 0 0.5rem; padding: 0.35rem 0.9rem 0.35rem 0.6rem;
+  border: 1.5px solid var(--ink-4); border-radius: var(--r-pill, 999px); background: none; color: var(--text); cursor: pointer;
+  font-family: 'Rubik', sans-serif; font-weight: 700; font-size: max(var(--text-floor), 0.88rem);
 }
-.auth-tab.active { border-color: var(--green); color: var(--on-green); background: var(--green); }
+.auth-back:hover, .auth-back:focus-visible { border-color: var(--green); color: var(--green-bright); }
+.auth-back:focus-visible { outline: 3px solid var(--focus, var(--green-bright)); outline-offset: 2px; }
+/* the name step's "Wallet connected" line: the address in short, the whole of it in the title */
+.w-connected { margin: 0 0 0.3rem; padding: 0.55rem 0.75rem; border-radius: var(--r-2, 12px); font-weight: 700; font-size: max(var(--text-floor), 0.88rem);
+  background: color-mix(in srgb, var(--green) 10%, transparent); border: 1px solid color-mix(in srgb, var(--green) 40%, transparent); overflow-wrap: anywhere; }
+.w-addr { font-family: ui-monospace, Menlo, monospace; color: var(--green-bright); }
+/* every control in the dialog is a finger's target */
+#auth-modal .modal-x { width: 44px; height: 44px; --ava: 44px; }
+#auth-modal .auth-seg { min-height: 44px; }
+#auth-modal .linklike { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; }
+#auth-modal .w-opt { min-height: 44px; margin: 0.35rem 0; }
+#auth-modal .w-extra > summary, #auth-modal .w-works > summary { display: block; min-height: 44px; box-sizing: border-box; padding-block: 0.7rem; }
+#auth-modal .w-extra[open] > summary { padding-bottom: 0.3rem; }
+/* "Read more" is a quiet line, not a box: centred on the ways in, its words left to right once open */
+#auth-modal .auth-more { border: 0; padding: 0; margin: 0.2rem 0 0.4rem; }
+#auth-modal .auth-more > summary { text-align: center; }
+#auth-modal .addr-input[aria-invalid="true"] { border-color: var(--red); }
 .f-label { display: block; font-weight: 700; font-size: max(var(--text-floor), 0.85rem); margin: 0.7rem 0 0.3rem; }
 /* a button that used to look like a gold text link — now a small gold pill, so its black type has a ground */
 .linklike { background: var(--gold); border: none; color: var(--on-gold); font-weight: 700; cursor: pointer; font-size: max(var(--text-floor), 0.85rem); font-family: 'Rubik', sans-serif; padding: 0.35rem 0.9rem; border-radius: var(--r-pill); text-decoration: none; }
@@ -6364,3 +6389,5 @@ html.motion-off .mv-strip-win { overflow-x: auto; overscroll-behavior-x: contain
 /* the sign-in dialog's "Read more" / "How it works" folds (auth.js) — long text closed by default (owner, 2026-11-24) */
 .auth-more { margin: 0.25rem 0 0.5rem; }
 .auth-more > summary { min-height: 44px; display: flex; align-items: center; color: var(--text-dim); }
+.auth-more > summary::after { content: '▾'; margin-left: 0.35em; }
+.auth-more[open] > summary::after { content: '▴'; }

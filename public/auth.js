@@ -49,28 +49,49 @@
   modal.setAttribute('hidden', '');
   modal.innerHTML = `
   <div class="modal-backdrop" data-close></div>
-  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="auth-title" aria-describedby="auth-sub">
     <button class="modal-x" data-close aria-label="Close sign-in dialog" data-tip="Closes this dialog without signing you in">✕</button>
-    <h2 id="auth-title" class="display" style="color:var(--green-bright); text-align:center; font-size:max(var(--text-floor), 1.6rem);">Welcome to The Send 🚀</h2>
-    <p class="modal-sub">One account. Your wall, your reactions, your private wallet tracker.</p>
+    <h2 id="auth-title" class="display">Sign in or create an account 🚀</h2>
+    <p class="modal-sub" id="auth-sub">It’s free. The same buttons work whether you’re new here or coming back.</p>
 
-    <div class="auth-tabs" role="tablist" aria-label="Sign-in method" aria-orientation="vertical">
-      <button class="auth-tab active" id="tab-wallet" role="tab" aria-selected="true" aria-controls="pane-wallet" data-tip="Sign in or sign up by connecting a wallet and signing a free message">🦊 Connect wallet</button>
-      <button class="auth-tab" id="tab-burn" role="tab" aria-selected="false" aria-controls="pane-burn" data-tip="For GMGN and any wallet that can't sign: prove it by sending any amount of $SEND or ETH to the burn address">🔥 Burn Verification</button>
-      <button class="auth-tab" id="tab-email" role="tab" aria-selected="false" aria-controls="pane-email" data-tip="Sign in or sign up with an email and a password">✉️ Email</button>
+    <!-- The ways in, for new and returning people alike (owner, 2026-11-24: "as intuitive as possible all the way through
+         clicking the button to getting an account"). Nothing is asked before the wallet connects: a wallet with an account
+         signs in, a new one is asked for its @username next, in this same dialog. -->
+    <div id="pane-choose" class="auth-step">
+      <button type="button" class="btn btn-primary auth-go" id="btn-wallet-signin" data-tip="Signs you in, or starts a free account if this wallet is new here">Continue with wallet 🦊</button>
+      <p class="modal-note auth-status" id="wallet-status" aria-live="polite"></p>
+      <p class="modal-note auth-lead" id="w-lead">One free signature — no transaction, no gas.</p>
+      <details class="w-works" id="w-works" hidden><summary data-tip="Shows every wallet that works here, and how"></summary><ul class="w-works-list" aria-label="Wallets that work here"></ul></details>
+      <button type="button" class="btn btn-ghost auth-go" id="btn-email-go" data-tip="Sign in with your email or @username, or create an account with an email">Continue with email ✉️</button>
+      <div id="oauth-row" class="oauth-row" hidden>
+        <div class="or-line"><span>or continue with</span></div>
+        <div class="oauth-grid">
+          <a class="oauth-btn" id="oauth-google" href="/api/auth/google" hidden data-tip="Sends you to Google to sign in, then back here" aria-label="Continue with Google">
+            <span class="oauth-ico"><svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span><span class="oauth-name">Google</span></a>
+          <a class="oauth-btn" id="oauth-facebook" href="/api/auth/facebook" hidden data-tip="Sends you to Facebook to sign in, then back here" aria-label="Continue with Facebook">
+            <span class="oauth-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="#1877F2" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.95.93-1.95 1.89v2.25h3.32l-.53 3.49h-2.79V24C19.61 23.1 24 18.1 24 12.07z"/></svg></span><span class="oauth-name">Facebook</span></a>
+          <a class="oauth-btn oauth-x" id="oauth-x" href="/api/auth/x" hidden data-tip="Sends you to X to sign in, then back here" aria-label="Continue with X (Twitter)">
+            <span class="oauth-ico"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M18.9 1.15h3.68l-8.04 9.19L24 22.85h-7.41l-5.8-7.58-6.64 7.58H.46l8.6-9.83L0 1.15h7.6l5.24 6.93 6.06-6.93zm-1.29 19.5h2.04L6.48 3.24H4.29L17.61 20.65z"/></svg></span><span class="oauth-name">X</span></a>
+          <a class="oauth-btn" id="oauth-instagram" href="/api/auth/instagram" hidden data-tip="Sends you to Instagram to sign in, then back here" aria-label="Continue with Instagram">
+            <span class="oauth-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><defs><linearGradient id="ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".25" stop-color="#FA7E1E"/><stop offset=".5" stop-color="#D62976"/><stop offset=".75" stop-color="#962FBF"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><path fill="url(#ig-g)" d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 01-1.38-.9 3.7 3.7 0 01-.9-1.38c-.16-.42-.36-1.06-.41-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41 1.27-.06 1.65-.07 4.85-.07zm0 1.62c-3.15 0-3.52.01-4.76.07-1.15.05-1.77.24-2.19.4-.55.22-.94.47-1.35.88-.41.41-.66.8-.88 1.35-.16.42-.35 1.04-.4 2.19-.06 1.24-.07 1.61-.07 4.76s.01 3.52.07 4.76c.05 1.15.24 1.77.4 2.19.22.55.47.94.88 1.35.41.41.8.66 1.35.88.42.16 1.04.35 2.19.4 1.24.06 1.61.07 4.76.07s3.52-.01 4.76-.07c1.15-.05 1.77-.24 2.19-.4.55-.22.94-.47 1.35-.88.41-.41.66-.8.88-1.35.16-.42.35-1.04.4-2.19.06-1.24.07-1.61.07-4.76s-.01-3.52-.07-4.76c-.05-1.15-.24-1.77-.4-2.19a3.6 3.6 0 00-.88-1.35 3.6 3.6 0 00-1.35-.88c-.42-.16-1.04-.35-2.19-.4-1.24-.06-1.61-.07-4.76-.07zm0 2.76a5.46 5.46 0 110 10.92 5.46 5.46 0 010-10.92zm0 9a3.54 3.54 0 100-7.08 3.54 3.54 0 000 7.08zm6.95-9.22a1.28 1.28 0 11-2.55 0 1.28 1.28 0 012.55 0z"/></svg></span><span class="oauth-name">Instagram</span></a>
+        </div>
+        <p class="modal-note auth-terms">Making an account this way means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
+      </div>
+      <p class="modal-note bp-alt">Wallet can’t sign, like GMGN? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Opens Burn Verification: prove the wallet by sending any amount of $SEND or ETH to the burn address yourself, instead of signing">Burn Verification 🔥</button></p>
+      <details class="w-extra auth-more"><summary data-tip="Shows what signing a message does and does not do">Read more</summary><p class="modal-note">Signing proves the wallet is yours. It moves nothing, approves nothing, and never lets this site move funds. A wallet that has been here before signs you in; a new one gets a free account once you pick a @username. Making an account needs no $SEND.</p></details>
     </div>
 
-    <div id="pane-wallet" role="tabpanel" aria-labelledby="tab-wallet">
-      <div class="auth-segment" role="group" aria-label="Sign in or create an account with a wallet">
-        <button type="button" class="auth-seg active" id="wseg-login" aria-pressed="true" data-tip="Sets this up for a wallet that already has an account">Sign in</button>
-        <button type="button" class="auth-seg" id="wseg-signup" aria-pressed="false" data-tip="Switches to making a new account with your wallet — free, no invite needed">Create account</button>
-      </div>
-      <div id="w-reg" hidden>
+    <!-- A new wallet's last step (or a sign-up that brought its @username with it): the name, the optional extras, one press -->
+    <div id="pane-wallet" class="auth-step" hidden>
+      <button type="button" class="auth-back" data-back data-tip="Goes back to the ways to sign in or create an account">← Back</button>
+      <p class="w-connected" id="w-connected" hidden><span aria-hidden="true">✅</span> Wallet connected: <b class="w-addr" id="w-addr"></b></p>
+      <p class="modal-note" id="w-name-lead"></p>
+      <form id="w-form" novalidate>
         <label class="f-label" for="w-username">Pick your @username <span class="f-hint">— your public name; you can also sign in with it</span></label>
-        <input class="addr-input" id="w-username" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false">
+        <input class="addr-input" id="w-username" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false" autocapitalize="none">
         <p class="modal-note" id="w-uname-status" aria-live="polite"></p>
         <details class="w-extra" id="w-extra">
-          <summary>➕ Add an email &amp; password too <span class="f-hint">(optional)</span></summary>
+          <summary data-tip="Shows the optional email and password, a second way to sign in">➕ Add an email &amp; password too <span class="f-hint">(optional)</span></summary>
           <p class="modal-note">A second way in: sign in with your @username or email and this password, even without the wallet. Leave both empty to skip.</p>
           <label class="f-label" for="w-email">Email</label>
           <input class="addr-input" id="w-email" type="email" autocomplete="email" placeholder="you@example.com">
@@ -79,29 +100,52 @@
           <label class="f-label" for="w-pw2">Confirm password</label>
           <input class="addr-input" id="w-pw2" type="password" autocomplete="new-password" placeholder="••••••••">
         </details>
-        <label class="w-opt"><input type="checkbox" id="w-2fa"> Set up two-factor right after <span class="f-hint">(optional)</span></label>
+        <label class="w-opt"><input type="checkbox" id="w-2fa"> <span>Set up two-factor right after <span class="f-hint">(optional)</span></span></label>
         <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
-      </div>
-      <p class="modal-note" id="w-lead">Sign a free message — no transaction, no gas.</p>
-      <details class="w-extra auth-more"><summary data-tip="Shows what signing does and does not do">Read more</summary><p class="modal-note">The message proves the wallet is yours. It moves nothing, approves nothing, and never lets this site move funds. Making an account is free and needs no $SEND.</p></details>
-      <details class="w-works" id="w-works" hidden><summary data-tip="Shows every wallet that works here, and how"></summary><ul class="w-works-list" aria-label="Wallets that work here"></ul></details>
-      <button type="button" class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
-      <p class="modal-note" id="wallet-status" aria-live="polite"></p>
-      <p class="modal-note bp-alt">Wallet can’t sign (GMGN), or not on the list? <button type="button" class="linklike" id="btn-burn-alt" data-tip="Switches to Burn Verification: prove the wallet by a burn of $SEND or ETH (any amount) instead of a signature">Use Burn Verification 🔥</button></p>
+        <button type="submit" class="btn btn-primary auth-go" id="w-create" data-tip="Makes your account with this @username — nothing else to sign">Create my account ✨</button>
+      </form>
+      <p class="modal-note auth-status" id="w-create-status" aria-live="polite"></p>
     </div>
 
-    <div id="pane-burn" role="tabpanel" aria-labelledby="tab-burn" hidden>
-      <p class="modal-note">For <b>GMGN</b> or any wallet that can’t sign.</p>
+    <div id="pane-email" class="auth-step" hidden>
+      <button type="button" class="auth-back" data-back data-tip="Goes back to the ways to sign in or create an account">← Back</button>
+      <div class="auth-segment" role="group" aria-label="Sign in, or create an account with an email">
+        <button type="button" class="auth-seg active" id="seg-login" aria-pressed="true" data-tip="For an account you already have: your email or @username, and your password">Sign in</button>
+        <button type="button" class="auth-seg" id="seg-signup" aria-pressed="false" data-tip="Makes a new account with a @username, an email and a password — free">Create account</button>
+      </div>
+      <form id="email-form" novalidate>
+        <div id="reg-fields" hidden>
+          <label class="f-label" for="f-username">Pick your @username <span class="f-hint">— your public name; sign in with it or your email</span></label>
+          <input class="addr-input" id="f-username" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false" autocapitalize="none">
+          <p class="modal-note" id="uname-status" aria-live="polite"></p>
+        </div>
+        <label class="f-label" for="f-email" id="f-email-label">Email or username</label>
+        <input class="addr-input" id="f-email" type="text" autocomplete="username" placeholder="email or @handle" spellcheck="false" autocapitalize="none">
+        <label class="f-label" for="f-password" id="f-password-label">Password</label>
+        <input class="addr-input" id="f-password" type="password" autocomplete="current-password" placeholder="••••••••">
+        <div id="reg-fields2" hidden>
+          <label class="f-label" for="f-password2">Confirm password</label>
+          <input class="addr-input" id="f-password2" type="password" autocomplete="new-password" placeholder="••••••••">
+          <label class="w-opt" id="f-2fa-opt"><input type="checkbox" id="f-2fa"> <span>Set up two-factor right after <span class="f-hint">(optional)</span></span></label>
+          <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
+        </div>
+        <button class="btn btn-primary auth-go" type="submit" id="email-submit" data-tip="Signs you in with this email or @username and password">Sign in 🚪</button>
+      </form>
+      <p class="modal-note auth-status" id="email-status" aria-live="polite"></p>
+    </div>
+
+    <div id="pane-burn" class="auth-step" hidden>
+      <button type="button" class="auth-back" data-back data-tip="Goes back to the ways to sign in or create an account">← Back</button>
       <details class="w-extra auth-more"><summary data-tip="Shows how Burn Verification works, step by step">How it works</summary><p class="modal-note">Fill this in once, then send <b>any amount of $SEND or ETH</b> — as much or as little as you like — from that wallet to the burn address within an hour, from your own wallet app. This site never sends it. A burn can’t sign you in, so the email and password below are how you sign in, on any device.</p></details>
-      <div class="auth-segment" role="group" aria-label="New here, or already have an account">
-        <button type="button" class="auth-seg active" id="bseg-signup" aria-pressed="true" data-tip="Sets this up to make a new account with an email and a password">Create account</button>
-        <button type="button" class="auth-seg" id="bseg-login" aria-pressed="false" data-tip="Sets this up for an account you already have">I have an account</button>
+      <div class="auth-segment" role="group" aria-label="Sign in, or create an account, with Burn Verification">
+        <button type="button" class="auth-seg" id="bseg-login" aria-pressed="false" data-tip="For an account you already have: sign in with your email or @username, then prove the wallet">Sign in</button>
+        <button type="button" class="auth-seg active" id="bseg-signup" aria-pressed="true" data-tip="Makes a new account with an email and a password, then proves the wallet">Create account</button>
       </div>
       <form id="burn-form" novalidate>
         <p class="modal-note bp-ticket-note" id="b-ticket" hidden>🎟️ Joining takes an invite code. You’ll enter it straight after this, then your account is made and your burn step opens — what you typed here is kept while you finish the ticket.</p>
         <div id="b-reg">
           <label class="f-label" for="b-username">Pick your @username <span class="f-hint">— your public name</span></label>
-          <input class="addr-input" id="b-username" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false">
+          <input class="addr-input" id="b-username" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false" autocapitalize="none">
           <p class="modal-note" id="b-uname-status" aria-live="polite"></p>
         </div>
         <label class="f-label" for="b-email" id="b-email-label">Email</label>
@@ -115,31 +159,9 @@
         <label class="f-label" for="b-addr">The wallet you’re verifying <span class="f-hint" id="b-addr-hint">— its address, copied from GMGN or your wallet app (starts with 0x)</span></label>
         <input class="addr-input" id="b-addr" autocomplete="off" spellcheck="false" maxlength="64" placeholder="0x…">
         <p class="modal-note auth-terms" id="b-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
-        <button class="btn btn-primary" type="submit" style="width:100%;" id="burn-submit" data-tip="Makes your account (or signs you in), starts your one hour and shows where to send the burn">Create account &amp; verify 🔥</button>
+        <button class="btn btn-primary auth-go" type="submit" id="burn-submit" data-tip="Makes your account (or signs you in), starts your one hour and shows where to send the burn">Create account &amp; verify 🔥</button>
       </form>
-      <p class="modal-note" id="burn-status" aria-live="polite"></p>
-    </div>
-
-    <div id="pane-email" role="tabpanel" aria-labelledby="tab-email" hidden>
-      <div class="auth-segment" role="group" aria-label="Log in or sign up">
-        <button type="button" class="auth-seg active" id="seg-login" aria-pressed="true" data-tip="Sets the form up for an account you already have">Log in</button>
-        <button type="button" class="auth-seg" id="seg-signup" aria-pressed="false" data-tip="Switches to making a new account with an email — free, no invite needed">Sign up</button>
-      </div>
-      <form id="email-form" novalidate>
-        <div id="reg-fields" hidden>
-          <label class="f-label" for="f-username">Pick your @username <span class="f-hint">— your public name; sign in with it or your email</span></label>
-          <input class="addr-input" id="f-username" autocomplete="username" maxlength="24" placeholder="moon_goblin" spellcheck="false">
-          <p class="modal-note" id="uname-status" aria-live="polite"></p>
-          <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
-        </div>
-        <label class="f-label" for="f-email" id="f-email-label">Email or username</label>
-        <input class="addr-input" id="f-email" type="text" autocomplete="username" placeholder="you@example.com or your @handle">
-        <label class="f-label" for="f-password">Password</label>
-        <input class="addr-input" id="f-password" type="password" autocomplete="current-password" placeholder="••••••••">
-        <label class="w-opt" id="f-2fa-opt" hidden><input type="checkbox" id="f-2fa"> Set up two-factor right after <span class="f-hint">(optional)</span></label>
-        <button class="btn btn-primary" type="submit" style="width:100%;" id="email-submit" data-tip="Sends these details to sign in or make your account">Sign In 🚪</button>
-      </form>
-      <p class="modal-note" id="email-status" aria-live="polite"></p>
+      <p class="modal-note auth-status" id="burn-status" aria-live="polite"></p>
     </div>
 
     <div id="pane-2fa" hidden>
@@ -184,42 +206,33 @@
       <p class="modal-note" id="cf-status" aria-live="polite"></p>
     </div>
 
-    <div id="oauth-row" class="oauth-row" hidden>
-      <div class="or-line"><span>or continue with</span></div>
-      <div class="oauth-grid">
-        <a class="oauth-btn" id="oauth-google" href="/api/auth/google" hidden data-tip="Sends you to Google to sign in, then back here" aria-label="Continue with Google">
-          <span class="oauth-ico"><svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg></span><span class="oauth-name">Google</span></a>
-        <a class="oauth-btn" id="oauth-facebook" href="/api/auth/facebook" hidden data-tip="Sends you to Facebook to sign in, then back here" aria-label="Continue with Facebook">
-          <span class="oauth-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="#1877F2" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.95.93-1.95 1.89v2.25h3.32l-.53 3.49h-2.79V24C19.61 23.1 24 18.1 24 12.07z"/></svg></span><span class="oauth-name">Facebook</span></a>
-        <a class="oauth-btn oauth-x" id="oauth-x" href="/api/auth/x" hidden data-tip="Sends you to X to sign in, then back here" aria-label="Continue with X (Twitter)">
-          <span class="oauth-ico"><svg viewBox="0 0 24 24" width="17" height="17" aria-hidden="true"><path fill="currentColor" d="M18.9 1.15h3.68l-8.04 9.19L24 22.85h-7.41l-5.8-7.58-6.64 7.58H.46l8.6-9.83L0 1.15h7.6l5.24 6.93 6.06-6.93zm-1.29 19.5h2.04L6.48 3.24H4.29L17.61 20.65z"/></svg></span><span class="oauth-name">X</span></a>
-        <a class="oauth-btn" id="oauth-instagram" href="/api/auth/instagram" hidden data-tip="Sends you to Instagram to sign in, then back here" aria-label="Continue with Instagram">
-          <span class="oauth-ico"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><defs><linearGradient id="ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#FEDA75"/><stop offset=".25" stop-color="#FA7E1E"/><stop offset=".5" stop-color="#D62976"/><stop offset=".75" stop-color="#962FBF"/><stop offset="1" stop-color="#4F5BD5"/></linearGradient></defs><path fill="url(#ig-g)" d="M12 2.16c3.2 0 3.58.01 4.85.07 1.17.05 1.8.25 2.23.41.56.22.96.48 1.38.9.42.42.68.82.9 1.38.16.42.36 1.06.41 2.23.06 1.27.07 1.65.07 4.85s-.01 3.58-.07 4.85c-.05 1.17-.25 1.8-.41 2.23-.22.56-.48.96-.9 1.38-.42.42-.82.68-1.38.9-.42.16-1.06.36-2.23.41-1.27.06-1.65.07-4.85.07s-3.58-.01-4.85-.07c-1.17-.05-1.8-.25-2.23-.41a3.7 3.7 0 01-1.38-.9 3.7 3.7 0 01-.9-1.38c-.16-.42-.36-1.06-.41-2.23-.06-1.27-.07-1.65-.07-4.85s.01-3.58.07-4.85c.05-1.17.25-1.8.41-2.23.22-.56.48-.96.9-1.38.42-.42.82-.68 1.38-.9.42-.16 1.06-.36 2.23-.41 1.27-.06 1.65-.07 4.85-.07zm0 1.62c-3.15 0-3.52.01-4.76.07-1.15.05-1.77.24-2.19.4-.55.22-.94.47-1.35.88-.41.41-.66.8-.88 1.35-.16.42-.35 1.04-.4 2.19-.06 1.24-.07 1.61-.07 4.76s.01 3.52.07 4.76c.05 1.15.24 1.77.4 2.19.22.55.47.94.88 1.35.41.41.8.66 1.35.88.42.16 1.04.35 2.19.4 1.24.06 1.61.07 4.76.07s3.52-.01 4.76-.07c1.15-.05 1.77-.24 2.19-.4.55-.22.94-.47 1.35-.88.41-.41.66-.8.88-1.35.16-.42.35-1.04.4-2.19.06-1.24.07-1.61.07-4.76s-.01-3.52-.07-4.76c-.05-1.15-.24-1.77-.4-2.19a3.6 3.6 0 00-.88-1.35 3.6 3.6 0 00-1.35-.88c-.42-.16-1.04-.35-2.19-.4-1.24-.06-1.61-.07-4.76-.07zm0 2.76a5.46 5.46 0 110 10.92 5.46 5.46 0 010-10.92zm0 9a3.54 3.54 0 100-7.08 3.54 3.54 0 000 7.08zm6.95-9.22a1.28 1.28 0 11-2.55 0 1.28 1.28 0 012.55 0z"/></svg></span><span class="oauth-name">Instagram</span></a>
-      </div>
-      <p class="modal-note auth-terms">Making an account this way means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
-    </div>
-    <!-- The way in for somebody who was handed a code. Without it, a person holding an invite has to
-         guess that "Sign up" is what opens the ticket — and this line also tells everyone else, in one
-         sentence, that they can read the whole site without any of this. -->
-    <p class="auth-invite">New here? Pick <b>Create account</b> — it's free, no invite needed. Got a code from a member? <button type="button" class="linklike" id="auth-ticket" data-tip="Closes this and opens the invite code panel, so the member who sent it is credited">Enter it</button> so they're credited.</p>
+    <!-- The way in for somebody who was handed a code, so the member who sent it is credited. Nobody needs one to join
+         (unless the operator turns INVITE_REQUIRED on, when the ticket opens by itself at the first sign-up step). -->
+    <p class="auth-invite" id="auth-invite">Got a code from a member? <button type="button" class="linklike" id="auth-ticket" data-tip="Closes this and opens the invite code box, so the member who sent it is credited">Enter it</button> so they’re credited.</p>
   </div>`;
 
   let lastFocus = null, releaseTrap = null, confirmReject = null, prevOverflow = '';
   function openModal() {
-    lastFocus = document.activeElement;
-    // a confirm raised from inside the ticket must hand the scroll lock back to it, not clear it
-    if (modal.hasAttribute('hidden')) prevOverflow = document.body.style.overflow;
+    /* Opened again while it is already up (a "confirm it's you" raised from it, a sign-up handed to it): the page's focus
+       and scroll lock were taken the first time — taking them again would hand back this dialog's own button, or its lock. */
+    const wasHidden = modal.hasAttribute('hidden');
+    if (wasHidden) {
+      lastFocus = document.activeElement;
+      prevOverflow = document.body.style.overflow;   // a confirm raised from inside the ticket must hand the scroll lock back to it, not clear it
+    }
     modal.removeAttribute('hidden');
     document.body.style.overflow = 'hidden';
-    if (AUTH._reset2fa) AUTH._reset2fa();
-    if (AUTH._resetModes) AUTH._resetModes();   // sign-in by default; openSignup switches both panes after this
-    modal.querySelector('.auth-tab.active').focus();
+    if (AUTH._reset2fa) AUTH._reset2fa();       // the headings, and the ways in
+    if (AUTH._resetModes) AUTH._resetModes();   // the forms on Sign in; openSignup switches them to Create account after this
+    const first = modal.querySelector('#btn-wallet-signin'); if (first) first.focus();   // the first way in, ready for Enter
+    if (releaseTrap) releaseTrap();             // never two traps on one card
     releaseTrap = window.trapFocus ? window.trapFocus(modal.querySelector('.modal-card')) : null;
-    document.dispatchEvent(new CustomEvent('jsi:modalopen'));
+    if (wasHidden) document.dispatchEvent(new CustomEvent('jsi:modalopen'));
   }
   function closeModal() {
+    if (modal.hasAttribute('hidden') && !confirmReject) return;   // already closed (a late wallet answer, say): nothing to hand back twice
     modal.setAttribute('hidden', '');
-    for (const id of ['f-2fa-pw', 'f-totp', 'cf-pw', 'cf-code', 'w-pw', 'w-pw2', 'b-pw', 'b-pw2']) { const i = modal.querySelector('#' + id); if (i) i.value = ''; }   // a password typed then cancelled must not wait in a hidden field
+    for (const id of ['f-2fa-pw', 'f-totp', 'cf-pw', 'cf-code', 'w-pw', 'w-pw2', 'b-pw', 'b-pw2', 'f-password', 'f-password2']) { const i = modal.querySelector('#' + id); if (i) i.value = ''; }   // a password typed then cancelled must not wait in a hidden field
     document.body.style.overflow = prevOverflow;
     if (releaseTrap) { releaseTrap(); releaseTrap = null; }
     if (lastFocus) lastFocus.focus();
@@ -305,15 +318,11 @@
   // Does this visitor already hold a ticket? Cached for the page's life — it only ever changes
   // through the ticket itself, which updates this when it does.
   let gateState = null;
-  /* How many of the sign-up segment clicks that follow may skip the "no ticket → close and reopen
-     the ticket" bounce. openSignup from the ticket sets this to 2 (email segment + wallet segment).
-     A stale cached "no ticket" used to close the dialog onto the homepage and reopen the ticket,
-     and the wallet signature never started. */
-  let signupTrusted = 0;
-  function signupTrust() {
-    if (signupTrusted > 0) { signupTrusted--; return true; }
-    return false;
-  }
+  /* A sign-up the site opened itself (startJoin, once it has read the pass; the ticket, after its last step) is trusted:
+     choosing Create account in it never re-reads the pass and bounces to the ticket. A stale cached "no ticket" once closed
+     the dialog onto the homepage and reopened the ticket, in a loop, and the wallet signature never started. openModal
+     clears it, so a dialog opened only to sign in still asks for the ticket where INVITE_REQUIRED=1 needs one. */
+  let joinTrusted = false;
   async function gate(force) {
     if (gateState && !force) return gateState;
     try { gateState = await api('/api/gate/state'); }
@@ -321,61 +330,43 @@
     return gateState;
   }
   AUTH.gate = gate;
-  /* The one function the rest of the site calls to start a sign-up. A visitor holding a ticket goes
-     straight to the account modal; one without sees the ticket first. */
+  /* The one function the rest of the site calls to start a sign-up. It is the same dialog as signing in — the ways in
+     first — with its forms set to Create account. opts: tab ('wallet' | 'email' | 'burn'); username, email, password,
+     password2 and setup2fa as typed on the ticket; connect (press the wallet button at once); fromTicket. */
   AUTH.openSignup = function (opts) {
     opts = opts || {};
     openModal();
-    // Burn Verification has its own sign-up (an email and a password, and the wallet): a sign-up opened on it stays there
-    if (opts && opts.tab === 'burn') { const t = modal.querySelector('#tab-burn'); if (t) t.click(); }
+    joinTrusted = true;
+    if (AUTH._emailMode) AUTH._emailMode(true);   // the email form on Create account, not Sign in
     if (AUTH._burnMode) AUTH._burnMode(true);
-    // The ticket step already proved the pass. Those segment clicks must not re-read a stale "no ticket"
-    // and close this dialog — that put the homepage back on screen and opened the ticket again, in a loop,
-    // instead of asking the wallet to sign.
-    if (opts.fromTicket) signupTrusted = 2;
-    const seg = modal.querySelector('#seg-signup');
-    if (seg) seg.click();
-    const wseg = modal.querySelector('#wseg-signup');   // the wallet tab too: @username first, then the wallet
-    if (wseg) wseg.click();
-    if (opts && opts.tab === 'wallet') { const t = modal.querySelector('#tab-wallet'); if (t) t.click(); }
-    if (opts && opts.tab === 'email') { const t = modal.querySelector('#tab-email'); if (t) t.click(); }
-    /* openModal focused the tab that was selected as it opened. A click does not move focus, so after switching to
-       Email the focus sat on the unselected Wallet tab, and Enter or Space took a keyboard user back to the wallet. */
-    const picked = ['wallet', 'burn', 'email'].includes(opts.tab) && modal.querySelector('#tab-' + opts.tab);
-    if (picked && picked.classList.contains('active')) picked.focus();
     /* The ticket asks "Set up two-factor right after?" on its own last step, because with connect the press below
-       is made at once: the box in this panel is read in that same instant and could never be ticked. */
+       is made at once: the box in this dialog is read in that same instant and could never be ticked. */
     if (opts.setup2fa !== undefined) {
       for (const id of ['w-2fa', 'f-2fa']) { const b = modal.querySelector('#' + id); if (b) b.checked = !!opts.setup2fa; }
     }
-    const user = modal.querySelector('#w-username');
-    if (user && opts.username) user.value = opts.username;
-    const emailUser = modal.querySelector('#f-username');
-    if (emailUser && opts.username && opts.tab === 'email') emailUser.value = opts.username;
-    if (opts.email) {
-      const em = modal.querySelector('#w-email'), pw = modal.querySelector('#w-pw'), pw2 = modal.querySelector('#w-pw2');
-      if (em) em.value = opts.email;
-      if (pw) pw.value = opts.password || '';
-      if (pw2) pw2.value = opts.password2 || '';
+    const put = (id, v) => { const el = modal.querySelector('#' + id); if (el) el.value = v || ''; };
+    if (opts.username) put(opts.tab === 'email' ? 'f-username' : 'w-username', opts.username);
+    if (opts.email && opts.tab === 'email') { put('f-email', opts.email); put('f-password', opts.password); put('f-password2', opts.password2); }
+    else if (opts.email) {
+      put('w-email', opts.email); put('w-pw', opts.password); put('w-pw2', opts.password2);
       const ex = modal.querySelector('#w-extra'); if (ex) ex.open = true;
-      if (opts.tab === 'email') {
-        const fe = modal.querySelector('#f-email'); if (fe) fe.value = opts.email;
-        const fp = modal.querySelector('#f-password'); if (fp && opts.password) fp.value = opts.password;
-      }
     }
-    // The name is already chosen: go straight to the read-only signature. Email stays optional.
+    /* Which step: Burn Verification and Email have forms of their own; a sign-up that brought its @username is on the name
+       step; anything else is on the ways in. Going there moves the focus to its first sensible control (a click does not). */
+    const to = opts.tab === 'burn' ? 'burn' : opts.tab === 'email' ? 'email' : opts.username ? 'wallet' : 'choose';
+    if (AUTH._goStep) AUTH._goStep(to);
+    // The name is already chosen: go straight to the read-only signature — one picker, one signature. Email stays optional.
     if (opts.connect) {
-      const go = modal.querySelector('#btn-wallet-signin');
+      const go = modal.querySelector(opts.username ? '#w-create' : '#btn-wallet-signin');
       if (go) go.click();
     }
   };
-  // the sign-in panel, on Burn Verification, set for a new account (join) or an existing one
+  // the sign-in dialog, on Burn Verification, set for a new account (join) or an existing one
   AUTH.openBurnSignup = function (join) {
     if (AUTH.user) { AUTH.openBurnProof({ from: 'signin' }); return; }
     if (modal.hasAttribute('hidden')) openModal();
-    if (AUTH._showBurnTab) AUTH._showBurnTab();
     if (AUTH._burnMode) AUTH._burnMode(join !== false);
-    const f = modal.querySelector(join !== false ? '#b-username' : '#b-email'); if (f) f.focus();
+    if (AUTH._showBurnTab) AUTH._showBurnTab();   // shows it, focused on its first field
   };
   AUTH.startJoin = async function (opts) {
     const g = await gate();
@@ -413,56 +404,94 @@
       closeModal();
     });
 
-    // tabs
-    // the three ways in, in this order (owner, 2026-10-20: "sign-in by connecting wallet, Burn Verification, or Email")
-    const tabs = { wallet: modal.querySelector('#tab-wallet'), burn: modal.querySelector('#tab-burn'), email: modal.querySelector('#tab-email') };
-    const panes = { wallet: modal.querySelector('#pane-wallet'), burn: modal.querySelector('#pane-burn'), email: modal.querySelector('#pane-email') };
-    const hidePanes = () => { for (const k of Object.keys(panes)) panes[k].hidden = true; };
-    for (const key of Object.keys(tabs)) {
-      tabs[key].addEventListener('click', () => {
-        for (const k of Object.keys(tabs)) {
-          tabs[k].classList.toggle('active', k === key);
-          tabs[k].setAttribute('aria-selected', String(k === key));
-          panes[k].hidden = k !== key;
-        }
-      });
-    }
-    // the arrow keys move between the tabs, as a tablist promises — click alone left a keyboard user on the first
-    modal.querySelector('.auth-tabs').addEventListener('keydown', e => {
-      const step = (e.key === 'ArrowDown' || e.key === 'ArrowRight') ? 1 : (e.key === 'ArrowUp' || e.key === 'ArrowLeft') ? -1 : 0;
-      if (!step) return;
-      const order = Object.keys(tabs).map((k) => tabs[k]), i = order.indexOf(e.target);
-      if (i < 0) return;
-      const other = order[(i + step + order.length) % order.length];
-      e.preventDefault(); other.click(); other.focus();
-    });
     // one writer for the status lines, so a failure's red is dropped again by the next progress message
     const setStatus = (el, text, bad) => { el.textContent = text; el.classList.toggle('is-err', !!bad); if (bad && window.SFX) SFX.play('error'); };
+    const q = (sel) => modal.querySelector(sel);
 
-    // email log-in / sign-up: an explicit segmented choice, DEFAULTING TO LOG IN (never sign-up-first)
-    let regMode = false;
-    const segLogin = modal.querySelector('#seg-login'), segSignup = modal.querySelector('#seg-signup');
+    /* ═══ one dialog, in steps ═══════════════════════════════════════════════════════════════════════
+       Owner, 2026-11-24: "Update the login/sign-up process to be as intuitive as possible all the way through clicking the
+       button to getting an account." It was three tabs, each with its own pair of buttons labelled three different ways
+       (Sign in | Create account, Create account | I have an account, Log in | Sign up): six choices before anything
+       happened. Now the ways in come first, the same for new and returning people — Continue with wallet, Continue with
+       email, any social sign-in, and Burn Verification for a wallet that cannot sign — and each way is a step of its own
+       with a Back to the ways in. Two-factor and "confirm it's you" are steps of the same card. One step shows at a time. */
+    const steps = { choose: q('#pane-choose'), wallet: q('#pane-wallet'), email: q('#pane-email'), burn: q('#pane-burn'), '2fa': q('#pane-2fa'), confirm: q('#pane-confirm') };
+    let step = 'choose';
+    // the headings the steps rewrite, captured once so the ways in (and a reset) can put the dialog's own back
+    const heads = ['#auth-title', '.modal-sub', '#twofa-password .modal-note', '#twofa-totp .modal-note'].map(s => q(s));
+    const headText = heads.map(el => el.textContent);
+    const STEP_HEADS = {
+      email: ['With your email ✉️', ''],
+      wallet: ['Create your account ✨', ''],
+      burn: ['Prove it by a burn 🔥', 'Burn Verification — for GMGN, or any wallet that can’t sign.'],
+    };
+    // the wallet sign-in's state, read by Back as well as by the wallet's own handlers below
+    let pendingSignup = null, pendingAddr = '', wRun = 0;
+    function showStep(name) {
+      step = name;
+      for (const k of Object.keys(steps)) steps[k].hidden = k !== name;
+      q('#auth-invite').hidden = name !== 'choose';   // with the ways in only: past them it would throw away what was typed
+      if (name !== '2fa' && name !== 'confirm') {   // those two write their own headings
+        const h = STEP_HEADS[name];
+        heads[0].textContent = h ? h[0] : headText[0];
+        heads[1].textContent = h ? h[1] : headText[1];
+      }
+      heads[1].hidden = !heads[1].textContent;
+      if (name === 'burn') paintBurnTicket();
+    }
+    // a step's first sensible control: the ways in start on the wallet; a form on its first empty field, or its button
+    function focusStep(name) {
+      if (name === 'choose') { q('#btn-wallet-signin').focus(); return; }
+      const pane = steps[name];
+      const shown = (el) => !!el && !el.disabled && el.getClientRects().length > 0;
+      const empty = [...pane.querySelectorAll('input.addr-input')].find((el) => shown(el) && !el.value);
+      const target = empty || pane.querySelector('.auth-go');
+      try { (shown(target) ? target : pane.querySelector('[data-back]') || q('#btn-wallet-signin')).focus(); } catch {}
+    }
+    function goStep(name) { showStep(name); focusStep(name); }
+    AUTH._goStep = goStep;
+    // Back: to the ways in, focused on the way this step came from. A wallet proof waiting for its name is let go.
+    const cameFrom = { wallet: '#btn-wallet-signin', email: '#btn-email-go', burn: '#btn-burn-alt' };
+    function backToChoose() {
+      const from = step;
+      if (from === 'wallet') { wRun++; pendingSignup = null; pendingAddr = ''; }
+      for (const id of ['wallet-status', 'w-create-status', 'email-status', 'burn-status']) setStatus(q('#' + id), '');
+      showStep('choose');
+      const b = q(cameFrom[from] || '#btn-wallet-signin'); if (b) b.focus();
+    }
+    modal.querySelectorAll('[data-back]').forEach((b) => b.addEventListener('click', backToChoose));
+    q('#btn-email-go').addEventListener('click', () => goStep('email'));
+
+    // email: one switch, Sign in or Create account — on Sign in unless the dialog was opened to make an account (openSignup)
+    let regMode = false, emailBusy = false;
+    const segLogin = q('#seg-login'), segSignup = q('#seg-signup');
     function setRegMode(v) {
       regMode = v;
-      modal.querySelector('#reg-fields').hidden = !regMode;
-      modal.querySelector('#email-submit').textContent = regMode ? 'Create Account ✨' : 'Sign In 🚪';
-      modal.querySelector('#f-password').autocomplete = regMode ? 'new-password' : 'current-password';
-      modal.querySelector('#f-email-label').textContent = regMode ? 'Email' : 'Email or username';
-      modal.querySelector('#f-email').type = regMode ? 'email' : 'text';
-      modal.querySelector('#f-email').autocomplete = regMode ? 'email' : 'username';
-      modal.querySelector('#f-email').placeholder = regMode ? 'you@example.com' : 'you@example.com or your @handle';
+      q('#reg-fields').hidden = !regMode;
+      q('#reg-fields2').hidden = !regMode;   // confirm password, the two-factor box, the terms line
+      const go = q('#email-submit');
+      go.textContent = regMode ? 'Create account ✨' : 'Sign in 🚪';
+      go.setAttribute('data-tip', regMode ? 'Makes your account with this @username, email and password' : 'Signs you in with this email or @username and password');
+      q('#f-password').autocomplete = regMode ? 'new-password' : 'current-password';
+      q('#f-password-label').innerHTML = regMode ? 'Password <span class="f-hint">(8+ characters)</span>' : 'Password';
+      q('#f-email-label').textContent = regMode ? 'Email' : 'Email or username';
+      const fe = q('#f-email');
+      fe.type = regMode ? 'email' : 'text';
+      fe.autocomplete = regMode ? 'email' : 'username';
+      fe.placeholder = regMode ? 'you@example.com' : 'email or @handle';
       segLogin.classList.toggle('active', !regMode); segLogin.setAttribute('aria-pressed', String(!regMode));
       segSignup.classList.toggle('active', regMode); segSignup.setAttribute('aria-pressed', String(regMode));
-      modal.querySelector('#f-2fa-opt').hidden = !regMode;
-      modal.querySelector('#email-status').textContent = '';
+      for (const id of ['f-username', 'f-email', 'f-password', 'f-password2']) q('#' + id).removeAttribute('aria-invalid');
+      setStatus(q('#email-status'), '');
     }
-    const ticketLink = modal.querySelector('#auth-ticket');
+    AUTH._emailMode = setRegMode;
+    const ticketLink = q('#auth-ticket');
     if (ticketLink) ticketLink.addEventListener('click', () => { closeModal(); openInvite({ code: true }); });
-    const burnAlt = modal.querySelector('#btn-burn-alt');
-    if (burnAlt) burnAlt.addEventListener('click', () => { tabs.burn.click(); tabs.burn.focus(); });
+    const burnAlt = q('#btn-burn-alt');
+    if (burnAlt) burnAlt.addEventListener('click', () => goStep('burn'));
     AUTH._showBurnTab = () => {
-      if (modal.querySelector('.auth-tabs').hidden) return false;   // a two-factor step or a confirm is up: it is not the moment to switch
-      tabs.burn.click(); tabs.burn.focus();   // the picker that sent us here handed focus back to a button this hides
+      if (step === '2fa' || step === 'confirm') return false;   // a two-factor step or a confirm is up: it is not the moment to switch
+      goStep('burn');   // the picker that sent us here handed focus back to a button this hides: it goes to the form instead
       return true;
     };
     /* ═══ Burn Verification: one form ════════════════════════════════════════════════════════════
@@ -489,7 +518,7 @@
       bSegLogin.classList.toggle('active', !v); bSegLogin.setAttribute('aria-pressed', String(!v));
       const em = bq('b-email');
       bq('b-email-label').textContent = v ? 'Email' : 'Email or username';
-      em.type = v ? 'email' : 'text'; em.autocomplete = v ? 'email' : 'username'; em.placeholder = v ? 'you@example.com' : 'you@example.com or your @handle';
+      em.type = v ? 'email' : 'text'; em.autocomplete = v ? 'email' : 'username'; em.placeholder = v ? 'you@example.com' : 'email or @handle';
       bq('b-pw-label').innerHTML = v ? 'Password <span class="f-hint">(8+ characters)</span>' : 'Password';
       bq('b-pw').autocomplete = v ? 'new-password' : 'current-password';
       bq('burn-submit').textContent = v ? 'Create account & verify 🔥' : 'Sign in & verify 🔥';
@@ -501,7 +530,6 @@
     AUTH._burnMode = setBurnMode;
     bSegSignup.addEventListener('click', () => setBurnMode(true));
     bSegLogin.addEventListener('click', () => setBurnMode(false));
-    tabs.burn.addEventListener('click', () => paintBurnTicket());
     // the same live availability check as the other sign-up forms
     let bUnameTimer;
     bq('b-username').addEventListener('input', (e) => {
@@ -520,7 +548,7 @@
     function resumeBurnForm() {
       const p = burnPending; burnPending = null; clearTimeout(burnPendingT);
       if (modal.hasAttribute('hidden')) openModal();
-      tabs.burn.click(); setBurnMode(true);
+      setBurnMode(true); showStep('burn');
       if (!p) { burnFail('your ticket is ready — type your password again (twice) and press Create account to carry on', 'b-pw'); return; }
       bq('b-username').value = p.username; bq('b-email').value = p.email; bq('b-pw').value = p.pw; bq('b-pw2').value = p.pw2; bq('b-addr').value = p.address;
       burnSubmit();
@@ -611,29 +639,29 @@
     }
     bq('burn-form').addEventListener('submit', (e) => { e.preventDefault(); burnSubmit(); });
     /* The wallets that work here, named on the sign-in and sign-up screen itself (owner, 2026-10-20: "I don't see all the new
-       wallets in the sign-up screen"): the best-known few in the line, every one of them a press away. Drawn from the same
-       registry the picker uses (WALLET.known), so the two can never disagree; the wallet button then opens that full list. */
+       wallets in the sign-up screen"): every one of them a press away, under the wallet button. The line itself stays short
+       — how many, and GMGN by a burn (owner, 2026-11-24: long text behind a drop-down). Drawn from the same registry the
+       picker uses (WALLET.known), so the two can never disagree; the wallet button then opens that full list. */
     const works = modal.querySelector('#w-works');
     if (works && window.WALLET && WALLET.known) {
       const all = WALLET.known(), signing = all.filter((k) => !k.burn), burnOnly = all.filter((k) => k.burn);
-      const lead = signing.slice(0, 5).map((k) => k.name);
       // the wallets that sign in by a signature, counted as such; GMGN (no signature here) named apart, with how it joins
-      works.querySelector('summary').textContent = 'Works with ' + signing.length + ' wallets — ' + lead.join(', ') + ' and ' + (signing.length - lead.length) + ' more' + (burnOnly.length ? ', plus ' + burnOnly.map((k) => k.name).join(', ') + ' by Burn Verification' : '');
+      works.querySelector('summary').textContent = 'Works with ' + signing.length + ' wallets' + (burnOnly.length ? ', and ' + burnOnly.map((k) => k.name).join(', ') + ' by a burn' : '') + ' — see which';
       const esc2 = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
       works.querySelector('.w-works-list').innerHTML = all.map((k) => '<li><span aria-hidden="true">' + esc2(k.emoji) + '</span> ' + esc2(k.name) + (k.burn ? ' <small>· by Burn Verification</small>' : k.chain ? ' <small>· ships Robinhood Chain</small>' : '') + '</li>').join('');
       works.hidden = false;
     }
     segLogin.addEventListener('click', () => setRegMode(false));
-    /* Choosing "Sign up" is the moment the ticket is needed, so that is where it appears — before
-       anyone fills in a form that was always going to be refused at the end of it. Someone who
-       already holds a ticket never sees it. */
+    /* Where INVITE_REQUIRED=1 asks for a ticket, choosing Create account is the moment it is needed, so that is where it
+       appears — before anyone fills in a form that was always going to be refused at the end of it. Someone who already
+       holds a ticket never sees it, and nobody does on open sign-up (the pass is always there). */
     segSignup.addEventListener('click', async () => {
       setRegMode(true);
-      if (signupTrust()) return;   // the ticket just handed us here — do not bounce back to it
+      if (joinTrusted) return;   // the site opened this to make an account (startJoin read the pass, or the ticket handed over): no bounce back
       const g = await gate(true);
       if (!g.signedIn && !g.access) { closeModal(); openInvite(); }
     });
-    setRegMode(false); // login-first
+    setRegMode(false);   // Sign in until the dialog is opened to make an account
 
     // live username availability
     let unameTimer;
@@ -677,11 +705,10 @@
     }
 
     function show2fa(j) {
-      // hide tabs + panes, show the challenge
-      modal.querySelector('.auth-tabs').hidden = true;
-      hidePanes();
-      const pane = modal.querySelector('#pane-2fa');
-      pane.hidden = false;
+      // the ways in step aside for the challenge, in the same card (its headings first: the step shows the line under the title only when it has words)
+      heads[0].textContent = 'Almost in 🔐';
+      heads[1].textContent = 'One more check to finish signing in.';
+      showStep('2fa');
       modal.querySelector('#twofa-totp').hidden = j.twofa !== 'totp';
       modal.querySelector('#twofa-wallet').hidden = j.twofa !== 'wallet';
       modal.querySelector('#twofa-password').hidden = j.twofa !== 'password';
@@ -711,6 +738,7 @@
         };
         input.onkeydown = ev => { if (ev.key === 'Enter') modal.querySelector('#totp-submit').click(); };
       } else {
+        modal.querySelector('#wallet2fa-submit').focus();   // the step's one control: the ways in that had the focus are hidden now
         modal.querySelector('#wallet2fa-submit').onclick = async () => {
           try {
             status.textContent = 'Choose your wallet… 👛';
@@ -733,17 +761,11 @@
     // show2fa lives in this DOMContentLoaded closure; the OAuth pickup at the bottom of the file runs
     // outside it, so expose it the same way _reset2fa is exposed
     AUTH._show2fa = show2fa;
-    // the headings confirm mode rewrites (below), captured once so a reset can put the sign-in ones back
-    const heads = ['#auth-title', '.modal-sub', '#twofa-password .modal-note', '#twofa-totp .modal-note'].map(s => modal.querySelector(s));
-    const headText = heads.map(el => el.textContent);
+    // back to the ways in, with the dialog's own headings (confirm mode and two-factor rewrite them)
     AUTH._reset2fa = function () {
       modal.classList.remove('is-confirm');
       heads.forEach((el, i) => { el.textContent = headText[i]; });
-      modal.querySelector('.auth-invite').hidden = false;
-      modal.querySelector('.auth-tabs').hidden = false;
-      modal.querySelector('#pane-2fa').hidden = true;
-      modal.querySelector('#pane-confirm').hidden = true;
-      for (const k of Object.keys(panes)) panes[k].hidden = !tabs[k].classList.contains('active');
+      showStep('choose');
     };
 
     /* The same masked pane, in a CONFIRM mode. A credential change made elsewhere (linking a wallet,
@@ -758,10 +780,7 @@
         heads[0].textContent = 'Confirm it’s you 🔐';
         heads[1].textContent = note || 'Confirm this change';
         heads[pw ? 2 : 3].textContent = pw ? '🔐 Enter your account password to confirm.' : '🔐 Enter the 6-digit code from your authenticator app to confirm.';
-        modal.querySelector('.auth-tabs').hidden = true;
-        modal.querySelector('.auth-invite').hidden = true;   // "new here?" is not a question for someone already in
-        hidePanes();
-        modal.querySelector('#pane-2fa').hidden = false;
+        showStep('2fa');   // without the ways in, or "got a code?" — that is not a question for someone already in
         modal.querySelector('#twofa-totp').hidden = pw;
         modal.querySelector('#twofa-wallet').hidden = true;
         modal.querySelector('#twofa-password').hidden = !pw;
@@ -795,12 +814,7 @@
         modal.classList.add('is-confirm');
         heads[0].textContent = 'Confirm it’s you 🔐';
         heads[1].textContent = 'Once — then every security setting on this device is unlocked for ' + (need.minutes || 30) + ' minutes.';
-        modal.querySelector('.auth-tabs').hidden = true;
-        modal.querySelector('.auth-invite').hidden = true;
-        hidePanes();
-        modal.querySelector('#pane-2fa').hidden = true;
-        const pane = modal.querySelector('#pane-confirm');
-        pane.hidden = false;
+        showStep('confirm');
         const q = (id) => modal.querySelector('#' + id);
         const reason = String(note || '').replace(/^.*?confirm it’s you first\s*[—-]?\s*/i, '');
         q('cf-lead').textContent = reason && !/^to\s/i.test(note || '') ? reason.charAt(0).toUpperCase() + reason.slice(1) + (/[.!?]$/.test(reason) ? '' : '.') : 'This change needs you to confirm it’s you.';
@@ -868,67 +882,93 @@
       });
     };
 
-    modal.querySelector('#email-form').addEventListener('submit', async e => {
+    /* An error is said beside the button that was pressed, and the focus goes to the field it is about (its fold opened),
+       so it is never below the fold unseen. Which field: the check's own, or read from the refusal's words. */
+    const NAME_RE = /^[a-zA-Z0-9_.-]{3,24}$/, EMAIL_RE = /^[^@\s]+@[^@\s]+\.[^@\s]+$/;
+    const fErr = (msg, field) => Object.assign(new Error(msg), { field });
+    const fieldOf = (msg, ids) => /username|@/i.test(msg) ? ids.user : /email/i.test(msg) ? ids.email : /passwords? don|match/i.test(msg) ? ids.pw2 : /password|credentials/i.test(msg) ? ids.pw : null;
+    function fieldFail(status, msg, field, fallback) {
+      setStatus(status, '⚠️ ' + msg, true);
+      const pane = status.closest('.auth-step') || modal;
+      pane.querySelectorAll('[aria-invalid]').forEach((el) => el.removeAttribute('aria-invalid'));
+      const f = field && q('#' + field);
+      const fold = f && f.closest('details'); if (fold) fold.open = true;
+      if (f && !f.closest('[hidden]')) { f.setAttribute('aria-invalid', 'true'); f.focus(); }
+      else if (fallback) fallback.focus();
+      try { status.scrollIntoView({ block: 'nearest' }); } catch {}
+    }
+
+    q('#email-form').addEventListener('submit', async e => {
       e.preventDefault();
-      const status = modal.querySelector('#email-status');
-      setStatus(status, '…');
+      if (emailBusy) return;
+      const status = q('#email-status');
+      const v = { username: q('#f-username').value.trim(), email: q('#f-email').value.trim(), pw: q('#f-password').value, pw2: q('#f-password2').value };
       try {
-        const body = { password: modal.querySelector('#f-password').value };
+        // checked here first: a typo is said beside the button, on its field, before anything is sent
         if (regMode) {
-          body.username = modal.querySelector('#f-username').value.trim();
-          body.email = modal.querySelector('#f-email').value;
+          if (!NAME_RE.test(v.username)) throw fErr('pick a @username: 3–24 letters, numbers, _ . -', 'f-username');
+          if (!EMAIL_RE.test(v.email)) throw fErr('enter a valid email — with your password, it’s how you sign in', 'f-email');
+          if (v.pw.length < 8) throw fErr('the password needs at least 8 characters', 'f-password');
+          if (v.pw !== v.pw2) throw fErr('the two passwords don’t match', 'f-password2');
         } else {
-          body.identifier = modal.querySelector('#f-email').value;
+          if (!v.email) throw fErr('enter your email or @username', 'f-email');
+          if (!v.pw) throw fErr('enter your password', 'f-password');
         }
+        emailBusy = true;
+        setStatus(status, regMode ? 'Making your account… ✨' : 'Signing in…');
+        const body = regMode ? { username: v.username, email: v.email, password: v.pw } : { identifier: v.email, password: v.pw };
         const j = await api(regMode ? '/api/auth/register' : '/api/auth/login', { method: 'POST', body });
         setStatus(status, '');
         if (j.twofa) { show2fa(j); return; }
-        loginSuccess(j, { setup2fa: regMode && modal.querySelector('#f-2fa').checked });
+        loginSuccess(j, { setup2fa: regMode && q('#f-2fa').checked });
       } catch (err) {
         // "you need a ticket" is not an error to read, it is a door to open
         if (AUTH.needsInvite(err)) { setStatus(status, ''); closeModal(); return; }
-        setStatus(status, '⚠️ ' + err.message, true);
-      }
+        const msg = (err && err.message) || 'that didn’t work — try again';
+        fieldFail(status, msg, err.field || fieldOf(msg, { user: regMode ? 'f-username' : 'f-email', email: 'f-email', pw: 'f-password', pw2: 'f-password2' }), q('#email-submit'));
+      } finally { emailBusy = false; }
     });
 
-    /* ═══ the wallet pane: sign in, or create an account ═══════════════════════════════════════════
-       Creating an account with a wallet asks for the @username FIRST, then connects the wallet — and can
-       add an email + password as a second way in, and offer two-factor straight after. Both optional.
-       Signing in with a wallet this site has never seen, while holding a ticket, lands on the same form:
-       the server answers "pick a name" instead of inventing one, and the proof the wallet just gave is
-       carried over, so choosing the name costs no second signature. */
-    let wRegMode = false, pendingSignup = null;
-    const wSegLogin = modal.querySelector('#wseg-login'), wSegSignup = modal.querySelector('#wseg-signup');
-    const wBtn = modal.querySelector('#btn-wallet-signin');
-    function setWalletMode(v, opts) {
-      wRegMode = v;
-      if (!v) pendingSignup = null;
-      modal.querySelector('#w-reg').hidden = !v;
-      wSegLogin.classList.toggle('active', !v); wSegLogin.setAttribute('aria-pressed', String(!v));
-      wSegSignup.classList.toggle('active', v); wSegSignup.setAttribute('aria-pressed', String(v));
-      modal.querySelector('#w-lead').textContent = pendingSignup
-        ? 'Your wallet is connected and proved. Pick your @username to finish — nothing else to sign.'
-        : v ? 'Then connect your wallet and sign a free message — no transaction, no gas, and it never lets this site move funds.'
-            : 'Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.';
-      wBtn.textContent = pendingSignup ? 'Create my account ✨' : v ? 'Connect wallet & create account 🦊' : 'Continue with Wallet 🦊';
-      if (!(opts && opts.keepStatus)) setStatus(modal.querySelector('#wallet-status'), '');
+    /* ═══ the wallet: connect first, then — for a new wallet only — the @username ══════════════════════════
+       Continue with wallet connects and signs before anything is asked. A wallet with an account is signed in (with its
+       second factor, when it has one). A wallet the site has never seen comes back as needUsername with a short-lived,
+       single-use token that carries its proof, and the name step names the account with no second signature. A sign-up
+       that brought its @username with it (the ticket's last step) runs the other way round: the name step first, then one
+       press that connects, signs and makes the account. Either way: one picker, one signature. The name step can add an
+       email + password as a second way in, and offer two-factor straight after; both optional. */
+    const wBtn = q('#btn-wallet-signin'), wForm = q('#w-form'), wCreate = q('#w-create');
+    let wSignupBusy = false;
+    // the name step says where it stands: a wallet connected and proved (the press only names it), or none yet
+    function paintWalletStep() {
+      const proved = !!pendingSignup;
+      q('#w-connected').hidden = !proved;
+      const addr = q('#w-addr');
+      addr.textContent = proved ? pendingAddr.slice(0, 6) + '…' + pendingAddr.slice(-4) : '';
+      if (proved) addr.title = pendingAddr; else addr.removeAttribute('title');
+      q('#w-name-lead').textContent = proved
+        ? 'No account for this wallet yet. Pick your @username and you’re in — there’s nothing else to sign.'
+        : 'Pick your @username, then connect your wallet and sign one free message — no transaction, no gas.';
+      wCreate.textContent = proved ? 'Create my account ✨' : 'Connect wallet & create account 🦊';
+      wCreate.setAttribute('data-tip', proved ? 'Makes your account with this @username — nothing else to sign' : 'Connects your wallet, asks it to sign a free message, and makes your account with this @username');
     }
-    wSegLogin.addEventListener('click', () => setWalletMode(false));
-    wSegSignup.addEventListener('click', async () => {
-      setWalletMode(true);
-      if (signupTrust()) return;   // the ticket just handed us here — do not bounce back to it
-      const g = await gate(true);
-      if (!g.signedIn && !g.access) { closeModal(); openInvite(); }
-    });
-    AUTH._resetModes = () => { setRegMode(false); setWalletMode(false); if (AUTH._burnMode) AUTH._burnMode(true); };
-    setWalletMode(false);
+    // a fresh dialog: no proof waiting, no old lines, the opt-ins unticked (openSignup ticks what the ticket asked for, after this)
+    function resetWallet() {
+      wRun++; pendingSignup = null; pendingAddr = '';
+      paintWalletStep();
+      for (const id of ['wallet-status', 'w-create-status']) setStatus(q('#' + id), '');
+      for (const id of ['w-username', 'w-email', 'w-pw', 'w-pw2']) q('#' + id).removeAttribute('aria-invalid');
+      q('#w-2fa').checked = false; q('#f-2fa').checked = false;
+      q('#w-extra').open = false;
+    }
+    AUTH._resetModes = () => { setRegMode(false); joinTrusted = false; resetWallet(); if (AUTH._burnMode) AUTH._burnMode(true); };
+    paintWalletStep();
 
-    // the same live availability check as the email form, for the wallet form's @username
+    // the same live availability check as the email form, for the name step's @username
     let wUnameTimer;
-    modal.querySelector('#w-username').addEventListener('input', e => {
+    q('#w-username').addEventListener('input', e => {
       clearTimeout(wUnameTimer);
       const v = e.target.value.trim();
-      const el = modal.querySelector('#w-uname-status');
+      const el = q('#w-uname-status');
       if (!v) { el.textContent = ''; return; }
       wUnameTimer = setTimeout(async () => {
         try {
@@ -939,19 +979,19 @@
       }, 300);
     });
 
-    // what the wallet sign-up form asks for, checked here so a typo never costs a wallet signature
+    // what the name step asks for, checked here so a typo never costs a wallet signature
     async function walletSignupFields() {
-      const username = modal.querySelector('#w-username').value.trim();
-      const email = modal.querySelector('#w-email').value.trim();
-      const pw = modal.querySelector('#w-pw').value, pw2 = modal.querySelector('#w-pw2').value;
-      if (!/^[a-zA-Z0-9_.-]{3,24}$/.test(username)) throw new Error('pick a @username first: 3–24 letters, numbers, _ . -');
+      const username = q('#w-username').value.trim();
+      const email = q('#w-email').value.trim();
+      const pw = q('#w-pw').value, pw2 = q('#w-pw2').value;
+      if (!NAME_RE.test(username)) throw fErr('pick a @username first: 3–24 letters, numbers, _ . -', 'w-username');
       if (email || pw || pw2) {
-        if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new Error('enter a valid email — or leave the email and password both empty');
-        if (pw.length < 8) throw new Error('the password needs at least 8 characters');
-        if (pw !== pw2) throw new Error('the two passwords don’t match');
+        if (!EMAIL_RE.test(email)) throw fErr('enter a valid email — or leave the email and password both empty', 'w-email');
+        if (pw.length < 8) throw fErr('the password needs at least 8 characters', 'w-pw');
+        if (pw !== pw2) throw fErr('the two passwords don’t match', 'w-pw2');
       }
       const chk = await api('/api/username-check?u=' + encodeURIComponent(username));
-      if (!chk.available) throw new Error('@' + username + ' is ' + (chk.reason || 'taken') + ' — pick another');
+      if (!chk.available) throw fErr('@' + username + ' is ' + (chk.reason || 'taken') + ' — pick another', 'w-username');
       const out = { username };
       if (email) { out.email = email; out.password = pw; }
       return out;
@@ -975,26 +1015,66 @@
       refresh().then(onAuthChange);
     }
 
-    wBtn.addEventListener('click', async () => {
-      const status = modal.querySelector('#wallet-status');
-      const setup2fa = wRegMode && modal.querySelector('#w-2fa').checked;
+    /* The one wallet sign-in: connect, sign the read-only message, and do what the server says it was. Back, a reset or a
+       newer press while the wallet is still answering supersedes it (wRun): a late answer then changes nothing on screen
+       — except a session the server has already made, which is never left unshown. */
+    async function walletProve(status, fields, setup2fa) {
+      const run = ++wRun;
+      const moved = () => run !== wRun;
       try {
-        let fields = null;
-        if (wRegMode) {
-          setStatus(status, 'Checking your name…');
-          fields = await walletSignupFields();
-          // A fresh read. The cached answer is from before the ticket was redeemed, and trusting it
-          // closed this dialog onto the homepage and reopened the ticket — the signature never started.
-          const g = await gate(true);
-          if (!g.signedIn && !g.access) {
-            setStatus(status, '');
-            closeModal();
-            openInvite({ then: () => AUTH.openSignup({ tab: 'wallet', fromTicket: true }) });
-            return;
-          }
+        setStatus(status, 'Choose your wallet… 👛');
+        const { provider, address } = await WALLET.connect({ burn: true });
+        if (moved()) return;
+        setStatus(status, 'Approve the signature in your wallet… ✍️');
+        const { message } = await api('/api/auth/wallet/nonce?purpose=signin&address=' + address);
+        const signature = await WALLET.sign(provider, address, message, { burn: true });
+        if (moved()) return;
+        const body = Object.assign({ address, signature, intent: fields ? 'signup' : 'signin' }, fields || {});
+        const j = await api('/api/auth/wallet/verify', { method: 'POST', body });
+        if (!j.ok && moved()) return;   // a two-factor challenge or a name to pick that nobody is waiting for any more
+        setStatus(status, '');
+        if (j.twofa) { show2fa(j); return; }   // an authenticator or a password is this account's second factor: the wallet was only the first
+        if (j.needUsername) {
+          // a wallet with no account yet: its proof waits (ten minutes, once) while they pick the name — nothing else to sign
+          pendingSignup = j.signup; pendingAddr = address;
+          if (window.SFX) SFX.play('connect');
+          paintWalletStep();
+          showStep('wallet');
+          const u = q('#w-username'); u.focus(); if (u.value) u.select();
+          return;
         }
+        walletDone(Object.assign({ named: !!(fields && fields.username) }, j), setup2fa);
+      } catch (err) {
+        if (moved()) return;   // a cancel or a refusal of an attempt already left behind is not this one's to report
+        throw err;
+      }
+    }
+
+    // Continue with wallet: nothing asked first. A returning wallet is signed in; a new one goes on to the name step.
+    wBtn.addEventListener('click', async () => {
+      const status = q('#wallet-status');
+      try { await walletProve(status, null, false); }
+      catch (err) {
+        /* A wallet nobody has signed in with is a NEW ACCOUNT, so where INVITE_REQUIRED=1 the server asks for the ticket
+           here: somebody who connected expecting to sign in gets the door, not a refusal. */
+        if (AUTH.needsInvite(err)) { setStatus(status, ''); closeModal(); return; }
+        // a closed picker or a declined signature is no error: they are back where they were, the button ready again
+        setStatus(status, err.message === 'cancelled' ? '' : '⚠️ ' + (err.message || 'that didn’t work — try again'), err.message !== 'cancelled');
+      }
+    });
+
+    // Create my account: the name (and the optional extras), then the account — by the proof waiting, or by one signature
+    wForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      if (wSignupBusy) return;
+      const status = q('#w-create-status');
+      const setup2fa = q('#w-2fa').checked;
+      try {
+        setStatus(status, 'Checking your name…');
+        const fields = await walletSignupFields();
         if (pendingSignup) {
-          // the wallet already proved itself a moment ago: this only names the account
+          // the wallet proved itself a moment ago: this only names the account
+          wSignupBusy = true;
           setStatus(status, 'Creating your account… ✨');
           const j = await api('/api/auth/wallet/signup', { method: 'POST', body: Object.assign({ signup: pendingSignup }, fields) });
           pendingSignup = null;
@@ -1002,33 +1082,30 @@
           walletDone(Object.assign({ named: true }, j), setup2fa);
           return;
         }
-        setStatus(status, 'Choose your wallet… 👛');
-        const { provider, address } = await WALLET.connect({ burn: true });
-        setStatus(status, 'Approve the signature in your wallet… ✍️');
-        const { message } = await api('/api/auth/wallet/nonce?purpose=signin&address=' + address);
-        const signature = await WALLET.sign(provider, address, message, { burn: true });
-        const body = Object.assign({ address, signature, intent: wRegMode ? 'signup' : 'signin' }, fields || {});
-        const j = await api('/api/auth/wallet/verify', { method: 'POST', body });
-        setStatus(status, '');
-        if (j.twofa) { show2fa(j); return; } // account has an authenticator / password second factor — the wallet was only the first
-        if (j.needUsername) {
-          // a wallet with no account yet, and a ticket in hand: this is a sign-up — ask for the name
-          pendingSignup = j.signup;
-          if (window.SFX) SFX.play('connect');
-          setWalletMode(true, { keepStatus: true });
-          setStatus(status, 'No account for ' + address.slice(0, 6) + '…' + address.slice(-4) + ' yet — pick your @username to create one.');
-          modal.querySelector('#w-username').focus();
+        /* No proof yet: the name came first (the ticket's last step), or the proof expired. A fresh read of the pass first —
+           a cached answer from before a ticket was redeemed once closed this dialog onto the homepage and reopened the
+           ticket, and the signature never started — then one picker and one signature make the account with this name. */
+        const g = await gate(true);
+        if (!g.signedIn && !g.access) {
+          setStatus(status, '');
+          closeModal();
+          openInvite({ then: () => AUTH.openSignup({ tab: 'wallet', fromTicket: true, username: fields.username }) });
           return;
         }
-        walletDone(Object.assign({ named: !!(fields && fields.username) }, j), setup2fa);
+        await walletProve(status, fields, setup2fa);
       } catch (err) {
-        // A wallet nobody has signed in with before is a NEW ACCOUNT, so the server asks for a ticket
-        // here too. Somebody who connected expecting to sign in gets the door, not a refusal.
         if (AUTH.needsInvite(err)) { setStatus(status, ''); closeModal(); return; }
-        // the connection behind a "pick a name" hand-off expired: start again from the wallet
-        if (pendingSignup && err.status === 401) { pendingSignup = null; setWalletMode(true, { keepStatus: true }); }
-        setStatus(status, (err.message === 'cancelled') ? '' : '⚠️ ' + (err.message || 'cancelled'), err.message !== 'cancelled');
-      }
+        // the proof behind the name step expired (ten minutes) or was spent: start again from the wallet, the name kept
+        if (err.status === 401 && pendingSignup) {
+          pendingSignup = null; pendingAddr = ''; paintWalletStep();
+          setStatus(status, '⚠️ That wallet connection expired. Press the button to connect your wallet again — your name is kept.', true);
+          wCreate.focus();
+          return;
+        }
+        if (err.message === 'cancelled') { setStatus(status, ''); return; }
+        const msg = err.message || 'that didn’t work — try again';
+        fieldFail(status, msg, err.field || fieldOf(msg, { user: 'w-username', email: 'w-email', pw: 'w-pw', pw2: 'w-pw2' }), wCreate);
+      } finally { wSignupBusy = false; }
     });
 
     /* An OAuth round trip that was refused for want of an invite comes back as ?needinvite=1 (the
@@ -1115,9 +1192,7 @@
   AUTH.connectWallet = async function (opts) {
     opts = opts || {};
     if (AUTH.user) return AUTH.linkWallet(opts.note);
-    openModal();
-    const tab = modal.querySelector('#tab-wallet');
-    if (tab && !tab.classList.contains('active')) tab.click();   // a previous visit may have left Email selected
+    openModal();                              // always on the ways in, whatever a previous visit left showing
     const go = modal.querySelector('#btn-wallet-signin');
     if (go) go.click();                       // the picker opens itself; the panel is only here to host it
     return null;
@@ -1526,8 +1601,8 @@
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'profile-link';
-      b.textContent = 'Sign In 🚪';
-      b.setAttribute('data-tip', 'Opens sign-in, where you can use an invite code or a wallet');
+      b.textContent = 'Sign in 🚪';
+      b.setAttribute('data-tip', 'Sign in, or create a free account with a wallet or an email');
       b.addEventListener('click', () => openModal());
       slot.appendChild(b);
     }

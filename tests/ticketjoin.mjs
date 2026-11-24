@@ -16,7 +16,11 @@
    2. A muted headless Chrome with a fake EIP-6963 wallet whose signatures are made here, in Node, with a fresh ethers key. Each walk
       is a new visitor (cookies, storage, its own address for the per-address limits) on /about, starting from its "Create account"
       button: the wallet join, the 2FA box, "Use email instead", Burn Verification, a cancelled picker; and the step's look at 320,
-      390 and 1280 px. Without Chrome (a CI runner with none) the browser part is skipped and the run says so; on a machine that has
+      390 and 1280 px.
+   3. The sign-in dialog itself, chooser first (2026-11-24, owner: "as intuitive as possible all the way through clicking the button
+      to getting an account"): Continue with wallet connects before anything is asked — a returning wallet is signed in, a new one
+      gets its @username step in the same dialog, with no second signature; a cancelled picker or signature, Back, Esc, the focus
+      trap, an expired proof, and the look of every step at 320 and 1280 px. The walks reuse the accounts the earlier walks make. Without Chrome (a CI runner with none) the browser part is skipped and the run says so; on a machine that has
       one, a browser that will not start fails.
    Everything it makes is in its own temporary directories, deleted at the end. Nothing leaves this machine. */
 import fs from 'node:fs';
@@ -87,6 +91,7 @@ function findChrome() {
 const CHROME = findChrome();
 let ws = null, session = null, seq = 0, chromeProc = null, profile = null;
 const pend = new Map(), errors = [], wallets = new Map();
+let signs = 0;   // signatures the fake wallet has made (one sign-up = one signature, whichever way the name comes)
 const cdp = (method, params = {}, sid = session) => new Promise((ok, bad) => { const id = ++seq; pend.set(id, { ok, bad }); ws.send(JSON.stringify({ id, method, params, ...(sid ? { sessionId: sid } : {}) })); });
 async function ev(expr) {
   const r = await cdp('Runtime.evaluate', { expression: expr, returnByValue: true, awaitPromise: true });
@@ -105,7 +110,7 @@ async function onSign(payload) {
     const p = JSON.parse(payload); id = p.id;
     const w = wallets.get(String(p.address).toLowerCase());
     if (!w) err = 'unknown account';
-    else sig = await w.signMessage(/^0x([0-9a-f]{2})*$/i.test(p.msg) ? getBytes(p.msg) : String(p.msg));
+    else { sig = await w.signMessage(/^0x([0-9a-f]{2})*$/i.test(p.msg) ? getBytes(p.msg) : String(p.msg)); signs++; }
   } catch (e) { err = e.message; }
   cdp('Runtime.evaluate', { expression: 'window.__jsiSigned && window.__jsiSigned(' + JSON.stringify(id) + ', ' + JSON.stringify(sig) + ', ' + JSON.stringify(err) + ')' }).catch(() => {});
 }
@@ -146,7 +151,10 @@ async function setWallet(addr) {
       if (method === 'eth_requestAccounts' || method === 'eth_accounts') return [ADDR];
       if (method === 'eth_chainId') return '0x1237';
       if (method === 'wallet_switchEthereumChain') return null;
-      if (method === 'personal_sign') { const id = ++n; return new Promise((ok, no) => { pending.set(id, { ok, no }); window.__jsiSign(JSON.stringify({ id, msg: params[0], address: params[1] })); }); }
+      if (method === 'personal_sign') {
+        if (window.__jsiDecline) { window.__jsiDecline = false; throw Object.assign(new Error('User rejected the request.'), { code: 4001 }); }   // the person says no, once
+        const id = ++n; return new Promise((ok, no) => { pending.set(id, { ok, no }); window.__jsiSign(JSON.stringify({ id, msg: params[0], address: params[1] })); });
+      }
       throw Object.assign(new Error('unsupported ' + method), { code: 4200 });
     }, on() {}, removeListener() {} };
     const info = Object.freeze({ uuid: '6f1c7e2a-0000-4000-8000-0000000000aa', name: 'Test Wallet', icon: 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22/%3E', rdns: 'test.ticketjoin.wallet' });
@@ -205,6 +213,26 @@ async function wheelScrolls() {
   return Number(await until('scrollY > 100 ? Math.round(scrollY) : 0', 3000)) || 0;
 }
 const name = () => 'tj_' + randomBytes(4).toString('hex');
+const key = (k, code) => cdp('Input.dispatchKeyEvent', { type: 'keyDown', key: k, code: k, windowsVirtualKeyCode: code }).then(() => cdp('Input.dispatchKeyEvent', { type: 'keyUp', key: k, code: k, windowsVirtualKeyCode: code }));
+const STEP = `(() => { const m = document.getElementById('auth-modal'); if (!m || m.hidden) return 'closed'; const p = [...m.querySelectorAll('.auth-step, #pane-2fa, #pane-confirm')].find((x) => !x.hidden); return p ? p.id : null; })()`;
+// the sign-in dialog as a reader meets it at this width: every control 44px, every word at the floor, nothing past the card's edge or cut with "…"
+const DLOOK = `(() => {
+  const card = document.querySelector('#auth-modal .modal-card');
+  const probe = document.createElement('span'); probe.style.fontSize = 'var(--text-floor)'; document.body.appendChild(probe);
+  const floor = parseFloat(getComputedStyle(probe).fontSize); probe.remove();
+  const small = [], out = [], tiny = [], cut = [], untipped = [];
+  const cr = card.getBoundingClientRect();
+  for (const el of card.querySelectorAll('*')) {
+    if (!el.getClientRects().length || el.closest('[hidden]')) continue;
+    const r = el.getBoundingClientRect(), cs = getComputedStyle(el);
+    if (r.right > cr.right + 1 || r.left < cr.left - 1) out.push((el.id || el.className || el.tagName) + ' ' + Math.round(r.left) + '–' + Math.round(r.right));
+    if (!el.matches('.modal-x') && [...el.childNodes].some((x) => x.nodeType === 3 && x.textContent.trim()) && parseFloat(cs.fontSize) < floor - 0.5) small.push((el.id || el.className || el.tagName) + ' ' + cs.fontSize);
+    if (el.matches('button, summary, input:not([type=checkbox]), label.w-opt, a.oauth-btn') && r.height < 43.5) tiny.push((el.id || el.className || el.tagName) + ' ' + Math.round(r.height) + 'px');
+    if (el.matches('button') && (el.getAttribute('data-tip') || '').length < 8) untipped.push(el.id || el.className);
+    if (cs.textOverflow === 'ellipsis' && cs.overflow === 'hidden') cut.push(el.id || el.className);
+  }
+  return { doc: document.documentElement.scrollWidth, iw: innerWidth, cardSW: card.scrollWidth, cardCW: card.clientWidth, small, out, tiny, cut, untipped };
+})()`;
 const typeVal = (id, v) => ev(`(() => { const e = document.getElementById(${JSON.stringify(id)}); e.value = ${JSON.stringify(v)}; e.dispatchEvent(new Event('input', { bubbles: true })); return true; })()`);
 // the join step as a reader meets it at this width: the controls, the floor, the edges
 const LOOK = `(() => {
@@ -246,12 +274,12 @@ if (!CHROME) {
       const direct = await (async () => {
         await ev('(() => { const b = document.getElementById("gs-join"); b.focus(); AUTH.startJoin(); return true; })()');
         const up = await until('!document.getElementById("auth-modal").hidden', 6000);
-        const s = await ev(`({ ticket: !!document.querySelector('#invite-overlay[data-open]'), create: (document.getElementById('wseg-signup') || {}).getAttribute && document.getElementById('wseg-signup').getAttribute('aria-pressed'), reg: !document.getElementById('w-reg').hidden })`);
+        const s = await ev(`({ ticket: !!document.querySelector('#invite-overlay[data-open]'), step: ${STEP}, focus: ${FOCUS}, create: document.getElementById('seg-signup').getAttribute('aria-pressed') })`);
         await ev('(() => { const x = document.querySelector("#auth-modal .modal-x"); if (x) x.click(); return true; })()');
         await until(`!${DIALOG_UP}`, 4000);
-        return up && !s.ticket && s.create === 'true' && s.reg ? true : JSON.stringify(s);
+        return up && !s.ticket && s.step === 'pane-choose' && s.focus === 'btn-wallet-signin' && s.create === 'true' ? true : JSON.stringify(s);
       })();
-      check('"Create account" opens the sign-up dialog at once, set to make a new account with a wallet — no ticket, no code (open sign-up, 2026-11-24)', direct === true, direct);
+      check('"Create account" opens the dialog at once on the ways in, focused on Continue with wallet, its email form set to Create account — no ticket, no code (open sign-up, 2026-11-24)', direct === true, direct);
       check('wallet: a member\'s code, entered on purpose, still leads to the ticket\'s last step (no terms step, as on the live site)', await toJoinStep());
       const look = await ev(LOOK);
       check('  ...the step says what making the account means, as the sign-in panel does: 18 or over, the Terms and the Privacy policy (SU-2)',
@@ -273,28 +301,118 @@ if (!CHROME) {
       check('  ...and the new member\'s page scrolls under the wheel (SU-1)', y > 100, 'scrollY ' + y);
     } catch (e) { check('the wallet walk ran to the end', false, e && e.message); }
 
-    /* — open sign-up, the plain way (2026-11-24): "Create account", a name, Continue with Wallet, the signature — no code anywhere,
-       and no loop: one picker, one signature, the account, nothing left open — */
+    /* — open sign-up, the plain way (2026-11-24): "Create account", Continue with wallet, the signature, then the @username in the
+       same dialog — no code anywhere, nothing asked before the wallet, and no loop: one picker, one signature, the account — */
+    let returning = null;   // that wallet and its account, signed in again below
     try {
-      await fresh(1280); await setWallet(newWallet()); await openAbout();
+      const addr = newWallet();
+      await fresh(1280); await setWallet(addr); await openAbout();
       await ev('(() => { const b = document.getElementById("gs-join"); b.focus(); AUTH.startJoin(); return true; })()');
       await until('!document.getElementById("auth-modal").hidden', 6000);
-      const who = name();
-      await typeVal('w-username', who);
+      const s0 = signs;
       await ev('document.getElementById("btn-wallet-signin").click(), true');
       const picked = await pickWallet();
+      const named = await until(`${STEP} === 'pane-wallet' && document.activeElement && document.activeElement.id === 'w-username'`, 12000);
+      const ns = await ev(`({ shown: !document.getElementById('w-connected').hidden, addr: document.getElementById('w-addr').textContent, title: document.getElementById('w-addr').title,
+        btn: document.getElementById('w-create').textContent, tip: document.getElementById('w-create').getAttribute('data-tip'), user: !!(window.AUTH && AUTH.user), picker: !!document.querySelector('.wc-overlay:not([hidden])') })`);
+      check('open sign-up with a wallet: Continue with wallet asks nothing first; a new wallet comes back to "Pick your @username" in the same dialog, the name field focused',
+        picked && !!named && !ns.user && !ns.picker && signs - s0 === 1, JSON.stringify([picked, !!named, ns, signs - s0]));
+      check('  ...showing the wallet it connected (short form, the whole address in its title) and "Create my account ✨"',
+        ns.shown && ns.addr === addr.slice(0, 6) + '…' + addr.slice(-4) && ns.title.toLowerCase() === addr.toLowerCase() && /Create my account/.test(ns.btn) && (ns.tip || '').length >= 8, JSON.stringify(ns));
+      /* the proof behind the name step is ten minutes long and single-use: when it has gone (a 401 on /api/auth/wallet/signup),
+         the step says so, keeps the name, and its button connects again — here the 401 is the page's own fetch answering it once */
+      const who = name();
+      await typeVal('w-username', who);
+      await ev(`(() => { const real = window.fetch; let once = true; window.fetch = function (u, o) { if (once && String(u).includes('/api/auth/wallet/signup')) { once = false; return Promise.resolve(new Response(JSON.stringify({ error: 'that wallet connection expired — connect your wallet again' }), { status: 401, headers: { 'Content-Type': 'application/json' } })); } return real.apply(this, arguments); }; return true; })()`);
+      await ev('document.getElementById("w-create").click(), true');
+      const ex = await until(`/expired/.test(document.getElementById('w-create-status').textContent) && ({ btn: document.getElementById('w-create').textContent, name: document.getElementById('w-username').value, shown: !document.getElementById('w-connected').hidden, focus: ${FOCUS}, step: ${STEP} })`, 6000);
+      check('  ...an expired proof (401) is said beside the button, the name kept, and the button connects the wallet again — no dead end',
+        ex && ex.step === 'pane-wallet' && ex.name === who && !ex.shown && /Connect wallet/.test(ex.btn) && ex.focus === 'w-create', JSON.stringify(ex));
+      // Back: to the ways in, focused on the wallet button; then the plain way again, all the way to the account
+      await ev('document.querySelector("#pane-wallet [data-back]").click(), true');
+      const back = await ev(`({ step: ${STEP}, focus: ${FOCUS} })`);
+      check('  ...Back returns to the ways in, focused on Continue with wallet', back.step === 'pane-choose' && back.focus === 'btn-wallet-signin', JSON.stringify(back));
+      const s1 = signs;
+      await ev('document.getElementById("btn-wallet-signin").click(), true');
+      await pickWallet();
+      await until(`${STEP} === 'pane-wallet'`, 12000);
+      const kept = await ev('document.getElementById("w-username").value');
+      await ev('document.getElementById("w-create").click(), true');
       const user = await until('window.AUTH && AUTH.user && AUTH.user.username', 12000);
       await sleep(1500);   // long enough for a loop to show itself: a second picker, the ticket, the dialog back
       const st = await ev(`({ ov: document.body.style.overflow, up: ${DIALOG_UP}, picker: !!document.querySelector('.wc-overlay:not([hidden])'), ticket: !!document.querySelector('#invite-overlay[data-open]') })`);
-      check('open sign-up with a wallet: "Create account", a name, one picker and one signature make the account — no code asked, and nothing comes back (no second picker, no ticket, no dialog)',
-        picked && user === who && !st.up && !st.picker && !st.ticket && st.ov === '', JSON.stringify([picked, user, st]));
+      check('  ...then Create my account makes it with that name: one picker and one signature for the account — and nothing comes back (no second picker, no ticket, no dialog)',
+        kept === who && user === who && signs - s1 === 1 && !st.up && !st.picker && !st.ticket && st.ov === '', JSON.stringify([kept, user, signs - s1, st]));
+      if (user === who) returning = { addr, who };
     } catch (e) { check('the open wallet sign-up walk ran to the end', false, e && e.message); }
+
+    /* — that wallet again, signed out: Continue with wallet signs it straight in — no name step, one signature — */
+    try {
+      if (!returning) throw new Error('no account from the walk above');
+      await ev('AUTH.logout().then(() => true)');
+      await until('!(window.AUTH && AUTH.user)', 4000);
+      await ev('(() => { document.querySelector("#nav-auth .profile-link").click(); return true; })()');
+      await until('!document.getElementById("auth-modal").hidden', 6000);
+      const nav = await ev(`({ step: ${STEP}, focus: ${FOCUS} })`);
+      const s0 = signs;
+      let sawName = false;
+      await ev('document.getElementById("btn-wallet-signin").click(), true');
+      await pickWallet();
+      const end = Date.now() + 12000;
+      let user = null;
+      while (Date.now() < end && !user) { if (await ev(STEP) === 'pane-wallet') sawName = true; user = await ev('window.AUTH && AUTH.user && AUTH.user.username'); if (!user) await sleep(80); }
+      await sleep(500);
+      check('a returning wallet: the nav\'s Sign in opens the ways in, and Continue with wallet signs it straight back in — no name step, one signature, nothing left open',
+        nav.step === 'pane-choose' && nav.focus === 'btn-wallet-signin' && user === returning.who && !sawName && signs - s0 === 1 && !await ev(DIALOG_UP), JSON.stringify([nav, user, sawName, signs - s0]));
+    } catch (e) { check('the returning wallet walk ran to the end', false, e && e.message); }
+
+    /* — no account made: a closed picker, a declined signature, Esc and the focus trap, on the ways in — */
+    try {
+      await fresh(1280); await setWallet(newWallet()); await openAbout();
+      await ev('(() => { const b = document.getElementById("gs-join"); b.focus(); AUTH.open(); return true; })()');
+      await until('!document.getElementById("auth-modal").hidden', 6000);
+      const nb = await ev(`(() => { const b = document.querySelector('#nav-auth .profile-link'); return b ? { text: b.textContent, tip: b.getAttribute('data-tip') } : null; })()`);
+      check('the nav button says "Sign in" and its tip offers a free account with a wallet or an email (no invite code)',
+        nb && nb.text === 'Sign in 🚪' && /create a free account/i.test(nb.tip) && !/invite/i.test(nb.tip), JSON.stringify(nb));
+      await ev('document.getElementById("btn-wallet-signin").click(), true');
+      await until('document.querySelector(".wc-overlay:not([hidden]) .wc-x")', 8000);
+      await ev('document.querySelector(".wc-overlay:not([hidden]) .wc-x").click(), true');
+      await until('!document.querySelector(".wc-overlay:not([hidden])")', 4000);
+      await sleep(300);
+      const a = await ev(`({ step: ${STEP}, focus: ${FOCUS}, status: document.getElementById('wallet-status').textContent, err: document.getElementById('wallet-status').classList.contains('is-err') })`);
+      check('a closed picker is no error: still on the ways in, nothing said, the focus back on Continue with wallet', a.step === 'pane-choose' && a.focus === 'btn-wallet-signin' && a.status === '' && !a.err, JSON.stringify(a));
+      await ev('window.__jsiDecline = true');
+      const s0 = signs;
+      await ev('document.getElementById("btn-wallet-signin").click(), true');
+      await pickWallet();
+      await until(`document.getElementById('wallet-status').textContent === '' && !document.querySelector('.wc-overlay:not([hidden])')`, 6000);
+      await sleep(300);
+      const b = await ev(`({ step: ${STEP}, status: document.getElementById('wallet-status').textContent, user: !!(window.AUTH && AUTH.user) })`);
+      check('  ...a declined signature too: back on the ways in, nothing signed, no account, the button ready again', b.step === 'pane-choose' && b.status === '' && !b.user && signs === s0, JSON.stringify(b));
+      // the focus trap holds over twenty Tabs, and Esc closes, handing the focus back to the button that opened it
+      let escaped = 0; const seen = new Set();
+      for (let i = 0; i < 20; i++) { await key('Tab', 9); const f = await ev(`(() => { const a = document.activeElement; return document.getElementById('auth-modal').contains(a) ? (a.id || a.textContent.trim().slice(0, 20)) : null; })()`); if (f == null) escaped++; else seen.add(f); }
+      // the first Esc may only close the description a Tab put up (tips.js, SC 1.4.13); the next closes the dialog
+      await key('Escape', 27); await sleep(150);
+      if (await ev(DIALOG_UP)) await key('Escape', 27);
+      await until(`!${DIALOG_UP}`, 3000);
+      const c = await ev(`({ up: ${DIALOG_UP}, focus: ${FOCUS}, ov: document.body.style.overflow })`);
+      check('  ...Tab goes round the dialog\'s controls and never leaves it, and Esc closes it, the focus back where it was and the page unlocked', escaped === 0 && seen.size >= 5 && !c.up && c.focus === 'gs-join' && c.ov === '', JSON.stringify([escaped, [...seen], c]));
+    } catch (e) { check('the cancel-on-the-ways-in walk ran to the end', false, e && e.message); }
 
     /* — open sign-up with an email — */
     try {
       await fresh(1280); await setWallet(null); await openAbout();
       await ev('(() => { AUTH.startJoin({ tab: "email" }); return true; })()');
       await until('!document.getElementById("pane-email").hidden', 6000);
+      const e0 = await ev(`({ focus: ${FOCUS}, btn: document.getElementById('email-submit').textContent, create: document.getElementById('seg-signup').getAttribute('aria-pressed'), pw2: !!document.getElementById('f-password2').getClientRects().length })`);
+      check('email sign-up opens on Create account, the focus on its first field, a password typed twice', e0.focus === 'f-username' && /^Create account/.test(e0.btn) && e0.create === 'true' && e0.pw2, JSON.stringify(e0));
+      // an error is said beside the button and the focus goes to its field: a name too short, nothing sent
+      await typeVal('f-username', 'ab');
+      await ev('(() => { document.getElementById("email-form").requestSubmit(); return true; })()');
+      await sleep(200);
+      const e1 = await ev(`({ focus: ${FOCUS}, status: document.getElementById('email-status').textContent, invalid: document.getElementById('f-username').getAttribute('aria-invalid') })`);
+      check('  ...a mistake is said beside the button, on its field (focused, marked invalid), before anything is sent', e1.focus === 'f-username' && /username/.test(e1.status) && e1.invalid === 'true', JSON.stringify(e1));
       const who = name();
       await typeVal('f-username', who); await typeVal('f-email', who + '@example.com'); await typeVal('f-password', 'hunter2hunter2');
       const pw2 = await ev('!!document.getElementById("f-password2")');
@@ -329,12 +447,12 @@ if (!CHROME) {
       await typeVal('inv-join-email', who + '@example.com'); await typeVal('inv-join-pw', 'hunter2hunter2'); await typeVal('inv-join-pw2', 'hunter2hunter2');
       await ev('document.getElementById("inv-join-emailbtn").click(), true');
       await until('!document.getElementById("pane-email").hidden', 6000);
-      const s = await ev(`({ focus: ${FOCUS}, sel: document.getElementById('tab-email').getAttribute('aria-selected'), u: document.getElementById('f-username').value, e: document.getElementById('f-email').value,
-        pw: !!document.getElementById('f-password').value, ticketPw: ['inv-join-pw', 'inv-join-pw2'].map((id) => document.getElementById(id).value.length), btn: document.getElementById('email-submit').textContent,
+      const s = await ev(`({ focus: ${FOCUS}, step: ${STEP}, u: document.getElementById('f-username').value, e: document.getElementById('f-email').value,
+        pw: !!document.getElementById('f-password').value, pw2: !!document.getElementById('f-password2').value, ticketPw: ['inv-join-pw', 'inv-join-pw2'].map((id) => document.getElementById(id).value.length), btn: document.getElementById('email-submit').textContent,
         tip: document.getElementById('inv-join-emailbtn').getAttribute('data-tip') })`);
-      check('email: "Use email instead" opens the email sign-up form filled with what was typed', s.sel === 'true' && s.u === who && s.e === who + '@example.com' && s.pw && /Create Account/.test(s.btn), JSON.stringify(s));
-      check('  ...focus is on the Email tab now selected, not the Wallet tab beside it (SU-7)', s.focus === 'tab-email', s.focus);
-      check('  ...the button\'s tip says what it does: it opens the form, and the account is made by Create Account there (SU-7)', /^Opens the email sign-up form/.test(s.tip) && /Create Account/.test(s.tip) && !/^Makes the account/.test(s.tip), s.tip);
+      check('email: "Use email instead" opens the email sign-up form filled with what was typed (both passwords)', s.step === 'pane-email' && s.u === who && s.e === who + '@example.com' && s.pw && s.pw2 && /Create account/.test(s.btn), JSON.stringify(s));
+      check('  ...focus is on that form — its Create account button, every field filled — not on the ways in behind it (SU-7)', s.focus === 'email-submit', s.focus);
+      check('  ...the button\'s tip says what it does: it opens the form, and the account is made by Create account there (SU-7)', /^Opens the email sign-up form/.test(s.tip) && /Create account/.test(s.tip) && !/^Makes the account/.test(s.tip), s.tip);
       check('  ...and the password typed on the ticket no longer waits in its hidden fields (SU-6)', s.ticketPw.join() === '0,0', s.ticketPw.join());
       await ev('document.getElementById("email-submit").click(), true');
       const user = await until('window.AUTH && AUTH.user && AUTH.user.username', 12000);
@@ -365,6 +483,8 @@ if (!CHROME) {
       const who = name();
       await ev('(() => { const b = document.getElementById("gs-join"); b.focus(); AUTH.openBurnSignup(true); return true; })()');
       await until('!document.getElementById("pane-burn").hidden', 6000);
+      const bf = await ev(FOCUS);
+      check('burn: Burn Verification opens on its own form, the focus on its first field', bf === 'b-username', bf);
       await typeVal('b-username', who); await typeVal('b-email', who + '@example.com'); await typeVal('b-pw', 'hunter2hunter2'); await typeVal('b-pw2', 'hunter2hunter2');
       await typeVal('b-addr', Wallet.createRandom().address);
       await ev('document.getElementById("burn-submit").click(), true');
@@ -415,6 +535,25 @@ if (!CHROME) {
         check('  ...every control on the step is 44px, every word at the floor, nothing past the edge or cut with "…"',
           !L.tiny.length && !L.small.length && !L.out.length && !L.cut.length && L.doc <= L.iw && L.ovSW <= L.ovCW + 1, JSON.stringify({ tiny: L.tiny, small: L.small, out: L.out, cut: L.cut, doc: L.doc, iw: L.iw, ovSW: L.ovSW, ovCW: L.ovCW }));
       } catch (e) { check('the look at ' + w + 'px ran to the end', false, e && e.message); }
+    }
+    for (const w of [320, 1280]) {
+      try {
+        await fresh(w); await setWallet(null); await openAbout();
+        const bad = [];
+        const measure = async (label) => { const L = await ev(DLOOK); if (L.tiny.length || L.small.length || L.out.length || L.cut.length || L.untipped.length || L.doc > L.iw || L.cardSW > L.cardCW + 1) bad.push(label + ' ' + JSON.stringify(L)); };
+        await ev('AUTH.open(), true'); await until('!document.getElementById("auth-modal").hidden', 6000); await sleep(250);
+        await measure('ways in');
+        await ev('document.querySelector("#w-works").open = true, document.querySelector("#pane-choose .auth-more").open = true'); await sleep(150); await measure('ways in, folds open');
+        await ev('document.getElementById("btn-email-go").click(), true'); await measure('email, sign in');
+        await ev('document.getElementById("seg-signup").click(), true'); await sleep(150); await measure('email, create account');
+        await ev('document.querySelector("#pane-email [data-back]").click(), true');
+        await ev('document.getElementById("btn-burn-alt").click(), true'); await measure('burn');
+        await ev('document.querySelector("#auth-modal .modal-x").click(), true');
+        await ev('AUTH.openSignup({ tab: "wallet", username: "look_only" }), true'); await sleep(250);
+        await ev('document.getElementById("w-extra").open = true'); await sleep(150); await measure('name step');
+        await ev('document.querySelector("#auth-modal .modal-x").click(), true');
+        check('the sign-in dialog at ' + w + 'px: every step\'s controls are 44px and described, every word at the floor, nothing past the edge or cut with "…"', !bad.length, bad.join(' | ').slice(0, 900));
+      } catch (e) { check('the dialog look at ' + w + 'px ran to the end', false, e && e.message); }
     }
     check('no script error on any page of any walk', errors.length === 0, errors.slice(0, 4).join(' | '));
   }
