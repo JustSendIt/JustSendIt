@@ -184,9 +184,11 @@ async function redeem() {
   await ev(`(() => { document.getElementById('inv-in').value = ${JSON.stringify(mintCode())}; document.getElementById('inv-go').click(); return true; })()`);
   return !!await until('document.querySelector("#invite-overlay[data-open] #step-join[data-active]")', 8000);
 }
+/* Open sign-up (2026-11-24): "Create account" opens the sign-up dialog itself (checked below). The ticket's last step — what these
+   walks test — is where a member's code leads, entered on purpose ("Got a code from a member? Enter it"), so they come in that way. */
 async function toJoinStep() {
-  await ev('(() => { const b = document.getElementById("gs-join"); b.focus(); AUTH.startJoin(); return true; })()');
-  if (!await until('document.querySelector("#invite-overlay[data-open] #step-ticket[data-active]")', 10000)) return false;
+  await ev('(() => { const b = document.getElementById("gs-join"); b.focus(); AUTH.openInvite({ code: true }); return true; })()');
+  if (!await until('document.querySelector("#invite-overlay[data-open] #step-code[data-active]")', 10000)) return false;
   return redeem();
 }
 async function pickWallet() {
@@ -241,7 +243,16 @@ if (!CHROME) {
     /* — the wallet join: one press, the account, and a page that scrolls — */
     try {
       await fresh(1280); await setWallet(newWallet()); await openAbout();
-      check('wallet: a redeemed code goes straight to the ticket\'s last step (no terms step, as on the live site)', await toJoinStep());
+      const direct = await (async () => {
+        await ev('(() => { const b = document.getElementById("gs-join"); b.focus(); AUTH.startJoin(); return true; })()');
+        const up = await until('!document.getElementById("auth-modal").hidden', 6000);
+        const s = await ev(`({ ticket: !!document.querySelector('#invite-overlay[data-open]'), create: (document.getElementById('wseg-signup') || {}).getAttribute && document.getElementById('wseg-signup').getAttribute('aria-pressed'), reg: !document.getElementById('w-reg').hidden })`);
+        await ev('(() => { const x = document.querySelector("#auth-modal .modal-x"); if (x) x.click(); return true; })()');
+        await until(`!${DIALOG_UP}`, 4000);
+        return up && !s.ticket && s.create === 'true' && s.reg ? true : JSON.stringify(s);
+      })();
+      check('"Create account" opens the sign-up dialog at once, set to make a new account with a wallet — no ticket, no code (open sign-up, 2026-11-24)', direct === true, direct);
+      check('wallet: a member\'s code, entered on purpose, still leads to the ticket\'s last step (no terms step, as on the live site)', await toJoinStep());
       const look = await ev(LOOK);
       check('  ...the step says what making the account means, as the sign-in panel does: 18 or over, the Terms and the Privacy policy (SU-2)',
         /18 or over/.test(look.terms || '') && /Terms/.test(look.terms) && look.termLinks.join(' ') === '/terms /privacy', JSON.stringify([look.terms, look.termLinks]));
@@ -261,6 +272,39 @@ if (!CHROME) {
       const y = await wheelScrolls();
       check('  ...and the new member\'s page scrolls under the wheel (SU-1)', y > 100, 'scrollY ' + y);
     } catch (e) { check('the wallet walk ran to the end', false, e && e.message); }
+
+    /* — open sign-up, the plain way (2026-11-24): "Create account", a name, Continue with Wallet, the signature — no code anywhere,
+       and no loop: one picker, one signature, the account, nothing left open — */
+    try {
+      await fresh(1280); await setWallet(newWallet()); await openAbout();
+      await ev('(() => { const b = document.getElementById("gs-join"); b.focus(); AUTH.startJoin(); return true; })()');
+      await until('!document.getElementById("auth-modal").hidden', 6000);
+      const who = name();
+      await typeVal('w-username', who);
+      await ev('document.getElementById("btn-wallet-signin").click(), true');
+      const picked = await pickWallet();
+      const user = await until('window.AUTH && AUTH.user && AUTH.user.username', 12000);
+      await sleep(1500);   // long enough for a loop to show itself: a second picker, the ticket, the dialog back
+      const st = await ev(`({ ov: document.body.style.overflow, up: ${DIALOG_UP}, picker: !!document.querySelector('.wc-overlay:not([hidden])'), ticket: !!document.querySelector('#invite-overlay[data-open]') })`);
+      check('open sign-up with a wallet: "Create account", a name, one picker and one signature make the account — no code asked, and nothing comes back (no second picker, no ticket, no dialog)',
+        picked && user === who && !st.up && !st.picker && !st.ticket && st.ov === '', JSON.stringify([picked, user, st]));
+    } catch (e) { check('the open wallet sign-up walk ran to the end', false, e && e.message); }
+
+    /* — open sign-up with an email — */
+    try {
+      await fresh(1280); await setWallet(null); await openAbout();
+      await ev('(() => { AUTH.startJoin({ tab: "email" }); return true; })()');
+      await until('!document.getElementById("pane-email").hidden', 6000);
+      const who = name();
+      await typeVal('f-username', who); await typeVal('f-email', who + '@example.com'); await typeVal('f-password', 'hunter2hunter2');
+      const pw2 = await ev('!!document.getElementById("f-password2")');
+      if (pw2) await typeVal('f-password2', 'hunter2hunter2');
+      await ev('(() => { const f = document.getElementById("email-form"); f.requestSubmit ? f.requestSubmit() : f.querySelector("[type=submit]").click(); return true; })()');
+      const user = await until('window.AUTH && AUTH.user && AUTH.user.username', 12000);
+      await sleep(800);
+      const st = await ev(`({ up: ${DIALOG_UP}, ticket: !!document.querySelector('#invite-overlay[data-open]') })`);
+      check('open sign-up with an email: a name, an email and a password make the account — no code asked, nothing left open', user === who && !st.up && !st.ticket, JSON.stringify([user, st]));
+    } catch (e) { check('the open email sign-up walk ran to the end', false, e && e.message); }
 
     /* — the two-factor box on the ticket reaches the sign-up — */
     try {
@@ -301,7 +345,21 @@ if (!CHROME) {
       check('  ...and scrolls under the wheel (SU-1)', await wheelScrolls() > 100);
     } catch (e) { check('the email walk ran to the end', false, e && e.message); }
 
-    /* — Burn Verification: the form first, the ticket, then Continue — */
+    /* — a member's code, entered on purpose ("Got a code from a member? Enter it"): still works, so they are credited — */
+    try {
+      await fresh(1280); await setWallet(null); await openAbout();
+      await ev("(() => { AUTH.open(); return true; })()");
+      await until('!document.getElementById("auth-modal").hidden', 6000);
+      const tip = await ev('(document.getElementById("auth-ticket") || {}).textContent || ""');
+      await ev('document.getElementById("auth-ticket").click(), true');
+      const atCode = await until('document.querySelector("#invite-overlay[data-open] #step-code[data-active]")', 8000);
+      await ev(`(() => { document.getElementById('inv-in').value = ${JSON.stringify(mintCode())}; document.getElementById('inv-go').click(); return true; })()`);
+      const atJoin = await until('document.querySelector("#invite-overlay[data-open] #step-join[data-active]")', 8000);
+      check('a member\'s code: "Enter it" opens the code box (not the join step), and the code still takes you on to the join step', /Enter it/.test(tip) && !!atCode && !!atJoin, JSON.stringify([tip, !!atCode, !!atJoin]));
+      await ev('(() => { const x = document.getElementById("inv-x"); if (x) x.click(); return true; })()');
+    } catch (e) { check('the code walk ran to the end', false, e && e.message); }
+
+    /* — Burn Verification: the form makes the account, then the burn step — */
     try {
       await fresh(1280); await setWallet(null); await openAbout();
       const who = name();
@@ -310,18 +368,10 @@ if (!CHROME) {
       await typeVal('b-username', who); await typeVal('b-email', who + '@example.com'); await typeVal('b-pw', 'hunter2hunter2'); await typeVal('b-pw2', 'hunter2hunter2');
       await typeVal('b-addr', Wallet.createRandom().address);
       await ev('document.getElementById("burn-submit").click(), true');
-      const raised = await until('document.querySelector("#invite-overlay[data-open] #step-ticket[data-active]")', 10000);
-      check('burn: with no ticket yet, the burn form raises the ticket first', !!raised);
-      await redeem();
-      await sleep(200);
-      const j = await ev(`({ focus: ${FOCUS}, btn: document.getElementById('inv-join').textContent, panel: document.getElementById('inv-join-panel').hidden,
-        enabled: [...document.querySelectorAll('#inv-join-panel input')].filter((i) => !i.disabled).map((i) => i.id) })`);
-      check('  ...its last step says Continue, with the wallet fields hidden and every one of them disabled', /Continue/.test(j.btn) && j.panel && j.enabled.length === 0, JSON.stringify(j));
-      check('  ...and focus is on Continue, not lost on <body> behind a hidden field (SU-4)', j.focus === 'inv-join', j.focus);
-      await ev('document.getElementById("inv-join").click(), true');
+      const raised = await until('document.querySelector("#invite-overlay[data-open] #step-ticket[data-active]")', 2500);
       const user = await until('window.AUTH && AUTH.user && AUTH.user.username', 12000);
       const bp = await until('document.querySelector(".bp-overlay:not([hidden]) .bp-x")', 10000);
-      check('  ...Continue makes the account from the burn form and opens the burn step', user === who && !!bp, JSON.stringify([user, !!bp]));
+      check('burn: the burn form makes the account at once — no ticket raised (open sign-up) — and opens the burn step', !raised && user === who && !!bp, JSON.stringify([!!raised, user, !!bp]));
       await ev('(() => { const x = document.querySelector(".bp-overlay:not([hidden]) .bp-x"); if (x) x.click(); return true; })()');
       await until(`!${DIALOG_UP}`, 4000);
       await sleep(400);

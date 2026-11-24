@@ -15958,6 +15958,10 @@ const TOS_VERSION = '2026-11-17';   // 2026-11-17: wall songs (§13(a) audio, §
 /* The terms-acceptance step is HIDDEN unless TOS_GATE=1: the page, the scroll-to-the-end box and the
    need_tos refusal all sit behind this one switch. The tests run with it on so the flow stays covered. */
 const TOS_GATE = process.env.TOS_GATE === '1';
+/* Sign-up is open (owner, 2026-11-24: "remove the referral gate requirement and allow users to setup an account easily with an
+   email or wallet connect, and don't have them have to have $100 of send to create an account"). An invite code still works —
+   whoever sent it is credited — but nobody needs one; INVITE_REQUIRED=1 brings the ticket back. The 18+ question stays. */
+const INVITE_REQUIRED = process.env.INVITE_REQUIRED === '1';
 const INVITE_GRANT = 10;                 // codes each admitted person gets to hand out
 const ADMIN_CODE_BATCH = 100;            // admin codes made the first time an admin opens them, and again on each "make more"
 const ADMIN_CODE_MAX = 1000;             // and never more than this many in all
@@ -16112,7 +16116,7 @@ function passOk(req) {           // a redeemed pass (that has accepted the terms
   return !!(r && (TOS_GATE ? r.tos_at : true));
 }
 function hasAccess(req, user) {
-  if (user) return true;
+  if (user || !INVITE_REQUIRED) return true;
   return passOk(req);
 }
 /* THE ONE PLACE THE INVITE IS ENFORCED. Every door that can create a user calls this; nothing else does.
@@ -16120,6 +16124,7 @@ function hasAccess(req, user) {
    open the ticket rather than showing a bare error. */
 function signupRefusal(req) {
   const r = passRow(req);
+  if (!INVITE_REQUIRED) return ageOk(req) ? null : { error: 'Confirm you are ' + AGE_MIN + ' or older to join.', code: 'need_age' };   // open sign-up: only the 18+ question
   if (!r) return { error: 'You need an invite code to join. Browsing is open to everyone — joining is by ticket.', code: 'need_invite' };
   if (r.owner_id == null && !seedCodesOpen()) return { error: 'That invite code is no longer active — ask a member for one of theirs.', code: 'code_retired' };
   if (TOS_GATE && !r.tos_at) return { error: 'Read and accept the terms to finish joining.', code: 'need_tos' };
@@ -17357,6 +17362,7 @@ const server = http.createServer(async (req, res) => {
         const u = me || getUser(req);
         return send(res, 200, {
           access: hasAccess(req, u),
+          inviteRequired: INVITE_REQUIRED,
           redeemed: !!r,
           tosAccepted: !TOS_GATE || !!(r && r.tos_at) || !!(u && u.tos_at),
           tosRequired: TOS_GATE,
@@ -19190,16 +19196,23 @@ const server = http.createServer(async (req, res) => {
       }
       if (p === '/api/posts' && req.method === 'POST') {
         if (!me) return bad(res, 'sign in to post', 401);
-        if (blockReadOnly(res, me)) return;
+        /* A basic post on your own wall is open before the $SEND check (owner, 2026-11-24: keep the $100 check "for them to perform
+           actions on the platform other than changing their profile settings and making a basic post to their profile"): text
+           only, and it earns no Send Power. Pictures, videos and help-desk questions still need the check; a sanction still pauses all. */
+        const unproved = needsHolderProof(me);
+        if (unproved ? blockSanctioned(res, me) : blockReadOnly(res, me)) return;
         if (!rateLimit('post:' + me.id, 12, 6e5)) return bad(res, 'posting too fast — take a breath 😅', 429);
         const bigUpload = Number(req.headers['content-length'] || 0) > MEDIA_GATE_BYTES;
         if (bigUpload && (bigPostInFlight >= BIG_POST_CONCURRENCY || (bigPostByUser.get(me.id) || 0) >= 1)) return bad(res, 'lots of large posts right now — try again in a moment', 503);
         let b, image = null;
         if (bigUpload) { bigPostInFlight++; bigPostByUser.set(me.id, (bigPostByUser.get(me.id) || 0) + 1); }
-        try { b = await readBody(req, 12 * 1024 * 1024); if (b.image) image = resolvePostMedia(b.image, me.id); } // media is normally a pre-uploaded /uploads URL; data: URIs still accepted
+        try { b = await readBody(req, 12 * 1024 * 1024); if (b.image && !unproved) image = resolvePostMedia(b.image, me.id); } // media is normally a pre-uploaded /uploads URL; data: URIs still accepted (never resolved before the check: refused below)
         catch (e) { return bad(res, e.message || 'could not read your post', (e && e.status) || 400); }
         finally { if (bigUpload) { bigPostInFlight--; const n = (bigPostByUser.get(me.id) || 1) - 1; if (n > 0) bigPostByUser.set(me.id, n); else bigPostByUser.delete(me.id); } }
         const board = BOARDS.has(String(b.board || '')) ? String(b.board) : null;
+        if (unproved && (b.image || board)) {
+          return send(res, 403, { error: 'A text post on your own wall is open to everyone. Pictures, videos and help-desk questions start once your linked wallets show $' + MIN_HOLD_USD + ' of $SEND bought.', needsProof: true, proof: holderProofState(me) });
+        }
         const rt = await resolveTokensInText(String(b.text || '').trim().slice(0, 500));
         const text = rt.text;
         if (!text && !image) return bad(res, board ? 'write your question first' : 'say something or add a photo, GIF or video');
@@ -19210,7 +19223,7 @@ const server = http.createServer(async (req, res) => {
            would make asking the cheapest farm on the site. The page says this plainly rather than leaving
            people to notice their balance did not move. */
         let earned = 0;
-        if (!board) {
+        if (!board && !unproved) {
           /* Counts only posts the user actually WROTE ON THE WALL. The community invite the site posts on
              their behalf is a posts row under their id, so counting it meant their real first post found
              n === 2 and the one-time bonus was silently forfeited forever — for something they never wrote.

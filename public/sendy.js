@@ -85,7 +85,7 @@
     },
     'account': {
       keywords: ['sign in', 'login', 'log in', 'password', 'two-factor', '2fa', 'delete my account', 'username', 'invite'],
-      answer: 'Your account lives on /profile: username, sign-in methods, two-factor, linked wallets, and the delete control (deleting is permanent). Joining is by invite code, and nobody here will ever ask for your password, a seed phrase or a private key.'
+      answer: 'Your account lives on /profile: username, sign-in methods, two-factor, linked wallets, and the delete control (deleting is permanent). Anyone 18 or over can make an account with an email or a wallet, and nobody here will ever ask for your password, a seed phrase or a private key.'
     },
     'support': {
       keywords: ['support', 'help', 'question', 'contact', 'email'],

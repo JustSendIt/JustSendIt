@@ -377,7 +377,7 @@ try {
     const AJS = readFileSync(ROOT + '/public/auth.js', 'utf8');
     check('  ...and the banner puts it in front of the person it concerns', /appeal it<\/b> — email/.test(AJS));
     // since "$100 bought" (owner's Q8) a buy-out is the $SEND BOUGHT since the restriction, valued at its own block: no price to spike
-    check('a restriction buy-out counts what was bought since it began (never a balance at today\'s price)', /const since = me\.redeem_since \|\| me\.flagged_at \|\| 0;/.test(SRC) && /if \(a != null && a >= since && Number\.isFinite\(usd\)\) buyUsd \+= usd;/.test(SRC));
+    check('a restriction buy-out counts the member\'s own buys made since it began and still held (never a balance at today\'s price, never coins sent in)', /const since = me\.redeem_since \|\| me\.flagged_at \|\| 0;/.test(SRC) && /if \(own === 1 && kept === 1 && bAt != null && bAt >= since && Number\.isFinite\(usd\)\) buyUsd \+= usd;/.test(SRC));
     check('opening a Send Call refuses a stale cached price', /lookupTokenPair\(token, \{ maxAgeMs: PRICE_MAX_AGE_MS \}\)/.test(SRC));
   }
 

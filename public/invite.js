@@ -60,9 +60,9 @@
 
         /* step 1 — the ticket */
         '<div class="inv-step" id="step-ticket" data-active>' +
-          '<p class="inv-kicker">Invite only · Live beta</p>' +
+          '<p class="inv-kicker">Got an invite code? · Live beta</p>' +
           '<h2 class="inv-title">Ticket to <span class="hl">Send</span> <span aria-hidden="true">🚀</span></h2>' +
-          '<p class="inv-sub">Reading the site is free for everyone 18 and over — you can carry on looking around without an account. <b>Joining</b> takes a code from someone already inside, and once you are in you get <b>ten of your own</b> to hand out.</p>' +
+          '<p class="inv-sub">Anyone 18 or over can join — <b>no code needed</b>. If a member sent you one, enter it so they’re credited; once you’re in you get <b>ten of your own</b> to hand out.</p>' +
           ticketHtml() +
           '<p class="tk-cta" id="inv-cta">👆 Tap the ticket — <b>got a code?</b></p>' +
           rulesHtml() +
@@ -143,15 +143,17 @@
         '<div class="inv-step" id="step-proof">' +
           '<p class="inv-kicker">One read-only check</p>' +
           '<h2 class="inv-title">Show us you\'re <span class="hl">actually here</span></h2>' +
-          '<p class="inv-sub">Reading the site is open to everyone. Posting, calling and voting are for people who hold the coins — so we read your wallet, once, and check two things.</p>' +
+          '<p class="inv-sub">Your profile and text posts on your own wall are open now. Calls, reactions, votes, pictures and communities are for people who bought the coin — so we read your wallet, once, and check two things.</p>' +
           '<div class="inv-panel">' +
             '<ul class="inv-tests" id="inv-tests">' +
               '<li data-t="hold"><span class="inv-tick">○</span><div><b>You bought <span id="inv-min">$100</span> of $SEND</b><small>Dollars spent on market buys across every wallet you link, at what each buy paid: today’s price never decides it. A buy counts once its coins have been held <span data-rule="after">24 hours</span>, at least <span data-rule="held">$10</span> of what you paid has to be still held, and coins sent to you count only as the buy they trace back to.</small></div></li>' +
               '<li data-t="net"><span class="inv-tick">○</span><div><b>You\'re not a net seller</b><small>You haven\'t sold more back to the market than you bought from it.</small></div></li>' +
             '</ul>' +
+            '<details class="inv-more"><summary data-tip="Shows how the check works, what it reads and what it never does">Read more</summary>' +
             '<p class="inv-note">⏳ <b>A buy counts after a day — and the day after you are in is watched.</b> A buy made today counts toward the <span data-rule="min">$100</span> once its coins have been held <span data-rule="after">24 hours</span>; sold inside them, it adds nothing. Once you are in, the <span data-rule="hours">24 hours</span> after your latest $SEND arrival (a buy, or coins traced in) are watched: if the balance drops more than about 2% inside them, the account goes read-only for a day.</p>' +
             '<p class="inv-safe">🔒 <b>Read-only, and it stays read-only.</b> You sign a sentence to prove the wallet is yours. That signature <b>moves nothing, approves nothing and costs no gas</b> — this site can never send your funds anywhere, and never asks your wallet to.</p>' +
             '<p class="inv-note">🔥 <b>Wallet can’t sign (GMGN), or not on the list?</b> Prove it by a burn instead: within an hour, send any amount of $SEND or ETH — as much or as little as you like — from it to the burn address yourself. Whatever you send is gone for good — and it needs an email and a password on your account, since a burn can’t sign you in.</p>' +
+            '</details>' +
             '<p class="inv-err" id="inv-proof-err" role="status" aria-live="polite"></p>' +
             '<div class="inv-actions" style="justify-content:flex-start;">' +
               '<button class="g-btn g-btn-primary" id="inv-proof-go" type="button" data-tip="Asks your wallet to sign a sentence, then starts the chain check">Connect wallet — read-only 🔗</button>' +
@@ -498,6 +500,7 @@
     await refresh();
     // land on the step that is actually next for this person
     if (state.signedIn) show('step-codes');
+    else if (o.code && !state.redeemed) show('step-code');   // open sign-up: a member's code, entered on purpose so they are credited
     else if (state.access) show('step-join');
     else if (state.redeemed) show(state.tosAccepted ? 'step-join' : 'step-tos');
     else show(o.step || 'step-ticket');

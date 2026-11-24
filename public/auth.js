@@ -63,7 +63,7 @@
     <div id="pane-wallet" role="tabpanel" aria-labelledby="tab-wallet">
       <div class="auth-segment" role="group" aria-label="Sign in or create an account with a wallet">
         <button type="button" class="auth-seg active" id="wseg-login" aria-pressed="true" data-tip="Sets this up for a wallet that already has an account">Sign in</button>
-        <button type="button" class="auth-seg" id="wseg-signup" aria-pressed="false" data-tip="Switches to making a new account with your wallet, and asks for an invite">Create account</button>
+        <button type="button" class="auth-seg" id="wseg-signup" aria-pressed="false" data-tip="Switches to making a new account with your wallet — free, no invite needed">Create account</button>
       </div>
       <div id="w-reg" hidden>
         <label class="f-label" for="w-username">Pick your @username <span class="f-hint">— your public name; you can also sign in with it</span></label>
@@ -82,7 +82,8 @@
         <label class="w-opt"><input type="checkbox" id="w-2fa"> Set up two-factor right after <span class="f-hint">(optional)</span></label>
         <p class="modal-note auth-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
       </div>
-      <p class="modal-note" id="w-lead">Sign a free message to prove you own your wallet — no transaction, no gas, and it never lets this site move funds.</p>
+      <p class="modal-note" id="w-lead">Sign a free message — no transaction, no gas.</p>
+      <details class="w-extra auth-more"><summary data-tip="Shows what signing does and does not do">Read more</summary><p class="modal-note">The message proves the wallet is yours. It moves nothing, approves nothing, and never lets this site move funds. Making an account is free and needs no $SEND.</p></details>
       <details class="w-works" id="w-works" hidden><summary data-tip="Shows every wallet that works here, and how"></summary><ul class="w-works-list" aria-label="Wallets that work here"></ul></details>
       <button type="button" class="btn btn-primary" id="btn-wallet-signin" style="width:100%;" data-tip="Connects your wallet and asks it to sign a message — nothing moves, nothing is approved">Continue with Wallet 🦊</button>
       <p class="modal-note" id="wallet-status" aria-live="polite"></p>
@@ -90,7 +91,8 @@
     </div>
 
     <div id="pane-burn" role="tabpanel" aria-labelledby="tab-burn" hidden>
-      <p class="modal-note">For <b>GMGN</b> or any wallet that can’t sign. Fill this in once, then send <b>any amount of $SEND or ETH</b> — as much or as little as you like — from that wallet to the burn address within an hour, from your own wallet app. This site never sends it.</p>
+      <p class="modal-note">For <b>GMGN</b> or any wallet that can’t sign.</p>
+      <details class="w-extra auth-more"><summary data-tip="Shows how Burn Verification works, step by step">How it works</summary><p class="modal-note">Fill this in once, then send <b>any amount of $SEND or ETH</b> — as much or as little as you like — from that wallet to the burn address within an hour, from your own wallet app. This site never sends it. A burn can’t sign you in, so the email and password below are how you sign in, on any device.</p></details>
       <div class="auth-segment" role="group" aria-label="New here, or already have an account">
         <button type="button" class="auth-seg active" id="bseg-signup" aria-pressed="true" data-tip="Sets this up to make a new account with an email and a password">Create account</button>
         <button type="button" class="auth-seg" id="bseg-login" aria-pressed="false" data-tip="Sets this up for an account you already have">I have an account</button>
@@ -112,7 +114,6 @@
         </div>
         <label class="f-label" for="b-addr">The wallet you’re verifying <span class="f-hint" id="b-addr-hint">— its address, copied from GMGN or your wallet app (starts with 0x)</span></label>
         <input class="addr-input" id="b-addr" autocomplete="off" spellcheck="false" maxlength="64" placeholder="0x…">
-        <p class="modal-note">🔑 A burn can’t sign you in, so this <b>email and password are how you sign in</b> — on any device, wallet or not.</p>
         <p class="modal-note auth-terms" id="b-terms">Creating an account means you are 18 or over and accept the <a href="/terms" target="_blank" rel="noopener" data-tip="Opens the terms of service in a new tab">Terms</a> and the <a href="/privacy" target="_blank" rel="noopener" data-tip="Opens the privacy policy in a new tab">Privacy policy</a>.</p>
         <button class="btn btn-primary" type="submit" style="width:100%;" id="burn-submit" data-tip="Makes your account (or signs you in), starts your one hour and shows where to send the burn">Create account &amp; verify 🔥</button>
       </form>
@@ -122,7 +123,7 @@
     <div id="pane-email" role="tabpanel" aria-labelledby="tab-email" hidden>
       <div class="auth-segment" role="group" aria-label="Log in or sign up">
         <button type="button" class="auth-seg active" id="seg-login" aria-pressed="true" data-tip="Sets the form up for an account you already have">Log in</button>
-        <button type="button" class="auth-seg" id="seg-signup" aria-pressed="false" data-tip="Switches to making a new account, and asks for an invite">Sign up</button>
+        <button type="button" class="auth-seg" id="seg-signup" aria-pressed="false" data-tip="Switches to making a new account with an email — free, no invite needed">Sign up</button>
       </div>
       <form id="email-form" novalidate>
         <div id="reg-fields" hidden>
@@ -200,7 +201,7 @@
     <!-- The way in for somebody who was handed a code. Without it, a person holding an invite has to
          guess that "Sign up" is what opens the ticket — and this line also tells everyone else, in one
          sentence, that they can read the whole site without any of this. -->
-    <p class="auth-invite">New here? Joining is by invite — <button type="button" class="linklike" id="auth-ticket" data-tip="Closes this and opens the invite code panel">get your ticket 🎟️</button>. You can read the whole site without an account.</p>
+    <p class="auth-invite">New here? Pick <b>Create account</b> — it's free, no invite needed. Got a code from a member? <button type="button" class="linklike" id="auth-ticket" data-tip="Closes this and opens the invite code panel, so the member who sent it is credited">Enter it</button> so they're credited.</p>
   </div>`;
 
   let lastFocus = null, releaseTrap = null, confirmReject = null, prevOverflow = '';
@@ -456,7 +457,7 @@
       modal.querySelector('#email-status').textContent = '';
     }
     const ticketLink = modal.querySelector('#auth-ticket');
-    if (ticketLink) ticketLink.addEventListener('click', () => { closeModal(); openInvite(); });
+    if (ticketLink) ticketLink.addEventListener('click', () => { closeModal(); openInvite({ code: true }); });
     const burnAlt = modal.querySelector('#btn-burn-alt');
     if (burnAlt) burnAlt.addEventListener('click', () => { tabs.burn.click(); tabs.burn.focus(); });
     AUTH._showBurnTab = () => {

@@ -1048,7 +1048,9 @@ number the window is measured by. An RPC that does not answer is never a sale; t
 
 **Once you pass**, the rest is optional: add an email and password if you joined with a wallet (a wallet-only account is a complete account), turn on two-factor, and link more wallets (all of them read-only). A wallet that joined without picking a name — the old one-step path — is given a placeholder and asked to claim a real @handle.
 
-### 3.16 The ticket — reading is open, joining is by invite 🎟️
+### 3.16 Joining — open to anyone 18 or over 🎟️
+
+**Since 2026‑11‑24 nobody needs an invite to join** (owner: "remove the referral gate requirement and allow users to setup an account easily with an email or wallet connect"). Make an account with an email or a wallet; no $SEND is needed for that. A new account can set up its profile and write text posts on its own wall at once; everything else on the platform starts with the $100 of $SEND bought check (§3.15b). An invite code still works — it credits the member who sent it — and `INVITE_REQUIRED=1` brings the ticket back. What follows describes the ticket as it worked until then, and the 18+ question, which stays.
 
 **First, one question: are you 18 or older?** Every visitor is asked once per device, before the site opens, to tick a box confirming it (`public/agegate.js`). On the homepage it opens the moment the loading screen ends; on every other page it opens straight away. It asks **nothing else** — no code, no wallet, no $100 — and anyone who answers yes reads the whole site for free. "I'm under 18" keeps the site closed for that tab.
 

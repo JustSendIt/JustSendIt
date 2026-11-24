@@ -219,8 +219,10 @@ try {
   /* ═══ the gate, through the real API ═══ */
   {
     const u = mkUser('__pg_new__', false);
+    // owner, 2026-11-24: a text post on your own wall is open before the check; a picture or a help-desk question is not
     const writes = [
-      ['post', '/api/posts', { text: 'hello' }],
+      ['post a picture', '/api/posts', { text: 'hello', image: 'data:image/png;base64,iVBORw0KGgo=' }],
+      ['ask the help desk', '/api/posts', { text: 'how?', board: 'support' }],
       ['send call', '/api/calls', { token: '0x' + 'ab'.repeat(20) }],
       ['track a wallet', '/api/wallets', { address: '0x' + 'cd'.repeat(20) }],
     ];
@@ -234,6 +236,10 @@ try {
       const r = await api(path, { method, sid: u.sid, body: method === 'POST' ? {} : undefined });
       check('an unverified account CAN still ' + label, r.status === 200, r.status);
     }
+    const tp = await api('/api/posts', { method: 'POST', sid: u.sid, body: { text: 'gm from a new account' } });
+    check('an unverified account CAN write a text post on its own wall (owner, 2026-11-24) — and it earns no Send Power before the check', tp.status === 200 && tp.j.post && tp.j.pointsEarned === 0, tp.status + ' ' + JSON.stringify(tp.j && [tp.j.pointsEarned, !!tp.j.post]));
+    const pr = await api('/api/profile', { method: 'POST', sid: u.sid, body: { bio: 'new here' } });
+    check('an unverified account CAN change its profile settings', pr.status === 200, pr.status + ' ' + JSON.stringify(pr.j && pr.j.error));
     const me = await api('/api/me', { sid: u.sid });
     check('the gate state reaches the client', me.j.user.holderVerified === false && me.j.user.holderProof, JSON.stringify(me.j.user.holderProof && me.j.user.holderProof.state));
     check('  ...with the honest read-only assurance, in words', /moves nothing, approves nothing, and costs no gas/.test((me.j.user.holderProof || {}).readOnly || ''));
