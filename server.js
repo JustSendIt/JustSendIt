@@ -1122,6 +1122,7 @@ for (const col of [
   "ALTER TABLE users ADD COLUMN og_cap INTEGER NOT NULL DEFAULT 0",
   "ALTER TABLE users ADD COLUMN redeem_since INTEGER",           // "$100 bought" (owner's Q8): a read-only buy-out counts the $SEND bought since this (the restriction began, or came back)
   "ALTER TABLE users ADD COLUMN og_rule_v2_at INTEGER",          // when this account's statuses were first decided under "$100 bought" (the switch's log: hold_migration_log)
+  "ALTER TABLE posts ADD COLUMN via_app TEXT",                   // the app that posted it for the member (lib/oidc.js POST /oauth/wall: its client_id); the post says so
   "ALTER TABLE users ADD COLUMN holder_reason_code TEXT",        // the participation check's last reason as a code (bought.js reasonOf), for re-asking by rule, not by copy
 ]) { try { db.exec(col); } catch {} }
 /* A PAUSE (2026-11-18 review): wallets leaving the account took off what the badge needs, and nothing was sold (ogOnLeave) —
@@ -13295,6 +13296,46 @@ function sweepOrphanUploads() {
   try { const cutoff = Date.now() - 60 * 60 * 1000; for (const f of fs.readdirSync(UPLOAD_DIR)) { if (f.startsWith('tmp_') && f.endsWith('.part')) { const fp = path.join(UPLOAD_DIR, f); try { if (fs.statSync(fp).mtimeMs < cutoff) fs.unlinkSync(fp); } catch {} } } } catch {}
 }
 
+/* The name of the app a post came from (POST /oauth/wall), as the app is called now: 'an app' once it is gone. Cached a
+   minute, so a feed of app posts reads oauth_clients once. */
+const viaNames = new Map();
+function viaAppName(clientId) {
+  const hit = viaNames.get(clientId);
+  if (hit && now() - hit.at < 60e3) return hit.name;
+  let name = 'an app';
+  try { const r = db.prepare('SELECT name FROM oauth_clients WHERE client_id = ?').get(clientId); if (r && r.name) name = r.name; } catch {}
+  if (viaNames.size > 500) viaNames.clear();
+  viaNames.set(clientId, { name, at: now() });
+  return name;
+}
+/* A post an app makes on a member's own Send Wall (owner, 2026-11-25: a sendy.gg player's screenshot or clip, posted "to a
+   users SendRH.com Connected profile"). lib/oidc.js POST /oauth/wall has already checked the app (a reviewed server app that
+   proved its secret), the member's send.post on file and the app's own limits, and read the media as a data: URL of a type
+   and size WALL_MEDIA allows. From here it is the site's own rules for a picture post on your own wall, as POST /api/posts
+   has them: the read-only mode, the $100 check (a picture or a video needs it; only a text post on your own wall does not),
+   the member's own posting limit (shared with the site: an app cannot post past it), the media checks in saveMedia (the type
+   by its bytes, the size, the pixels, the member's storage quota and the disk, location and device data scrubbed), and the
+   text's. It earns no Send Power, so no app can be used to farm it, and it carries the app's client_id (via_app), so the
+   post says where it came from. Answers { post: { id, url } }, or { status, error, description } for the app. */
+async function appPost(u, app, { text, media }) {
+  if (restrictionOf(u)) return { status: 403, error: 'not_allowed', description: 'this member has not allowed this app to post to their Send Wall' };
+  if (needsHolderProof(u)) return { status: 403, error: 'needs_proof', description: 'pictures and clips on a Send Wall start once the member\'s linked wallets show $' + MIN_HOLD_USD + ' of $SEND bought; they can see how on their profile at ' + SITE_ORIGIN };
+  if (!rateLimit('post:' + u.id, 12, 6e5)) return { status: 429, error: 'slow_down', description: 'this member is posting fast: wait a few minutes, then try again' };
+  if (bigPostInFlight >= BIG_POST_CONCURRENCY || (bigPostByUser.get(u.id) || 0) >= 1) return { status: 503, error: 'temporarily_unavailable', description: 'lots of large posts right now: try again in a moment' };
+  bigPostInFlight++; bigPostByUser.set(u.id, 1);
+  let image;
+  try { image = saveMedia(media, { userId: u.id, maxImage: 8 * 1048576, maxVideo: 16 * 1048576 }); }
+  catch (e) {
+    const m = String((e && e.message) || 'could not read the media');
+    return { status: /too large|storage limit/.test(m) ? 413 : /storage is full/.test(m) ? 507 : 400, error: 'invalid_media', description: m };
+  } finally { bigPostInFlight--; bigPostByUser.delete(u.id); }
+  const rt = await resolveTokensInText(String(text || '').trim().slice(0, 280));
+  const r = db.prepare('INSERT INTO posts (user_id, text, image, tokens, via_app, created_at) VALUES (?,?,?,?,?,?)').run(u.id, rt.text, image, rt.tokens, app.client_id, now());
+  const row = db.prepare('SELECT * FROM posts WHERE id = ?').get(Number(r.lastInsertRowid));
+  scanWriteAction(u.id, 'post', rt.text);
+  fanOutAlert(row, 'posted on their wall.', '🧱');
+  return { post: { id: row.id, url: SITE_ORIGIN + '/u/' + encodeURIComponent(u.username) + '#p' + row.id } };
+}
 function postView(p, me) {
   const counts = { fire: 0, rocket: 0 };
   for (const r of db.prepare('SELECT kind, COUNT(*) n FROM reactions WHERE post_id = ? GROUP BY kind').all(p.id)) counts[r.kind] = r.n;
@@ -13315,6 +13356,7 @@ function postView(p, me) {
     community: p.community_id ? (postCommunities([p.community_id])[p.community_id] || null) : null,
     squad: p.squad_id ? squadBadge(p.squad_id) : null,   // a Send Squad's wall post — the client badges it 🛡️
     tokens: parseTokens(p.tokens), // [{addr,symbol,name}] → the client renders each $TICKER as a token chip
+    via: p.via_app ? viaAppName(p.via_app) : null,   // posted from an app (POST /oauth/wall): its name, shown on the post
   };
   attachCalls([out], me); // if this post is a Send Call, attach its live widget data
   return out;
@@ -13355,6 +13397,7 @@ function postsView(rows, me) {
       community: p.community_id ? (comms[p.community_id] || null) : null,
       squad: p.squad_id ? (sqs[p.squad_id] || null) : null,
       tokens: parseTokens(p.tokens), // $TICKER chips in feeds too, not just single-post views
+      via: p.via_app ? viaAppName(p.via_app) : null,
     };
   });
   attachCalls(out, me); // batch-attach Send Call widgets for any call posts in this feed
@@ -17203,6 +17246,7 @@ const OIDC = OIDC_LIB.createOidc({
   ownershipRefusal: (me, b) => ownershipRefusal(me, b), verifyNeeds: (me) => verifyNeedsOf(me),
   origin: () => SITE_ORIGIN, escHtml: (v) => escHtml(v), assetVer: (f) => assetVer(f), secHeaders: SEC_HEADERS,
   levelForXp, titleFor, effectiveMult, restrictionOf, sendNoOf: (u) => sendNoOf(u),
+  appPost: (u, app, post) => appPost(u, app, post),   // POST /oauth/wall: the site's own rules for a picture post on the member's wall
   nameKey: (v) => nameKey(v), reservedKeys: () => [...RESERVED_KEYS],
   // the signing key is replaced every this many days (a new one is published a day before it signs); 0 = only by hand (/admin)
   rotateDays: () => { const v = String(process.env.OIDC_KEY_ROTATE_DAYS == null ? '' : process.env.OIDC_KEY_ROTATE_DAYS).trim(); return v === '' ? 90 : Math.max(0, Number(v) || 0); },

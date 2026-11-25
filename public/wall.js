@@ -71,7 +71,7 @@ function postEl(p) {
   el.innerHTML = comm +
     '<div class="post-head">' + ava +
       '<div><div class="who"><a class="handle" href="' + uHref + '" style="text-decoration:none;' + (p.accent ? 'color:' + esc(p.accent) : '') + '">@' + esc(p.username) + '</a>' + (window.ogBadge ? ogBadge(p.og) : '') + '</div>' +
-      '<div class="when">' + timeAgo(p.created_at) + '</div></div>' +
+      '<div class="when">' + timeAgo(p.created_at) + (p.via ? ' · <span class="post-via" data-tip="Posted from ' + esc(p.via) + ' by @' + esc(p.username) + ', who let that app post to their Send Wall">📸 via ' + esc(p.via) + '</span>' : '') + '</div></div>' +
     '</div>' +
     (p.text ? '<div class="post-body">' + (window.richText ? richText(p.text, p.tokens) : esc(p.text)) + '</div>' : '') + // $TICKERs → token chips (tokentext.js)
     (p.image ? window.mediaTag(esc(p.image), esc(p.username)) : '') +

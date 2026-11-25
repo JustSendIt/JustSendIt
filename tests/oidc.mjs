@@ -150,8 +150,8 @@ try {
   const D = disc.j || {};
   check('discovery answers the standard document; the issuer is the site\'s public origin, never the Host header', disc.status === 200 && D.issuer === BASE && D.authorization_endpoint === BASE + '/oauth/authorize' && D.token_endpoint === BASE + '/oauth/token'
     && D.userinfo_endpoint === BASE + '/oauth/userinfo' && D.jwks_uri === BASE + '/.well-known/jwks.json' && D.revocation_endpoint === BASE + '/oauth/revoke', JSON.stringify(D).slice(0, 300));
-  check('  ...code flow only, PKCE S256 only, ES256 only, pairwise subjects, the eight scopes, iss in the response', JSON.stringify(D.response_types_supported) === '["code"]' && JSON.stringify(D.code_challenge_methods_supported) === '["S256"]'
-    && JSON.stringify(D.id_token_signing_alg_values_supported) === '["ES256"]' && JSON.stringify(D.subject_types_supported) === '["pairwise"]' && D.scopes_supported.join(' ') === 'openid send.handle send.picture send.id send.power send.boost send.verified offline_access'
+  check('  ...code flow only, PKCE S256 only, ES256 only, pairwise subjects, the nine scopes, iss in the response', JSON.stringify(D.response_types_supported) === '["code"]' && JSON.stringify(D.code_challenge_methods_supported) === '["S256"]'
+    && JSON.stringify(D.id_token_signing_alg_values_supported) === '["ES256"]' && JSON.stringify(D.subject_types_supported) === '["pairwise"]' && D.scopes_supported.join(' ') === 'openid send.handle send.picture send.id send.power send.boost send.verified send.post offline_access'
     && D.authorization_response_iss_parameter_supported === true && !D.claims_supported.includes('email'));
   check('  ...open to any origin (CORS *), never with credentials', disc.h.get('access-control-allow-origin') === '*' && !disc.h.get('access-control-allow-credentials'));
   const alias = await req('GET', '/.well-known/oauth-authorization-server');
@@ -167,7 +167,7 @@ try {
 
   const sc = await api('/api/oauth/scopes');
   check('/api/oauth/scopes (what /developers draws its table from) lists the endpoints, every scope with its claims and plain words, and the limits', sc.status === 200 && sc.j.issuer === BASE && sc.j.endpoints.token === BASE + '/oauth/token' && sc.j.endpoints.jwks === BASE + '/.well-known/jwks.json'
-    && sc.j.scopes.length === 8 && sc.j.scopes.every((x) => Array.isArray(x.claims) && x.plain.length > 10 && x.label.length > 5) && sc.j.scopes[0].scope === 'openid' && sc.j.scopes[0].required === true
+    && sc.j.scopes.length === 9 && sc.j.scopes.find((x) => x.scope === 'send.post').serverOnly === true && sc.j.scopes.every((x) => Array.isArray(x.claims) && x.plain.length > 10 && x.label.length > 5) && sc.j.scopes[0].scope === 'openid' && sc.j.scopes[0].required === true
     && sc.j.limits.appsPerMember === 5 && sc.j.limits.redirectUrisPerApp === 5 && sc.j.limits.codeSeconds === 60 && sc.j.limits.refreshDays === 30, sc.text.slice(0, 200));
 
   /* ═══ 2. registering apps (/api/oauth/apps) ═══ */

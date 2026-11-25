@@ -194,7 +194,7 @@ try {
   const disc = (await get('/.well-known/openid-configuration')).j || {};
   const listed = [...page.text.matchAll(/<td data-label="Address"><code>(?:GET or POST|GET|POST) (\S+)<\/code><\/td>/g)].map((m) => m[1]);
   check('the endpoints the page lists are the ones discovery publishes, at this site\'s issuer (the page is written against the placeholder origin and served with the real one)',
-    JSON.stringify(listed) === JSON.stringify([BASE + '/.well-known/openid-configuration', disc.jwks_uri, disc.authorization_endpoint, disc.token_endpoint, disc.userinfo_endpoint, disc.revocation_endpoint, disc.introspection_endpoint, BASE + '/oauth/handles']) && disc.issuer === BASE
+    JSON.stringify(listed) === JSON.stringify([BASE + '/.well-known/openid-configuration', disc.jwks_uri, disc.authorization_endpoint, disc.token_endpoint, disc.userinfo_endpoint, disc.revocation_endpoint, disc.introspection_endpoint, BASE + '/oauth/handles', BASE + '/oauth/wall']) && disc.issuer === BASE
     && preOf(page.text, 'dv-ex-browser').includes("const ISSUER = '" + disc.issuer + "';"), JSON.stringify(listed));
   const ajs = await Promise.all([get('/adminapps.js'), get('/adminapps.js', { cookie: member.cookie }), get('/AdminApps.js', { cookie: member.cookie }), get('/adminapps.js', { cookie: admin.cookie })]);
   check('adminapps.js is the admin\'s alone: the same 404 for nobody, a member and another spelling; the admin gets it, never cached',
