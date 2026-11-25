@@ -15106,6 +15106,7 @@ const buckets = new Map();
 function rateLimit(key, max, windowMs) {
   const b = buckets.get(key) || { n: 0, t: now() };
   if (now() - b.t > windowMs) { b.n = 0; b.t = now(); }
+  b.w = windowMs;   // its own window: the sweeps below keep a day-long count (POST /oauth/wall's 30 a day) for its whole day
   b.n++; buckets.set(key, b);
   return b.n <= max;
 }
@@ -16733,7 +16734,7 @@ const sweeper = setInterval(() => {
   const t = now();
   for (const [k, v] of pendingLogins) if (v.expires < t) pendingLogins.delete(k);
   for (const [k, v] of oauthStates) if (v.expires < t) oauthStates.delete(k);
-  for (const [k, v] of buckets) if (t - v.t > 36e5) buckets.delete(k); // idle >1h
+  for (const [k, v] of buckets) if (t - v.t > Math.max(36e5, v.w || 0)) buckets.delete(k); // past its own window (at least 1h)
   for (const m of [actHeavy, actLight]) for (const [k, v] of m) { const f = v.filter(x => t - x < 3e5); if (f.length) m.set(k, f); else m.delete(k); }
   for (const [k, v] of postLog) { const f = v.filter(x => t - x.t < 36e5); if (f.length) postLog.set(k, f); else postLog.delete(k); }
   try {
@@ -19295,7 +19296,7 @@ const server = http.createServer(async (req, res) => {
              their behalf is a posts row under their id, so counting it meant their real first post found
              n === 2 and the one-time bonus was silently forfeited forever — for something they never wrote.
              Same predicate the profile timeline already uses. */
-          const first = db.prepare('SELECT COUNT(*) n FROM posts WHERE user_id = ? AND board IS NULL AND community_id IS NULL').get(me.id).n === 1;
+          const first = db.prepare('SELECT COUNT(*) n FROM posts WHERE user_id = ? AND board IS NULL AND community_id IS NULL AND via_app IS NULL').get(me.id).n === 1;   // a post an app made (POST /oauth/wall) is not one they wrote
           earned = awardPoints(me.id, 'post', PTS.post, 'post:' + row.id) + (first ? awardPoints(me.id, 'first_post', PTS.first_post, 'firstpost:' + me.id) : 0);
         }
         scanWriteAction(me.id, 'post', text);
@@ -22059,8 +22060,8 @@ server.maxRequestsPerSocket = 0;   // unlimited keep-alive requests per connecti
 const walTimer = setInterval(() => {
   try { db.exec('PRAGMA wal_checkpoint(PASSIVE); PRAGMA optimize;'); } catch {}
   // sweep stale rate-limit buckets so the map can't grow unbounded with one entry per IP/user over time
-  const cutoff = now() - 3600000; // older than the longest rate-limit window (1h)
-  for (const [k, b] of buckets) if (b.t < cutoff) buckets.delete(k);
+  const cutoff = now() - 3600000; // older than an hour, and past its own window (a day-long limit keeps its count all day)
+  for (const [k, b] of buckets) if (b.t < cutoff && now() - b.t > (b.w || 0)) buckets.delete(k);
   presenceSweep();
   // Caches keyed on addresses an anonymous caller supplies. SCALING.md says every in-memory cache is
   // cleaned up; these three were the exceptions, and they are exactly the ones a stranger can grow.

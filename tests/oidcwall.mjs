@@ -186,6 +186,12 @@ try {
   const off = await wall(good, { sub: subBusy, media: pic });
   check('an app the admin switched off: 401 invalid_client', off.status === 401 && off.j.error === 'invalid_client', off.status);
 
+  /* 8b. a day-long limit lasts its day: the bucket sweeps keep a count until its own window has passed */
+  const SRV = readFileSync(path.join(ROOT, 'server.js'), 'utf8');
+  check('the rate-limit buckets remember their window, and both sweeps keep a count until it has passed (30 a day stays 30 a day)',
+    /b\.w = windowMs;/.test(SRV) && /t - v\.t > Math\.max\(36e5, v\.w \|\| 0\)\) buckets\.delete/.test(SRV) && /b\.t < cutoff && now\(\) - b\.t > \(b\.w \|\| 0\)\) buckets\.delete/.test(SRV));
+  check('a post an app made never takes the member\'s first-post bonus from the first post they write themselves', /community_id IS NULL AND via_app IS NULL'\)\.get\(me\.id\)\.n === 1/.test(SRV));
+
   /* 9. the words */
   const DEV = readFileSync(path.join(ROOT, 'public', 'developers.html'), 'utf8'), PRIV = readFileSync(path.join(ROOT, 'public', 'privacy.html'), 'utf8');
   check('/developers documents POST /oauth/wall (client_secret_basic, the body, the limits, not_allowed and needs_proof) and the privacy page says what an app that posts for you can and cannot do',
