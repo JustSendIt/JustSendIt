@@ -316,7 +316,7 @@
     [18, "index.html", "dwell('.dash-title-ico', 2000)", "A saucer over Mission Control. It hovered, it watched, it left."],
     [19, "index.html", "taps('.rh-badge .dot', 3, 2000)", "The LIVE dot, poked. Still live. Still undead."],
     [20, "index.html", "taps('details.reassure summary', 8, 10000)", "Eight peeks behind the curtain. Nothing jumped out. This time."],
-    [21, "index.html", "taps('#watch .section-title', 2, 600)", "Two taps on the screen's title. The signal flickered, then held."],
+    [21, "index.html", "taps('#swap .section-title', 2, 600)", "Two taps on the swap's title. The signal flickered, then held."],
     [22, "index.html", "bottom()", "You scrolled all the way down. Down here it's all cobwebs."],
     [23, "index.html", "taps('#emblem-SEND', 3, 2000)", "Emblem tapped thrice. That's how you summon it."],
     [24, "index.html", "dwell('.beta-k', 3000)", "Staring at the clock won't slow it. The witching hour comes anyway."],

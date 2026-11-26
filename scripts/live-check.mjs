@@ -114,7 +114,10 @@ if (cfRay) pass('Cloudflare does not cache the API', !/HIT/i.test(h(gs, 'cf-cach
 const cfg = await get('/api/config');
 let cfgj = null; try { cfgj = JSON.parse(cfg.text); } catch {}
 pass('/api/config is served', cfg.status === 200 && cfgj && cfgj.features, cfg.status);
-if (cfgj && cfgj.media) warn('the theme song and the feature video are on the box (they ship outside git)', cfgj.media.audio !== false && cfgj.media.video !== false, JSON.stringify({ audio: cfgj.media.audio, video: cfgj.media.video, poster: cfgj.media.poster }));
+if (cfgj && cfgj.media) warn('the theme song is on the box (it ships outside git)', cfgj.media.audio !== false, JSON.stringify({ audio: cfgj.media.audio }));
+/* the feature video (and its poster, a frame of it) came down on 2026-11-26: it is someone else's action-camera footage with the
+   $Send logo laid over it, and nobody here holds a licence for it. The files wait outside public/ on the box until the owner has one */
+if (cfgj && cfgj.media) warn('the feature video and its poster are not served (no licence for the footage)', cfgj.media.video === false && cfgj.media.poster === false, JSON.stringify({ video: cfgj.media.video, poster: cfgj.media.poster }));
 /* the music player's songs ship outside git too (server.js PLAYLIST): each file has to be copied into the live box's public/assets by
    hand, and the server lists only the ones it found when it started — a song missing here is one the deploy did not bring */
 if (cfgj && cfgj.media) {

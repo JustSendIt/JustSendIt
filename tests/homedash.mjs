@@ -106,7 +106,7 @@ try {
     '.dash-title-ico': () => /<h2 class="dash-title" id="dash-title"><span class="dash-title-ico" aria-hidden="true">🛸<\/span>/.test(hero),   // egg 18: the saucer
     '.rh-badge .dot': () => /<div class="rh-badge"><span class="dot"><\/span>/.test(hero),
     'details.reassure summary': () => /<details class="reassure">\s*<summary>/.test(hero),
-    '#watch .section-title': () => /class="section-title/.test(slice('<section class="alt-bg" id="watch">', '</section>')),
+    '#swap .section-title': () => /class="section-title/.test(slice('<section id="swap"', '</section>')),   // egg 21: not the video's title (the video can be absent)
     '#emblem-SEND': () => I.includes('id="emblem-SEND"'),
     '.beta-k': () => /class="beta-k"/.test(slice('<section id="beta"', '</section>')),
     '#guide .step-num': () => /class="step-num"/.test(slice('<section id="guide">', '</section>')),
